@@ -1,0 +1,249 @@
+using System.Collections.Concurrent;
+using Banking.Agents.Tracing;
+using Banking.Domain.Models;
+using Banking.Domain.Services;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
+using OpenAI.Chat;
+
+namespace Banking.Agents.Collection;
+
+/// <summary>Tahsilat akışının her adımında UI'a dönen sonuç.</summary>
+public sealed record CollectStepResult(
+    string SessionId,
+    string Status,                       // question | confirmation | completed | cancelled
+    string? Prompt = null,
+    ConfirmationView? Confirmation = null,
+    ReceiptDto? Receipt = null);
+
+public sealed record ReceiptDto(string ReceiptId, decimal Amount, decimal RemainingDebt, string Date);
+
+/// <summary>
+/// Tek bir tahsilat oturumunu yürütür:
+///  Aşama A — CollectionAgent (LLM) eksik bilgileri kendisi sorar (slot-filling),
+///  Aşama B — bilgiler tamamlanınca deterministik MAF Workflow + RequestPort ile onay gate,
+///            onaylanırsa tahsilat servisi çağrılır.
+/// </summary>
+public sealed class CollectionConversation
+{
+    private const string Instructions =
+        """
+        Sen bir kredi kartı borç TAHSİLAT asistanısın. Görevin, müşteriden bir kart borcu ödemesi için
+        gereken bilgileri ADIM ADIM toplamak ve doğrulamak. PARAYI ASLA SEN ÇEKMEZSİN; yalnızca bilgileri
+        toplar ve hepsi netleştiğinde propose_payment aracını çağırırsın. Onay ve tahsilat, araç çağrısından
+        sonra sistem tarafından yapılır.
+
+        Toplaman gereken 3 bilgi:
+        1) Hangi kartın borcu ödenecek? Bilmiyorsan get_my_cards ile kartları ve güncel borçları getir, kullanıcıya sor.
+        2) Ödenecek tutar nedir? Kullanıcı "tamamı/hepsi" derse o kartın güncel borcunu kullan; kısmi tutar da olabilir.
+        3) Hangi hesaptan çekilecek? Bilmiyorsan get_my_accounts ile hesapları ve bakiyeleri getir, kullanıcıya sor.
+
+        Kurallar:
+        - Her mesajda yalnızca TEK soru sor; kısa, nazik ve Türkçe.
+        - Tutar/hesap sorarken kullanıcıya ilgili seçenekleri (kart, borç, hesap, bakiye) göster.
+        - Üç bilgi (kart, tutar, kaynak hesap) netleşir netleşmez KENDİN ayrıca "onaylıyor musunuz?" diye SORMA.
+          Resmî onay ekranını SİSTEM otomatik gösterecek. Sen yalnızca propose_payment(cardId, amount, sourceAccountId)
+          aracını çağır.
+        - propose_payment HATA dönerse, kullanıcıya nazikçe ilet ve doğru bilgiyi tekrar iste.
+        - propose_payment başarılı olursa yalnızca kısa bir mesaj ver: "Bilgileri aldım, onay ekranını hazırlıyorum."
+        - Kullanıcı bu işlemden VAZGEÇERSE / iptal etmek isterse (ör. "vazgeçtim", "iptal", "istemiyorum", "boş ver"),
+          cancel_collection aracını çağır ve kısaca veda et.
+        """;
+
+    private readonly AIAgent _agent;
+    private readonly AgentSession _session;
+    private readonly CollectionToolset _toolset;
+    private readonly ICollectionService _collections;
+    private readonly TraceHub _hub;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
+    private string _phase = "slot";   // slot | confirm | done
+    private StreamingRun? _run;
+    private IAsyncEnumerator<WorkflowEvent>? _events;
+    private ExternalRequest? _pendingApproval;
+    private ConfirmationView? _confirmation;
+
+    public string SessionId { get; }
+
+    private CollectionConversation(string sessionId, AIAgent agent, AgentSession session,
+        CollectionToolset toolset, ICollectionService collections, TraceHub hub)
+    {
+        SessionId = sessionId;
+        _agent = agent;
+        _session = session;
+        _toolset = toolset;
+        _collections = collections;
+        _hub = hub;
+    }
+
+    public static async Task<CollectionConversation> CreateAsync(
+        string sessionId, ChatClient chat, TraceHub hub,
+        ICardService cards, IAccountService accounts, ICollectionService collections, CustomerContext context)
+    {
+        var toolset = new CollectionToolset(cards, accounts, context);
+        var tools = new List<AITool>
+        {
+            new TracingAIFunction(AIFunctionFactory.Create(toolset.GetMyCards, name: "get_my_cards"), hub, "SERVICE", "get_my_cards", "→ CardService"),
+            new TracingAIFunction(AIFunctionFactory.Create(toolset.GetMyAccounts, name: "get_my_accounts"), hub, "SERVICE", "get_my_accounts", "→ AccountService"),
+            new TracingAIFunction(AIFunctionFactory.Create(toolset.ProposePayment, name: "propose_payment"), hub, "WORKFLOW", "propose_payment", "ödeme bilgilerini doğrula"),
+            new TracingAIFunction(AIFunctionFactory.Create(toolset.CancelCollection, name: "cancel_collection"), hub, "WORKFLOW", "cancel_collection", "kullanıcı vazgeçti"),
+        };
+        var client = new TracingChatClient(chat.AsIChatClient(), hub, "Tahsilat Ajanı");
+        var agent = client.AsAIAgent(instructions: Instructions, name: "TahsilatAsistani", tools: tools);
+        var session = await agent.CreateSessionAsync();
+        return new CollectionConversation(sessionId, agent, session, toolset, collections, hub);
+    }
+
+    public async Task<CollectStepResult> StartAsync(string? initialMessage = null)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            var kickoff = string.IsNullOrWhiteSpace(initialMessage)
+                ? "Kredi kartı borcumu ödemek istiyorum. Lütfen gerekli bilgileri sırayla sor."
+                : $"{initialMessage!.Trim()}\n\n(Bu talebe göre eksik bilgileri sırayla sor; üçü de tamamlanınca propose_payment'i çağır.)";
+            var response = await _agent.RunAsync(kickoff, _session);
+            return await AfterSlotRunAsync(response.Text);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<CollectStepResult> RespondAsync(string answer)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            return _phase switch
+            {
+                "confirm" => await HandleApprovalAsync(answer),
+                "done" => new CollectStepResult(SessionId, "cancelled", Prompt: "Bu oturum tamamlandı."),
+                _ => await HandleSlotAnswerAsync(answer),
+            };
+        }
+        finally { _gate.Release(); }
+    }
+
+    private async Task<CollectStepResult> HandleSlotAnswerAsync(string answer)
+    {
+        var response = await _agent.RunAsync(answer, _session);
+        return await AfterSlotRunAsync(response.Text);
+    }
+
+    /// <summary>Agent çalıştıktan sonra: iptal edildiyse çık, teklif hazırsa onay gate'ine geç, değilse soruyu döndür.</summary>
+    private async Task<CollectStepResult> AfterSlotRunAsync(string? agentText)
+    {
+        if (_toolset.Cancelled)
+        {
+            _phase = "done";
+            _hub.Publish("SYSTEM", "Tahsilat oturumu iptal edildi → akıştan çıkıldı");
+            return new CollectStepResult(SessionId, "cancelled",
+                Prompt: string.IsNullOrWhiteSpace(agentText) ? "İşlem iptal edildi." : agentText!);
+        }
+
+        if (_toolset.Proposal is { } slots)
+            return await EnterConfirmationAsync(slots);
+
+        var prompt = string.IsNullOrWhiteSpace(agentText)
+            ? "Devam etmek için lütfen bilgi verir misiniz?"
+            : agentText!;
+        return new CollectStepResult(SessionId, "question", Prompt: prompt);
+    }
+
+    /// <summary>Aşama B: MAF Workflow'u başlat ve insan onayı isteyen RequestInfoEvent'e kadar yürüt.</summary>
+    private async Task<CollectStepResult> EnterConfirmationAsync(PaymentSlots slots)
+    {
+        _confirmation = _toolset.BuildConfirmationView(slots);
+        _hub.Publish("WORKFLOW", "Bilgiler tamamlandı → onay workflow'u başlatıldı (MAF + RequestPort)");
+        var workflow = PaymentApprovalWorkflow.Build(_collections, slots, _hub);
+
+        _run = await InProcessExecution.RunStreamingAsync(workflow, _confirmation);
+        _events = _run.WatchStreamAsync().GetAsyncEnumerator();
+
+        while (await _events.MoveNextAsync())
+        {
+            if (_events.Current is RequestInfoEvent req)
+            {
+                _pendingApproval = req.Request;
+                _phase = "confirm";
+                _hub.Publish("WORKFLOW", "Onay ekranı kullanıcıya gönderildi → onay bekleniyor (HITL)");
+                return new CollectStepResult(SessionId, "confirmation", Confirmation: _confirmation);
+            }
+        }
+
+        // Beklenmedik: onay istenmeden tamamlandı.
+        _phase = "done";
+        return new CollectStepResult(SessionId, "cancelled", Prompt: "Onay adımı başlatılamadı.");
+    }
+
+    private async Task<CollectStepResult> HandleApprovalAsync(string answer)
+    {
+        if (_run is null || _events is null || _pendingApproval is null)
+            return new CollectStepResult(SessionId, "cancelled", Prompt: "Onay durumu bulunamadı.");
+
+        var approved = ParseApproval(answer);
+        await _run.SendResponseAsync(_pendingApproval.CreateResponse(approved));
+
+        while (await _events.MoveNextAsync())
+        {
+            if (_events.Current is WorkflowOutputEvent output && output.Is<PaymentOutcome>())
+            {
+                _phase = "done";
+                var outcome = output.As<PaymentOutcome>();
+                if (outcome?.Receipt is { } r)
+                {
+                    _hub.Publish("SYSTEM", "Tahsilat tamamlandı → oturum kapandı (makbuz üretildi)");
+                    var dto = new ReceiptDto(r.ReceiptId, r.Amount, r.RemainingDebt, r.Date.ToString("dd.MM.yyyy"));
+                    return new CollectStepResult(SessionId, "completed", Receipt: dto);
+                }
+                _hub.Publish("SYSTEM", "Tahsilat oturumu kapandı (onaylanmadı)");
+                return new CollectStepResult(SessionId, "cancelled", Prompt: "Ödeme iptal edildi. Hiçbir tutar tahsil edilmedi.");
+            }
+        }
+
+        _phase = "done";
+        return new CollectStepResult(SessionId, "cancelled",
+            Prompt: approved ? "İşlem tamamlandı." : "Ödeme iptal edildi.");
+    }
+
+    private static bool ParseApproval(string answer)
+    {
+        var s = answer.Trim().ToLowerInvariant();
+        if (s.Contains("iptal") || s.Contains("hayır") || s.Contains("vazgeç") || s == "h")
+            return false;
+        return s.Contains("onayl") || s.Contains("evet") || s.Contains("kabul") || s.Contains("tamam") || s == "e";
+    }
+}
+
+/// <summary>Aktif tahsilat oturumlarını tutan ve yöneten singleton.</summary>
+public sealed class CollectionSessionStore(
+    ChatClient chat,
+    TraceHub hub,
+    ICardService cards,
+    IAccountService accounts,
+    ICollectionService collections,
+    CustomerContext context)
+{
+    private readonly ConcurrentDictionary<string, CollectionConversation> _sessions = new();
+
+    public async Task<CollectStepResult> StartAsync(string? initialMessage = null)
+    {
+        hub.Publish("SYSTEM", "Tahsilat (human-in-the-loop) oturumu başlatıldı");
+        var id = "cs-" + Guid.NewGuid().ToString("N")[..8];
+        var convo = await CollectionConversation.CreateAsync(id, chat, hub, cards, accounts, collections, context);
+        _sessions[id] = convo;
+        return await convo.StartAsync(initialMessage);
+    }
+
+    public async Task<CollectStepResult> RespondAsync(string sessionId, string answer)
+    {
+        if (!_sessions.TryGetValue(sessionId, out var convo))
+            return new CollectStepResult(sessionId, "cancelled",
+                Prompt: "Oturum bulunamadı veya süresi doldu. Lütfen tahsilatı yeniden başlatın.");
+
+        var result = await convo.RespondAsync(answer);
+        if (result.Status is "completed" or "cancelled")
+            _sessions.TryRemove(sessionId, out _);
+        return result;
+    }
+}

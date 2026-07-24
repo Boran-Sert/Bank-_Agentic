@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Banka Asistanı · MAF Agentic</title>
+<style>
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --panel2: #334155;
+    --accent: #2563eb; --green: #16a34a; --red: #dc2626;
+    --text: #e2e8f0; --muted: #94a3b8; --bubble-user: #2563eb; --bubble-bot: #334155;
+    --l-llm:#a855f7; --l-a2a:#3b82f6; --l-mcp:#14b8a6; --l-service:#22c55e; --l-workflow:#f59e0b; --l-system:#64748b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--panel2);
+    display: flex; align-items: center; gap: 12px;
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .badge { font-size: 11px; color: var(--muted); background: var(--panel2); padding: 3px 8px; border-radius: 999px; }
+  header .spacer { flex: 1; }
+
+  #main { flex: 1; display: flex; min-height: 0; }
+  .chat-pane { flex: 1.2; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--panel2); }
+  .trace-pane { flex: 1; display: flex; flex-direction: column; min-width: 320px; background: #0b1120; }
+
+  #chat { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 11px; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; line-height: 1.45; white-space: pre-wrap; font-size: 14px; }
+  .msg.user { align-self: flex-end; background: var(--bubble-user); color: white; border-bottom-right-radius: 4px; }
+  .msg.bot { align-self: flex-start; background: var(--bubble-bot); border-bottom-left-radius: 4px; }
+  .msg.sys { align-self: center; background: transparent; color: var(--muted); font-size: 12px; font-style: italic; }
+  .typing { align-self: flex-start; color: var(--muted); font-size: 13px; }
+  .confirm-card { align-self: flex-start; background: var(--panel); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,.3); }
+  .confirm-card h3 { margin: 0 0 12px; font-size: 14px; color: #93c5fd; letter-spacing: .5px; }
+  .confirm-card .row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; border-bottom: 1px dashed var(--panel2); }
+  .confirm-card .row span:first-child { color: var(--muted); }
+  .confirm-card .row.total span:last-child { font-weight: 700; color: #fde68a; }
+  .confirm-card .actions { display: flex; gap: 10px; margin-top: 14px; }
+  .confirm-card button { flex: 1; padding: 9px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .btn-approve { background: var(--green); color: white; }
+  .btn-cancel { background: var(--red); color: white; }
+  .receipt { align-self: flex-start; background: #052e16; border: 1px solid var(--green); border-radius: 14px; padding: 14px 18px; max-width: 360px; }
+  .receipt h3 { margin: 0 0 8px; color: #86efac; font-size: 14px; }
+  .receipt .row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+
+  footer { padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--panel2); }
+  .mode-pill { font-size: 12px; color: #fbbf24; margin-bottom: 8px; display: none; }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .chip { font-size: 12px; padding: 6px 12px; border-radius: 999px; background: var(--panel2); color: var(--text); cursor: pointer; border: none; }
+  .chip:hover { background: var(--accent); }
+  .chip.collect { background: #7c2d12; }
+  .input-row { display: flex; gap: 10px; }
+  #input { flex: 1; padding: 11px 14px; border-radius: 10px; border: 1px solid var(--panel2); background: var(--bg); color: var(--text); font-size: 14px; }
+  #input:focus { outline: none; border-color: var(--accent); }
+  button.send { padding: 0 18px; border: none; border-radius: 10px; background: var(--accent); color: white; font-weight: 600; cursor: pointer; }
+  button.send:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* Trace panel */
+  .trace-head { padding: 11px 16px; border-bottom: 1px solid var(--panel2); display: flex; align-items: center; gap: 8px; }
+  .trace-head h2 { font-size: 13px; margin: 0; font-weight: 600; color: #cbd5e1; }
+  .trace-head .dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; }
+  .trace-head .dot.on { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .trace-head .spacer { flex: 1; }
+  .trace-head button { font-size: 11px; padding: 4px 9px; border: 1px solid var(--panel2); background: transparent; color: var(--muted); border-radius: 6px; cursor: pointer; }
+  #trace { flex: 1; overflow-y: auto; padding: 10px 12px; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; }
+  .trace-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 6px; border-radius: 6px; }
+  .trace-row:hover { background: #111c33; }
+  .tlayer { flex: 0 0 78px; text-align: center; font-weight: 700; font-size: 10px; letter-spacing: .5px; padding: 2px 0; border-radius: 5px; color: #0b1120; }
+  .l-LLM { background: var(--l-llm); } .l-A2A { background: var(--l-a2a); } .l-MCP { background: var(--l-mcp); }
+  .l-SERVICE { background: var(--l-service); } .l-WORKFLOW { background: var(--l-workflow); } .l-SYSTEM { background: var(--l-system); color:#e2e8f0; }
+  .ttext { flex: 1; color: #e2e8f0; line-height: 1.4; }
+  .tdetail { color: var(--muted); }
+  .ttime { color: #475569; font-size: 10px; }
+  .trace-empty { color: var(--muted); font-style: italic; padding: 8px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1>🏦 Banka Asistanı</h1>
+    <span class="badge">Microsoft Agent Framework · MCP · A2A</span>
+    <div class="spacer"></div>
+    <span class="badge" id="customer">Yusuf Efe Mayda</span>
+  </header>
+
+  <div id="main">
+    <!-- SOL: SOHBET -->
+    <div class="chat-pane">
+      <div id="chat">
+        <div class="msg bot">Merhaba 👋 Ben bankacılık asistanınızım. Hesaplarınız ve kredi kartlarınızla ilgili soru sorabilir, ya da kart borcu ödemesi başlatabilirsiniz. Sağ panelde her sorunun hangi katmanlardan (LLM · A2A · MCP · Servis · Workflow) geçtiğini canlı görebilirsiniz.</div>
+      </div>
+      <footer>
+        <div class="mode-pill" id="modePill">🔴 Tahsilat akışı aktif — asistanın sorularını yanıtlayın.</div>
+        <div class="toolbar" id="toolbar">
+          <button class="chip" onclick="quick('Hesaplarımı ve bakiyelerimi listeler misin?')">Hesaplarım</button>
+          <button class="chip" onclick="quick('Kredi kartı borçlarım ne kadar?')">Kart borcum</button>
+          <button class="chip" onclick="quick('Kartımın kullanılabilir limiti nedir?')">Limitim</button>
+          <button class="chip collect" onclick="quick('Kart borcumu ödemek istiyorum')">💳 Kart borcu öde</button>
+        </div>
+        <div class="input-row">
+          <input id="input" placeholder="Bir şey sorun..." autocomplete="off" onkeydown="if(event.key==='Enter')send()" />
+          <button class="send" id="sendBtn" onclick="send()">Gönder</button>
+        </div>
+      </footer>
+    </div>
+
+    <!-- SAĞ: CANLI KATMAN İZİ -->
+    <div class="trace-pane">
+      <div class="trace-head">
+        <span class="dot" id="traceDot"></span>
+        <h2>🔎 Katman İzi (canlı)</h2>
+        <div class="spacer"></div>
+        <button onclick="clearTrace()">temizle</button>
+      </div>
+      <div id="trace"><div class="trace-empty" id="traceEmpty">Bir soru sorun; çağrı zinciri burada akacak…</div></div>
+    </div>
+  </div>
+
+<script>
+let collectSession = null;
+const chat = document.getElementById('chat');
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('sendBtn');
+const modePill = document.getElementById('modePill');
+const trace = document.getElementById('trace');
+
+function add(text, cls) {
+  const d = document.createElement('div'); d.className = 'msg ' + cls; d.textContent = text;
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d;
+}
+function typing() {
+  const d = document.createElement('div'); d.className = 'typing'; d.textContent = '⏳ asistan düşünüyor...';
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d;
+}
+function fmt(n) { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n); }
+function setMode(collect) {
+  modePill.style.display = collect ? 'block' : 'none';
+  input.placeholder = collect ? 'Asistanın sorusunu yanıtlayın...' : 'Bir şey sorun...';
+}
+function quick(q) { input.value = q; send(); }
+
+async function send() {
+  const text = input.value.trim(); if (!text) return;
+  input.value = ''; add(text, 'user'); sendBtn.disabled = true;
+  const t = typing();
+  try {
+    if (collectSession) {
+      const r = await postJson('/api/collect/respond', { sessionId: collectSession, answer: text });
+      t.remove(); handleCollect(r);
+    } else {
+      const r = await postJson('/api/chat', { message: text });
+      t.remove(); add(r.reply ?? '(boş yanıt)', 'bot');
+      if (r.startCollection) { await startCollect(text); }
+    }
+  } catch (e) { t.remove(); add('⚠️ Hata: ' + e.message, 'sys'); }
+  finally { sendBtn.disabled = false; input.focus(); }
+}
+
+async function startCollect(initialMessage) {
+  add('💳 Kart borcu ödeme akışı başlatılıyor...', 'sys');
+  sendBtn.disabled = true; const t = typing();
+  try {
+    const r = await postJson('/api/collect/start', initialMessage ? { message: initialMessage } : {});
+    t.remove(); handleCollect(r);
+  } catch (e) { t.remove(); add('⚠️ Hata: ' + e.message, 'sys'); }
+  finally { sendBtn.disabled = false; input.focus(); }
+}
+
+function handleCollect(r) {
+  collectSession = (r.status === 'completed' || r.status === 'cancelled') ? null : r.sessionId;
+  setMode(collectSession !== null);
+  if (r.status === 'question') add(r.prompt, 'bot');
+  else if (r.status === 'confirmation') renderConfirm(r);
+  else if (r.status === 'completed') { if (r.receipt) renderReceipt(r.receipt); else add(r.prompt ?? 'İşlem tamamlandı.', 'bot'); }
+  else if (r.status === 'cancelled') add(r.prompt ?? 'İşlem iptal edildi.', 'sys');
+  else add(r.prompt ?? JSON.stringify(r), 'bot');
+}
+
+function renderConfirm(r) {
+  const c = r.confirmation;
+  const card = document.createElement('div'); card.className = 'confirm-card';
+  card.innerHTML = `
+    <h3>🔐 ÖDEME ONAYI</h3>
+    <div class="row"><span>Kart</span><span>${c.cardMasked}</span></div>
+    <div class="row"><span>Güncel borç</span><span>${fmt(c.totalDebt)}</span></div>
+    <div class="row total"><span>Ödenecek tutar</span><span>${fmt(c.amount)}${c.partial ? ' (kısmi)' : ' (tamamı)'}</span></div>
+    <div class="row"><span>Kaynak hesap</span><span>${c.sourceAccountMasked}</span></div>
+    <div class="row"><span>Tarih</span><span>${c.date}</span></div>
+    <div class="actions"><button class="btn-approve">✓ Onayla</button><button class="btn-cancel">✗ İptal</button></div>`;
+  chat.appendChild(card); chat.scrollTop = chat.scrollHeight;
+  const [approve, cancel] = card.querySelectorAll('button');
+  approve.onclick = () => respondConfirm(card, 'onayla');
+  cancel.onclick = () => respondConfirm(card, 'iptal');
+}
+
+async function respondConfirm(card, answer) {
+  card.querySelectorAll('button').forEach(b => b.disabled = true);
+  add(answer === 'onayla' ? '✓ Onaylıyorum' : '✗ İptal', 'user');
+  const t = typing();
+  try {
+    const r = await postJson('/api/collect/respond', { sessionId: collectSession, answer });
+    t.remove(); handleCollect(r);
+  } catch (e) { t.remove(); add('⚠️ Hata: ' + e.message, 'sys'); }
+}
+
+function renderReceipt(rc) {
+  const d = document.createElement('div'); d.className = 'receipt';
+  d.innerHTML = `
+    <h3>✅ Ödeme Başarılı</h3>
+    <div class="row"><span>Makbuz No</span><span>${rc.receiptId}</span></div>
+    <div class="row"><span>Ödenen</span><span>${fmt(rc.amount)}</span></div>
+    <div class="row"><span>Kalan borç</span><span>${fmt(rc.remainingDebt)}</span></div>
+    <div class="row"><span>Tarih</span><span>${rc.date}</span></div>`;
+  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+}
+
+async function postJson(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + (await res.text()));
+  return res.json();
+}
+
+/* ---------- Canlı katman izi (SSE) ---------- */
+function escapeHtml(s) { return (s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+let traceEmpty = document.getElementById('traceEmpty');
+function clearTrace() { trace.innerHTML = ''; traceEmpty = null; }
+function addTrace(ev) {
+  if (traceEmpty) { traceEmpty.remove(); traceEmpty = null; }
+  const layer = (ev.layer || 'SYSTEM').toUpperCase();
+  const row = document.createElement('div'); row.className = 'trace-row';
+  row.innerHTML =
+    `<span class="tlayer l-${layer}">${layer}</span>` +
+    `<span class="ttext">${escapeHtml(ev.text)}${ev.detail ? ' <span class="tdetail">'+escapeHtml(ev.detail)+'</span>' : ''}</span>` +
+    `<span class="ttime">${ev.t || ''}</span>`;
+  trace.appendChild(row); trace.scrollTop = trace.scrollHeight;
+}
+function connectTrace() {
+  const dot = document.getElementById('traceDot');
+  const es = new EventSource('/api/trace/stream');
+  es.onopen = () => dot.classList.add('on');
+  es.onerror = () => dot.classList.remove('on');
+  es.onmessage = (e) => { try { addTrace(JSON.parse(e.data)); } catch {} };
+}
+connectTrace();
+</script>
+</body>
+</html>

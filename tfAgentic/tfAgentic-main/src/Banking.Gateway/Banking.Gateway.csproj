@@ -1,0 +1,12 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<RootNamespace>Banking.Gateway</RootNamespace>
+	</PropertyGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Banking.Domain\Banking.Domain.csproj" />
+		<ProjectReference Include="..\Banking.Agents\Banking.Agents.csproj" />
+	</ItemGroup>
+</Project>

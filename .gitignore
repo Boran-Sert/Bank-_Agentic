@@ -1,0 +1,66 @@
+# Projeye özel dokümanlar / taslaklar
+migration_source_code.md
+ANALIZ.md.bak
+
+# Visual Studio / VS Code / JetBrains Rider / Eclipse / IntelliJ
+.vs/
+.vscode/
+.idea/
+*.user
+*.userosv
+*.suo
+*.userprefs
+*.DotSettings.user
+*.swp
+*~
+
+# .NET build ve derleme çıktıları
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+artifacts/
+*.dll
+*.exe
+*.pdb
+*.cache
+
+# NuGet / Paketler
+project.lock.json
+project.assets.json
+*.nuget.props
+*.nuget.targets
+.packages/
+
+# Java / Maven / Gradle / Spring çıktıları
+target/
+build/
+.gradle/
+*.class
+*.jar
+*.war
+*.ear
+.project
+.classpath
+.settings/
+
+# Test / Coverage
+[Tt]est[Rr]esult*/
+coverage*.json
+*.coverage
+
+# Gizli / Yerel ayarlar (API anahtarları repoya GİRMEZ)
+appsettings.Local.json
+appsettings.*.Local.json
+.env
+*.env
+secrets.json
+
+# İşletim Sistemi geçici dosyaları
+.DS_Store
+Thumbs.db
+desktop.ini

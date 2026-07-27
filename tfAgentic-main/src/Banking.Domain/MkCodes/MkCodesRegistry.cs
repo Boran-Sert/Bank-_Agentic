@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 namespace Banking.Domain.MkCodes;
 
@@ -10,28 +10,23 @@ public static class MkCodesRegistry
     {
         ["CreditCardPayment"] = new(
             Value: "CreditCardPayment",
-            Label: "Kredi Kartı Borç Ödeme",
-            RequiredSlots: ["cardId", "amount", "sourceAccountId"]),
+            Label: "Kredi Kartı Borç Ödeme"),
 
         ["TransferMenu"] = new(
             Value: "TransferMenu",
-            Label: "Para Transferi",
-            RequiredSlots: ["sourceAccountId", "targetIban", "amount", "description"]),
+            Label: "Para Transferi"),
 
         ["AccountsMenu"] = new(
             Value: "AccountsMenu",
-            Label: "Hesaplarım",
-            RequiredSlots: []),
+            Label: "Hesaplarım"),
 
         ["CreditCardMenu"] = new(
             Value: "CreditCardMenu",
-            Label: "Kredi Kartlarım",
-            RequiredSlots: []),
+            Label: "Kredi Kartlarım"),
 
         ["PaymentsMenu"] = new(
             Value: "PaymentsMenu",
-            Label: "Ödemeler",
-            RequiredSlots: []),
+            Label: "Ödemeler")
     };
 
     /// Belirli bir mkCode tanımını döner. Bulunamazsa null.
@@ -42,15 +37,5 @@ public static class MkCodesRegistry
     public static IReadOnlyList<MkCodeDefinition> GetAll() =>
         Codes.Values.ToList().AsReadOnly();
 
-    /// Tüm mkCode'ları MW'nin beklediği JSON formatında serialize eder.
-    /// Format: [{"value":"CreditCardPayment","label":"Kredi Kartı Borç Ödeme"}, ...]
-    public static string ToMkCodesJson()
-    {
-        var entries = Codes.Values.Select(c => new { value = c.Value, label = c.Label });
-        return JsonSerializer.Serialize(entries, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = false
-        });
-    }
+
 }

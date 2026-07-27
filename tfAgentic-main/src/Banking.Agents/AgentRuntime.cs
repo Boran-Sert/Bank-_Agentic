@@ -11,8 +11,8 @@ using OpenAI.Chat;
 
 namespace Banking.Agents;
 
-/// <summary>Orkestratör yanıtı: metin + tahsilat akışının başlatılması gerekip gerekmediği.</summary>
-public sealed record OrchestratorReply(string Reply, bool StartCollection);
+/// <summary>Orkestratör yanıtı: metin + tahsilat akışının başlatılması gerekip gerekmediği + açılacak ekran mkCode (varsa).</summary>
+public sealed record OrchestratorReply(string Reply, bool StartCollection, string? OpenScreenMkCode);
 
 /// <summary>
 /// Ajan grafiğini TEMBEL kurar. Uzmanlar süreç-içi MCP server'a (loopback) bağlanır; bu yüzden
@@ -32,6 +32,8 @@ public sealed class AgentRuntime
         - Kullanıcı bir kredi kartı borcunu ÖDEMEK / kapatmak isterse (bilgi sorusu DEĞİL), 'tahsilat_akisini_baslat'
           aracını çağır ve kullanıcıya yalnızca kısaca "Tahsilat akışını başlatıyorum." de. Borç tutarı, limit veya
           son ödeme tarihi BİLGİSİ soruluyorsa bu aracı çağırma; 'kart_uzmanina_sor' kullan.
+        - Kullanıcı BELİRLİ BİR EKRANI (ör: para transferi, hesaplar, kartlar, ödemeler) AÇMAK İSTERSE 'ekran_ac' aracını
+          kullanarak uygun ekran kodunu dön. (Örn: Havale/EFT için TransferMenu, Hesaplar için AccountsMenu).
         - Araçlardan gelmeyen bilgiyi asla uydurma.
         """;
 
@@ -51,6 +53,9 @@ public sealed class AgentRuntime
 
     // Orkestratör 'tahsilat_akisini_baslat' aracını çağırınca bu istek için işaretlenir (AsyncLocal → istek-izole).
     private static readonly AsyncLocal<StrongBox<bool>?> PaymentIntent = new();
+    
+    // Orkestratör 'ekran_ac' aracını çağırınca açılacak mkCode'u tutar.
+    private static readonly AsyncLocal<StrongBox<string?>?> NavigationIntent = new();
 
     public int McpToolCount { get; private set; }
     public string SpecialistTransport { get; private set; } = "(kurulmadı)";
@@ -183,6 +188,9 @@ public sealed class AgentRuntime
                 new TracingAIFunction(
                     AIFunctionFactory.Create(TahsilatAkisiniBaslat, name: "tahsilat_akisini_baslat"),
                     _hub, "WORKFLOW", "Tahsilat akışı tetiklendi"),
+                new TracingAIFunction(
+                    AIFunctionFactory.Create(EkranAc, name: "ekran_ac"),
+                    _hub, "WORKFLOW", "Ekran yönlendirmesi tetiklendi"),
             };
 
             _orchestrator = TracedClient("Orkestratör")
@@ -200,20 +208,33 @@ public sealed class AgentRuntime
         return "Tahsilat akışı başlatılıyor.";
     }
 
+    [Description("Kullanıcı belirli bir menüye veya ekrana GİTMEK/AÇMAK istediğinde çağrılır. Parametre olarak menü mkCode değeri alır. Desteklenen mkCode değerleri: 'CreditCardPayment', 'TransferMenu', 'AccountsMenu', 'CreditCardMenu', 'PaymentsMenu'. Para transferi veya EFT denirse 'TransferMenu' yolla.")]
+    private string EkranAc(string mkCode)
+    {
+        if (NavigationIntent.Value is { } box) box.Value = mkCode;
+        return $"{mkCode} ekranı açılıyor.";
+    }
+
     /// <summary>Q&A: kullanıcı sorusunu orkestratöre iletir; yanıt metni + tahsilat akışı başlatılmalı mı bilgisi döner.</summary>
     public async Task<OrchestratorReply> AskAsync(string message, CancellationToken ct = default)
     {
         await EnsureOrchestratorAsync(ct);
         _hub.Publish("SYSTEM", "Kullanıcı sorusu alındı → Orkestratör");
         var intentBox = new StrongBox<bool>(false);
+        var navBox = new StrongBox<string?>(null);
         PaymentIntent.Value = intentBox;
+        NavigationIntent.Value = navBox;
         try
         {
             var response = await _orchestrator!.RunAsync(message, cancellationToken: ct);
             _hub.Publish("SYSTEM", "Yanıt kullanıcıya hazır");
-            return new OrchestratorReply(response.Text, intentBox.Value);
+            return new OrchestratorReply(response.Text, intentBox.Value, navBox.Value);
         }
-        finally { PaymentIntent.Value = null; }
+        finally 
+        { 
+            PaymentIntent.Value = null; 
+            NavigationIntent.Value = null; 
+        }
     }
 
     public async Task<object> GetDiagnosticsAsync(CancellationToken ct = default)

@@ -14,12 +14,7 @@ public sealed record ScreenCommand
     /// Örnek: "CreditCardPayment", "TransferMenu", "AccountsMenu
     [JsonPropertyName("mkCodeValue")]
     public required string MkCodeValue { get; init; }
-
-    /// Tüm desteklenen mkCode'ların JSON serileştirilmiş listesi.
-    /// Mobil uygulama bu listeyi navigasyon/menü oluşturmak için kullanabilir
     
-    [JsonPropertyName("mkCodesJson")]
-    public required string MkCodesJson { get; init; }
 
     /// Mobil uygulamanın tema bilgisi. MW'den geldi, aynen geri döner.
     [JsonPropertyName("themeValue")]

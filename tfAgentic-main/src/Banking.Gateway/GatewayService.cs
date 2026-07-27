@@ -63,6 +63,13 @@ public sealed class GatewayService
                 return await StartCollectionAsync(session, request, ct);
             }
 
+            // Orkestratör ekran açma yönlendirmesi yaptıysa
+            if (!string.IsNullOrEmpty(reply.OpenScreenMkCode))
+            {
+                _hub.Publish("GATEWAY", $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({reply.OpenScreenMkCode})");
+                return GatewayResponse.AsOpenScreen(reply.OpenScreenMkCode);
+            }
+
             // Normal sohbet/Q&A yanıtı (TEXT)
             _hub.Publish("GATEWAY", "Metin yanıtı hazır → TEXT", $"len={reply.Reply.Length}");
             return GatewayResponse.AsText(reply.Reply);
@@ -115,12 +122,13 @@ public sealed class GatewayService
                 return GatewayResponse.AsText(result.Prompt!);
 
             case "confirmation":
-                _hub.Publish("GATEWAY", "Onay ekranı hazır → TEXT (onay metni)");
-                return GatewayResponse.AsText(FormatConfirmationPrompt(result.Confirmation!));
+                _hub.Publish("GATEWAY", "Onay ekranı hazır → CONFIRM_PAYMENT");
+                return BuildConfirmationScreen(result.Confirmation!);
 
             case "completed" when result.Receipt is not null:
-                _hub.Publish("GATEWAY", "Tahsilat tamamlandı → OPEN_SCREEN üretiliyor");
-                return BuildScreenCommand(session, result);
+                _hub.Publish("GATEWAY", "Tahsilat tamamlandı → TEXT (makbuz)");
+                ClearCollectionSession(session);
+                return GatewayResponse.AsText($"Ödeme başarıyla tamamlandı.\nMakbuz No: {result.Receipt.ReceiptId}\nKalan Borç: {result.Receipt.RemainingDebt:N2} ₺");
 
             case "cancelled":
                 _hub.Publish("GATEWAY", "Oturum iptal edildi → TEXT");
@@ -134,34 +142,22 @@ public sealed class GatewayService
         }
     }
 
-    private GatewayResponse BuildScreenCommand(
-        GatewaySession session, CollectStepResult result)
+    private GatewayResponse BuildConfirmationScreen(ConfirmationView confirmation)
     {
-        var receipt = result.Receipt!;
         var mkCodeDef = MkCodesRegistry.Get("CreditCardPayment");
-
         if (mkCodeDef is null)
         {
             _logger.LogError("CreditCardPayment mkCode tanımı bulunamadı");
             return GatewayResponse.AsText("Ekran kodu tanımı bulunamadı.");
         }
 
-        var parameters = new Dictionary<string, object>
-        {
-            ["receiptId"] = receipt.ReceiptId,
-            ["amount"] = receipt.Amount,
-            ["remainingDebt"] = receipt.RemainingDebt,
-            ["date"] = receipt.Date,
-            ["status"] = "SUCCESS"
-        };
-
-        ClearCollectionSession(session);
-
-        _hub.Publish("GATEWAY",
-            $"OPEN_SCREEN hazır → mkCode={mkCodeDef.Value}",
-            $"amount={receipt.Amount} remaining={receipt.RemainingDebt}");
-
-        return GatewayResponse.AsOpenScreen(mkCodeDef.Value, MkCodesRegistry.ToMkCodesJson(), parameters);
+        return GatewayResponse.AsConfirmPayment(
+            mkCodeValue: mkCodeDef.Value,
+            cardNumber: confirmation.CardMasked,
+            cardProductName: null, // Not available in ConfirmationView directly
+            amount: confirmation.Amount.ToString("F2"),
+            accountNo: confirmation.SourceAccountMasked
+        );
     }
 
     private void ClearCollectionSession(GatewaySession session)
@@ -169,20 +165,6 @@ public sealed class GatewayService
         session.CollectionSessionId = null;
     }
 
-    private static string FormatConfirmationPrompt(ConfirmationView confirmation)
-    {
-        var partialLabel = confirmation.Partial ? "(kısmi ödeme)" : "(tamamı)";
-        return $"""
-            ─────── ÖDEME ONAYI ───────
-            Kart:          {confirmation.CardMasked}
-            Toplam Borç:   {confirmation.TotalDebt:N2} ₺
-            Ödenecek:      {confirmation.Amount:N2} ₺ {partialLabel}
-            Kaynak Hesap:  {confirmation.SourceAccountMasked}
-            Tarih:         {confirmation.Date}
-            ───────────────────────────
-            Bu ödemeyi onaylıyor musunuz? (evet / hayır)
-            """;
-    }
 
     private static string NormalizeSessionToken(string? token)
     {

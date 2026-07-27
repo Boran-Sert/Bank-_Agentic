@@ -12,8 +12,8 @@ import java.nio.charset.StandardCharsets;
 @Service
 public class AdcAIClient {
 
-    // .NET AI orchestrator endpoint — production URL'sini buraya yaz
-    private static final String ENDPOINT = "http://adc-ai-backend/api/ai/chat";
+    // .NET AI orchestrator endpoint
+    private static final String ENDPOINT = "http://10.141.5.253:5080/api/ai/chat";
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 

@@ -19,9 +19,6 @@ public sealed record GatewayResponse
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? MkCodeValue { get; init; }
 
-    [JsonPropertyName("mkCodesJson")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? MkCodesJson { get; init; }
 
     // MW'nin beklediği diğer alanlar (tahsilat onayında veya ekranda gerekirse)
     [JsonPropertyName("cardNumber")]
@@ -46,26 +43,25 @@ public sealed record GatewayResponse
         Text = text
     };
 
-    public static GatewayResponse AsOpenScreen(string mkCodeValue, string mkCodesJson, Dictionary<string, object>? parameters = null) 
+    public static GatewayResponse AsOpenScreen(string mkCodeValue) 
     {
-        var response = new GatewayResponse
+        return new GatewayResponse
         {
             Type = GatewayResponseType.OPEN_SCREEN,
-            MkCodeValue = mkCodeValue,
-            MkCodesJson = mkCodesJson
+            MkCodeValue = mkCodeValue
         };
+    }
 
-        // Eğer parametrelerde alanlar varsa flat yapıya ekle (Demo amaçlı haritalama)
-        if (parameters != null)
+    public static GatewayResponse AsConfirmPayment(string mkCodeValue, string cardNumber, string? cardProductName, string amount, string accountNo) 
+    {
+        return new GatewayResponse
         {
-            if (parameters.TryGetValue("amount", out var amt))
-                response = response with { Amount = amt.ToString() };
-            if (parameters.TryGetValue("sourceAccountId", out var acc))
-                response = response with { AccountNo = acc.ToString() };
-            if (parameters.TryGetValue("cardId", out var cardId))
-                response = response with { CardNumber = cardId.ToString() };
-        }
-
-        return response;
+            Type = GatewayResponseType.CONFIRM_PAYMENT,
+            MkCodeValue = mkCodeValue,
+            CardNumber = cardNumber,
+            CardProductName = cardProductName,
+            Amount = amount,
+            AccountNo = accountNo
+        };
     }
 }

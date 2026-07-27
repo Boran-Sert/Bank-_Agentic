@@ -4,6 +4,8 @@ using Banking.Agents.Tracing;
 using Banking.Domain.Data;
 using Banking.Domain.Services;
 using Banking.Mcp;
+using Banking.Gateway;
+using Banking.Gateway.Models;
 using Microsoft.Agents.AI.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -33,6 +35,9 @@ builder.Services.AddSingleton<TraceHub>();
 builder.Services.AddSingleton(sp => ChatClientFactory.Create(sp.GetRequiredService<AgentOptions>()));
 builder.Services.AddSingleton<AgentRuntime>();
 builder.Services.AddSingleton<CollectionSessionStore>();
+
+// --- MW Gateway (Java MW ↔ .NET iletişimi) ---
+builder.Services.AddSingleton<GatewayService>();
 
 // --- MCP server (tek server, hesap + kart araçları; loopback /mcp) ---
 builder.Services.AddMcpServer()
@@ -64,6 +69,16 @@ app.MapPost("/api/chat", async (ChatRequest req, AgentRuntime runtime, Cancellat
         return Results.BadRequest(new { error = "message boş olamaz" });
     var r = await runtime.AskAsync(req.Message, ct);
     return Results.Ok(new { reply = r.Reply, startCollection = r.StartCollection });
+});
+
+// ── MW Gateway Endpoint (Java MW için) ──
+app.MapPost("/api/ai/chat", async (GatewayRequest req, GatewayService gw, CancellationToken ct) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Text))
+        return Results.BadRequest(new { error = "text alanı boş olamaz." });
+
+    var response = await gw.ProcessAsync(req, ct);
+    return Results.Ok(response);
 });
 
 // --- Tahsilat (human-in-the-loop) ---

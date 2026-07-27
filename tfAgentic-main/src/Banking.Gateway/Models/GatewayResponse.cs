@@ -1,76 +1,71 @@
-﻿using System.Text.Json.Serialization;
-using Banking.Domain.MkCodes;
+using System.Text.Json.Serialization;
 
 namespace Banking.Gateway.Models;
 
+/// <summary>
+/// .NET'ten Java MW'ye dönen response. Java MW'nin beklediği flat JSON'a uygundur.
+/// </summary>
 public sealed record GatewayResponse
 {
     [JsonPropertyName("type")]
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public required GatewayResponseType Type { get; init; }
 
-    /// <summary>Oturum kimliği. MW bu değeri sonraki isteklerde geri göndermelidir.</summary>
-    [JsonPropertyName("sessionId")]
-    public string? SessionId { get; init; }
-
-    // ── TEXT / QUESTION ──
-
-    /// <summary>Metin yanıtı (sohbet veya slot-filling sorusu).</summary>
     [JsonPropertyName("text")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Text { get; init; }
 
-    // ── SCREEN_COMMAND ──
-
-    /// <summary>Tamamlanmış ekran komutu (mkCodes + parametreler).</summary>
-    [JsonPropertyName("screenCommand")]
+    [JsonPropertyName("mkCodeValue")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ScreenCommand? ScreenCommand { get; init; }
+    public string? MkCodeValue { get; init; }
 
-    // ── ERROR ──
-
-    /// <summary>Hata kodu (fintech standart hata sınıflandırması).</summary>
-    [JsonPropertyName("errorCode")]
+    [JsonPropertyName("mkCodesJson")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? ErrorCode { get; init; }
+    public string? MkCodesJson { get; init; }
 
-    /// <summary>İnsan-okunabilir hata mesajı.</summary>
-    [JsonPropertyName("errorMessage")]
+    // MW'nin beklediği diğer alanlar (tahsilat onayında veya ekranda gerekirse)
+    [JsonPropertyName("cardNumber")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? ErrorMessage { get; init; }
+    public string? CardNumber { get; init; }
 
-    // ── Factory metotları ──
+    [JsonPropertyName("cardProductName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? CardProductName { get; init; }
 
-    /// <summary>Genel metin/sohbet yanıtı oluşturur.</summary>
-    public static GatewayResponse AsText(string sessionId, string text) => new()
+    [JsonPropertyName("amount")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Amount { get; init; }
+
+    [JsonPropertyName("accountNo")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AccountNo { get; init; }
+
+    public static GatewayResponse AsText(string text) => new()
     {
         Type = GatewayResponseType.TEXT,
-        SessionId = sessionId,
         Text = text
     };
 
-    /// <summary>Slot-filling sorusu oluşturur.</summary>
-    public static GatewayResponse AsQuestion(string sessionId, string prompt) => new()
+    public static GatewayResponse AsOpenScreen(string mkCodeValue, string mkCodesJson, Dictionary<string, object>? parameters = null) 
     {
-        Type = GatewayResponseType.QUESTION,
-        SessionId = sessionId,
-        Text = prompt
-    };
+        var response = new GatewayResponse
+        {
+            Type = GatewayResponseType.OPEN_SCREEN,
+            MkCodeValue = mkCodeValue,
+            MkCodesJson = mkCodesJson
+        };
 
-    /// <summary>Tamamlanmış ekran komutu oluşturur.</summary>
-    public static GatewayResponse AsScreenCommand(string sessionId, ScreenCommand command) => new()
-    {
-        Type = GatewayResponseType.SCREEN_COMMAND,
-        SessionId = sessionId,
-        ScreenCommand = command
-    };
+        // Eğer parametrelerde alanlar varsa flat yapıya ekle (Demo amaçlı haritalama)
+        if (parameters != null)
+        {
+            if (parameters.TryGetValue("amount", out var amt))
+                response = response with { Amount = amt.ToString() };
+            if (parameters.TryGetValue("sourceAccountId", out var acc))
+                response = response with { AccountNo = acc.ToString() };
+            if (parameters.TryGetValue("cardId", out var cardId))
+                response = response with { CardNumber = cardId.ToString() };
+        }
 
-    /// <summary>İş hatası yanıtı oluşturur.</summary>
-    public static GatewayResponse AsError(string? sessionId, string code, string message) => new()
-    {
-        Type = GatewayResponseType.ERROR,
-        SessionId = sessionId,
-        ErrorCode = code,
-        ErrorMessage = message
-    };
+        return response;
+    }
 }

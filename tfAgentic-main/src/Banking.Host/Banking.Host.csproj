@@ -1,9 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
     <ProjectReference Include="..\Banking.Agents\Banking.Agents.csproj" />
     <ProjectReference Include="..\Banking.Mcp\Banking.Mcp.csproj" />
     <ProjectReference Include="..\Banking.Domain\Banking.Domain.csproj" />
+    <ProjectReference Include="..\Banking.Gateway\Banking.Gateway.csproj" />
   </ItemGroup>
 
   <ItemGroup>

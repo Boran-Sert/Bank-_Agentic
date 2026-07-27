@@ -79,13 +79,13 @@ public sealed class InMemoryBankStore
 
         // Borcu güncel kart
         var card1 = new Card(
-            "CARD-2001", customer.Id, "**** **** **** 4521", "4521", "Visa",
+            "CARD-2001", customer.Id, "1234 1234 1234 4521", "4521", "Visa",
             CreditLimit: 50_000m, CurrentDebt: 12_450.00m, MinimumPayment: 1_245.00m,
             StatementDate: new DateOnly(2026, 6, 20), DueDate: new DateOnly(2026, 7, 5));
 
         // Gecikmiş borçlu kart (tahsilat senaryosu için)
         var card2 = new Card(
-            "CARD-2002", customer.Id, "**** **** **** 8830", "8830", "Mastercard",
+            "CARD-2002", customer.Id, "2456 1234 5684 8830", "8830", "Mastercard",
             CreditLimit: 30_000m, CurrentDebt: 8_900.00m, MinimumPayment: 2_670.00m,
             StatementDate: new DateOnly(2026, 5, 25), DueDate: new DateOnly(2026, 6, 10));
 

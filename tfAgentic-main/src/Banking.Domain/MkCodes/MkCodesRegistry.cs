@@ -8,7 +8,7 @@ public static class MkCodesRegistry
 {
     private static readonly Dictionary<string, MkCodeDefinition> Codes = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["CreditCardPayment"] = new(
+        ["MyCardPayment"] = new(
             Value: "CreditCardPayment",
             Label: "Kredi Kartı Borç Ödeme"),
 
@@ -16,7 +16,7 @@ public static class MkCodesRegistry
             Value: "TransferMenu",
             Label: "Para Transferi"),
 
-        ["AccountsMenu"] = new(
+        ["MyAccountList"] = new(
             Value: "AccountsMenu",
             Label: "Hesaplarım"),
 
@@ -24,7 +24,7 @@ public static class MkCodesRegistry
             Value: "CreditCardMenu",
             Label: "Kredi Kartlarım"),
 
-        ["PaymentsMenu"] = new(
+        ["Payments"] = new(
             Value: "PaymentsMenu",
             Label: "Ödemeler")
     };

@@ -71,3 +71,15 @@ Accept: application/json
   "sessionToken": "{{sessionToken}}"
 }
 
+
+
+### 6. Hesap Bilgisini Verme (Tüm slotlar doldu -> CONFIRM_PAYMENT Beklenir)
+POST {{baseUrl}}/api/ai/chat
+Content-Type: application/json
+Accept: application/json
+
+{
+  "text": "hesaplarimi listeleyen ekrani ac",
+  "sessionToken": "{{sessionToken}}"
+}
+

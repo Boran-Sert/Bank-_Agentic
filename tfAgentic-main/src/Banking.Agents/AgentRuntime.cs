@@ -22,8 +22,8 @@ public sealed record OrchestratorReply(string Reply, bool StartCollection, strin
 /// </summary>
 public sealed class AgentRuntime
 {
-    private const string OrchestratorInstructions =
-        """
+    private static string OrchestratorInstructions =>
+        $"""
         Sen bir banka asistanı ORKESTRATÖRÜSÜN. Kullanıcının sorusunu analiz et ve doğru uzmana yönlendir:
         - Hesap, bakiye, IBAN, hesap hareketi/işlem soruları için 'hesap_uzmanina_sor' aracını kullan.
         - Kredi kartı, kart borcu, asgari ödeme, limit, son ödeme tarihi soruları için 'kart_uzmanina_sor' aracını kullan.
@@ -33,7 +33,7 @@ public sealed class AgentRuntime
           aracını çağır ve kullanıcıya yalnızca kısaca "Tahsilat akışını başlatıyorum." de. Borç tutarı, limit veya
           son ödeme tarihi BİLGİSİ soruluyorsa bu aracı çağırma; 'kart_uzmanina_sor' kullan.
         - Kullanıcı BELİRLİ BİR EKRANI (ör: para transferi, hesaplar, kartlar, ödemeler) AÇMAK İSTERSE 'ekran_ac' aracını
-          kullanarak uygun ekran kodunu dön. (Örn: Havale/EFT için TransferMenu, Hesaplar için AccountsMenu).
+          kullan. Geçerli mkCode değerleri: {string.Join(", ", Banking.Domain.MkCodes.MkCodesRegistry.GetAll().Select(x => $"'{x.Value}' ({x.Label})"))}. Bu listeden başka bir şey uydurma!
         - Araçlardan gelmeyen bilgiyi asla uydurma.
         """;
 
@@ -208,7 +208,7 @@ public sealed class AgentRuntime
         return "Tahsilat akışı başlatılıyor.";
     }
 
-    [Description("Kullanıcı belirli bir menüye veya ekrana GİTMEK/AÇMAK istediğinde çağrılır. Parametre olarak menü mkCode değeri alır. Desteklenen mkCode değerleri: 'CreditCardPayment', 'TransferMenu', 'AccountsMenu', 'CreditCardMenu', 'PaymentsMenu'. Para transferi veya EFT denirse 'TransferMenu' yolla.")]
+    [Description("Kullanıcı belirli bir menüye veya ekrana GİTMEK/AÇMAK istediğinde çağrılır. Parametre olarak mkCode değeri alır (Sistem talimatlarındaki listeden seçin).")]
     private string EkranAc(string mkCode)
     {
         if (NavigationIntent.Value is { } box) box.Value = mkCode;

@@ -4,6 +4,7 @@ using A2A;
 using Banking.Agents.Mcp;
 using Banking.Agents.Specialists;
 using Banking.Agents.Tracing;
+using Banking.Domain.MkCodes;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -29,11 +30,8 @@ public sealed class AgentRuntime
         - Kredi kartı, kart borcu, asgari ödeme, limit, son ödeme tarihi soruları için 'kart_uzmanina_sor' aracını kullan.
         - Uzmandan gelen cevabı kullanıcıya açık, kibar ve Türkçe ilet.
         - Soru her iki alanı da kapsıyorsa iki aracı da kullan ve cevapları birleştir.
-        - Kullanıcı bir kredi kartı borcunu ÖDEMEK / kapatmak isterse (bilgi sorusu DEĞİL), 'tahsilat_akisini_baslat'
-          aracını çağır ve kullanıcıya yalnızca kısaca "Tahsilat akışını başlatıyorum." de. Borç tutarı, limit veya
-          son ödeme tarihi BİLGİSİ soruluyorsa bu aracı çağırma; 'kart_uzmanina_sor' kullan.
-        - Kullanıcı BELİRLİ BİR EKRANI (ör: para transferi, hesaplar, kartlar, ödemeler) AÇMAK İSTERSE 'ekran_ac' aracını
-          kullanarak uygun ekran kodunu dön. (Örn: Havale/EFT için TransferMenu, Hesaplar için AccountsMenu).
+        - Kullanıcı bir kredi kartı borcunu ÖDEMEK / kapatmak isterse (bilgi sorusu DEĞİL), 'tahsilat_akisini_baslat' aracını çağır.
+        - Kullanıcı BELİRLİ BİR EKRANI (ör: para transferi, hesaplar, kartlar, ödemeler) AÇMAK İSTERSE, ÖNCE 'ekran_kodu_ara' aracını kullanarak kullanıcının niyetini arat. Dönen sonuçlardan (en iyi skorlardan) en uygun mkCode değerini seç ve SADECE bu mkCode değeri ile 'ekran_ac' aracını çağır.
         - Araçlardan gelmeyen bilgiyi asla uydurma.
         """;
 
@@ -41,6 +39,7 @@ public sealed class AgentRuntime
     private readonly ChatClient _chat;
     private readonly TraceHub _hub;
     private readonly ILogger<AgentRuntime> _logger;
+    private readonly SemanticMkCodeSearcher _semanticMkCodeSearcher;
 
     private readonly DeferredSpecialistAgent _hesap;
     private readonly DeferredSpecialistAgent _kart;
@@ -60,12 +59,13 @@ public sealed class AgentRuntime
     public int McpToolCount { get; private set; }
     public string SpecialistTransport { get; private set; } = "(kurulmadı)";
 
-    public AgentRuntime(AgentOptions options, ChatClient chat, TraceHub hub, ILogger<AgentRuntime> logger)
+    public AgentRuntime(AgentOptions options, ChatClient chat, TraceHub hub, ILogger<AgentRuntime> logger, SemanticMkCodeSearcher semanticMkCodeSearcher)
     {
         _options = options;
         _chat = chat;
         _hub = hub;
         _logger = logger;
+        _semanticMkCodeSearcher = semanticMkCodeSearcher;
 
         _hesap = new DeferredSpecialistAgent(
             "HesapUzmani", "Hesap, bakiye, IBAN ve hesap hareketi uzmanı.",
@@ -189,6 +189,9 @@ public sealed class AgentRuntime
                     AIFunctionFactory.Create(TahsilatAkisiniBaslat, name: "tahsilat_akisini_baslat"),
                     _hub, "WORKFLOW", "Tahsilat akışı tetiklendi"),
                 new TracingAIFunction(
+                    AIFunctionFactory.Create(EkranKoduAra, name: "ekran_kodu_ara"),
+                    _hub, "WORKFLOW", "Semantik Ekran Kodu Arama tetiklendi"),
+                new TracingAIFunction(
                     AIFunctionFactory.Create(EkranAc, name: "ekran_ac"),
                     _hub, "WORKFLOW", "Ekran yönlendirmesi tetiklendi"),
             };
@@ -208,7 +211,29 @@ public sealed class AgentRuntime
         return "Tahsilat akışı başlatılıyor.";
     }
 
-    [Description("Kullanıcı belirli bir menüye veya ekrana GİTMEK/AÇMAK istediğinde çağrılır. Parametre olarak menü mkCode değeri alır. Desteklenen mkCode değerleri: 'CreditCardPayment', 'TransferMenu', 'AccountsMenu', 'CreditCardMenu', 'PaymentsMenu'. Para transferi veya EFT denirse 'TransferMenu' yolla.")]
+    /// <summary>
+    /// LLM'in kullanıcının niyetine uygun en iyi mkCode seçeneklerini semantik arama ile bulmasını sağlar.
+    /// </summary>
+    [Description("Kullanıcı bir ekrana veya menüye gitmek istediğinde, sistemdeki geçerli ekran kodlarını aramak için kullanılır. 'niyet' parametresine kullanıcının isteğini (örn: 'hesap özeti') yazın. Size en uygun kodları skorlarıyla dönecektir.")]
+    private string EkranKoduAra(string niyet)
+    {
+        var results = _semanticMkCodeSearcher.Search(niyet, topK: 3);
+        
+        if (results.Count == 0) return "Uygun ekran kodu bulunamadı.";
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("Bulunan en uygun ekran kodları (Skorları ile birlikte):");
+        foreach (var r in results)
+        {
+            sb.AppendLine($"- mkCode: {r.Code.Value} (Açıklama: {r.Code.Label}, Eşleşme Skoru: {r.Score:F3})");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// LLM'in hedef ekranı açması için tetiklediği araç.
+    /// </summary>
+    [Description("Kullanıcı belirli bir menüye veya ekrana GİTMEK/AÇMAK istediğinde çağrılır. Parametre olarak SADECE 'ekran_kodu_ara' aracından bulduğunuz en uygun mkCode değerini verin.")]
     private string EkranAc(string mkCode)
     {
         if (NavigationIntent.Value is { } box) box.Value = mkCode;

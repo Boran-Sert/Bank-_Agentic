@@ -2,11 +2,13 @@ using Banking.Agents;
 using Banking.Agents.Collection;
 using Banking.Agents.Tracing;
 using Banking.Domain.Data;
+using Banking.Domain.MkCodes;
 using Banking.Domain.Services;
 using Banking.Mcp;
 using Banking.Gateway;
 using Banking.Gateway.Models;
 using Microsoft.Agents.AI.Hosting;
+using SmartComponents.LocalEmbeddings;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -29,6 +31,10 @@ builder.Services.AddSingleton<CustomerContext>();
 builder.Services.AddSingleton<IAccountService, AccountService>();
 builder.Services.AddSingleton<ICardService, CardService>();
 builder.Services.AddSingleton<ICollectionService, CollectionService>();
+
+// --- Semantik Arama & Embedding ---
+builder.Services.AddSingleton<LocalEmbedder>();
+builder.Services.AddSingleton<SemanticMkCodeSearcher>();
 
 // --- LLM + ajan altyapısı ---
 builder.Services.AddSingleton<TraceHub>();
@@ -53,6 +59,13 @@ builder.Services.AddAIAgent("KrediKartiUzmani", (sp, _) => sp.GetRequiredService
     .AddA2AServer();
 
 var app = builder.Build();
+
+// Semantik mkCode arama indeksini uygulama başlarken hafızaya al (Cold-start önleme)
+using (var scope = app.Services.CreateScope())
+{
+    var searcher = scope.ServiceProvider.GetRequiredService<SemanticMkCodeSearcher>();
+    searcher.Initialize();
+}
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

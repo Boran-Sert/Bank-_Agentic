@@ -10,6 +10,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.11.1-preview.260625.1" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.0" />
+    <PackageReference Include="SmartComponents.LocalEmbeddings" Version="0.1.0-preview10148" />
   </ItemGroup>
 
   <PropertyGroup>

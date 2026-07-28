@@ -71,3 +71,14 @@ Accept: application/json
   "sessionToken": "{{sessionToken}}"
 }
 
+
+### Ekran Yönlendirme Testi - Arbitraj
+POST http://10.141.5.253:5080/api/ai/chat
+Content-Type: application/json
+Accept: application/json
+
+{
+  "text": "Poliçelerimi göster",
+  "sessionToken": "e2e-test-session-002"
+}
+

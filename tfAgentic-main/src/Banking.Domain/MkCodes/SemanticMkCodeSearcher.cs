@@ -1,3 +1,4 @@
+using System.Diagnostics.Eventing.Reader;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using SmartComponents.LocalEmbeddings;
@@ -45,32 +46,46 @@ namespace Banking.Domain.MkCodes
         /// <param name="intent">Kullanıcının ekran arama niyeti (örn: "kredi kartı borcunu öde")</param>
         /// <param name="topK">Dönecek maksimum sonuç sayısı (varsayılan: 3)</param>
         /// <returns>En iyi eşleşen kodlar ve skorları</returns>
-        public IReadOnlyList<(MkCodeDefinition Code, float Score)> Search(string intent, int topK = 3)
+        public IReadOnlyList<(MkCodeDefinition Code, float Score)> Search(string intent, int topK = 5)
         {
+            _logger.LogInformation("Semantic Search input: '{Intent}'", intent);
             if (!_isInitialized)
             {
                 Initialize();
             }
-            var Intentembedding = _embedder.Embed(intent);
+
+            var intentEmbedding = _embedder.Embed(intent);
+
             var results = _cache
                 .Select(c => new
                 {
                     c.Code,
-                    Score = Intentembedding.Similarity(c.Vector)
+                    Score = intentEmbedding.Similarity(c.Vector)
                 })
                 .OrderByDescending(x => x.Score)
                 .Take(topK)
+                .Where(x => x.Score > 0.70f)
                 .Select(x => (x.Code, x.Score))
                 .ToList();
 
-            // Skoru ve eşleşmeleri loglama
             var logBuilder = new StringBuilder();
             logBuilder.AppendLine($"[SemanticSearch] Niyet: '{intent}' araması yapıldı. Bulunan Top {topK}:");
-            foreach (var r in results)
+
+            if (!results.Any())
             {
-                logBuilder.AppendLine($"  -> Skor: {r.Score:F4} | Kod: {r.Code.Value} | Etiket: {r.Code.Label}");
+                logBuilder.AppendLine("  -> 0.70 üzeri benzerlikte MkCode bulunamadı.");
             }
+            else
+            {
+                foreach (var r in results)
+                {
+                    logBuilder.AppendLine(
+                        $"  -> Skor: {r.Score:F4} | Kod: {r.Code.Value} | Etiket: {r.Code.Label}");
+                }
+            }
+
             _logger.LogInformation(logBuilder.ToString());
+
             return results;
         }
     }

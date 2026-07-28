@@ -217,7 +217,7 @@ public sealed class AgentRuntime
     [Description("Kullanıcı bir ekrana veya menüye gitmek istediğinde, sistemdeki geçerli ekran kodlarını aramak için kullanılır. 'niyet' parametresine kullanıcının isteğini (örn: 'hesap özeti') yazın. Size en uygun kodları skorlarıyla dönecektir.")]
     private string EkranKoduAra(string niyet)
     {
-        var results = _semanticMkCodeSearcher.Search(niyet, topK: 3);
+        var results = _semanticMkCodeSearcher.Search(niyet);
         
         if (results.Count == 0) return "Uygun ekran kodu bulunamadı.";
 

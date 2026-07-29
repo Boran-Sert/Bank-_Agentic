@@ -14,6 +14,7 @@ public sealed class InMemoryBankStore
     private readonly ConcurrentDictionary<string, Customer> _customers = new();
     private readonly ConcurrentDictionary<string, Account> _accounts = new();
     private readonly ConcurrentDictionary<string, Card> _cards = new();
+    private readonly ConcurrentDictionary<string, Campaign> _campaigns = new();
     private readonly List<Transaction> _transactions = new();
     private readonly object _gate = new();
 
@@ -24,6 +25,7 @@ public sealed class InMemoryBankStore
 
     public IReadOnlyCollection<Account> Accounts => _accounts.Values.ToList();
     public IReadOnlyCollection<Card> Cards => _cards.Values.ToList();
+    public IReadOnlyCollection<Campaign> Campaigns => _campaigns.Values.ToList();
 
     public Customer? GetCustomer(string id) =>
         _customers.TryGetValue(id, out var c) ? c : null;
@@ -34,11 +36,17 @@ public sealed class InMemoryBankStore
     public Card? GetCard(string id) =>
         _cards.TryGetValue(id, out var c) ? c : null;
 
+    public Campaign? GetCampaign(string id) =>
+        _campaigns.TryGetValue(id, out var c) ? c : null;
+
     public IEnumerable<Account> AccountsOf(string customerId) =>
         _accounts.Values.Where(a => a.CustomerId == customerId);
 
     public IEnumerable<Card> CardsOf(string customerId) =>
         _cards.Values.Where(c => c.CustomerId == customerId);
+
+    public IEnumerable<Campaign> CampaignsByMcc(string mccGroup) =>
+        _campaigns.Values.Where(c => c.IsActive && (string.Equals(c.TargetMccGroup, mccGroup, StringComparison.OrdinalIgnoreCase) || c.TargetMccGroup == "All"));
 
     public IEnumerable<Transaction> TransactionsOf(string accountId) =>
         _transactions.Where(t => t.AccountId == accountId).OrderByDescending(t => t.Date);
@@ -91,6 +99,56 @@ public sealed class InMemoryBankStore
 
         _cards[card1.Id] = card1;
         _cards[card2.Id] = card2;
+
+        // Mock Banka ve Kart Kampanyaları
+        var camp1 = new Campaign(
+            "CAMP-101",
+            "Market Alışverişlerinize 250 TL Bonus",
+            "BİM, CarrefourSA ve A101 gibi anlaşmalı market harcamalarınıza özel tek seferde 500 TL üzeri alışverişe 250 TL Bonus hediye!",
+            "MarketAndShopping",
+            "250 TL Bonus",
+            BonusPoints: 250m,
+            MinimumSpendAmount: 500m,
+            StartDate: new DateOnly(2026, 7, 1),
+            EndDate: new DateOnly(2026, 8, 31));
+
+        var camp2 = new Campaign(
+            "CAMP-102",
+            "Giyim ve Tekstilde Peşin Fiyatına 6 Taksit",
+            "Seçili giyim, tuhafiye ve tekstil mağazalarındaki 300 TL ve üzeri peşin harcamalarınıza vade farksız 6 taksit imkânı!",
+            "Clothing",
+            "Peşin Fiyatına 6 Taksit",
+            BonusPoints: 0m,
+            MinimumSpendAmount: 300m,
+            StartDate: new DateOnly(2026, 7, 1),
+            EndDate: new DateOnly(2026, 8, 31));
+
+        var camp3 = new Campaign(
+            "CAMP-103",
+            "Gıda ve Fırın Harcamalarında %10 Ekstra Puan",
+            "Fırın, ekmek ve gıda restoranı harcamalarınızda her alışverişe %10 oranında ekstra puan kazanma fırsatı!",
+            "Food",
+            "%10 Ekstra Puan",
+            BonusPoints: 50m,
+            MinimumSpendAmount: 50m,
+            StartDate: new DateOnly(2026, 7, 1),
+            EndDate: new DateOnly(2026, 8, 31));
+
+        var camp4 = new Campaign(
+            "CAMP-104",
+            "Yurt Dışı ve Seyahat Harcamalarına Sıfır Komisyon",
+            "Yurt dışı çıkış harçları ve seyahat harcamalarınızda döviz komisyonu ve ek işlem ücreti sıfırlanıyor!",
+            "Other",
+            "Sıfır Komisyon ve Masrafsızlık",
+            BonusPoints: 0m,
+            MinimumSpendAmount: 100m,
+            StartDate: new DateOnly(2026, 7, 1),
+            EndDate: new DateOnly(2026, 8, 31));
+
+        _campaigns[camp1.Id] = camp1;
+        _campaigns[camp2.Id] = camp2;
+        _campaigns[camp3.Id] = camp3;
+        _campaigns[camp4.Id] = camp4;
 
         _transactions.AddRange(new[]
         {

@@ -1,6 +1,8 @@
 using Banking.Agents;
 using Banking.Agents.Collection;
+using Banking.Agents.Specialists;
 using Banking.Agents.Tracing;
+using Banking.Domain.Campaigns;
 using Banking.Domain.Data;
 using Banking.Domain.MkCodes;
 using Banking.Domain.Services;
@@ -11,6 +13,12 @@ using Microsoft.Agents.AI.Hosting;
 using SmartComponents.LocalEmbeddings;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// JSON yanıtlarında Türkçe karakterlerin ve Unicode dizilerinin (\uXXXX) kaçışsız (doğal UTF-8) çıkması için encoder ayarı
+builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
+{
+    options.SerializerOptions.Encoder = System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All);
+});
 
 // API anahtarı gibi gizli ayarları User Secrets'tan da yükle (ortamdan bağımsız, repo dışında).
 builder.Configuration.AddUserSecrets(System.Reflection.Assembly.GetExecutingAssembly(), optional: true);
@@ -31,25 +39,29 @@ builder.Services.AddSingleton<CustomerContext>();
 builder.Services.AddSingleton<IAccountService, AccountService>();
 builder.Services.AddSingleton<ICardService, CardService>();
 builder.Services.AddSingleton<ICollectionService, CollectionService>();
+builder.Services.AddSingleton<IAnalyzeService, AnalyzeService>();
 
 // --- Semantik Arama & Embedding ---
 builder.Services.AddSingleton<LocalEmbedder>();
 builder.Services.AddSingleton<SemanticMkCodeSearcher>();
+builder.Services.AddSingleton<SemanticCampaignSearcher>();
 
 // --- LLM + ajan altyapısı ---
 builder.Services.AddSingleton<TraceHub>();
 builder.Services.AddSingleton(sp => ChatClientFactory.Create(sp.GetRequiredService<AgentOptions>()));
+builder.Services.AddSingleton<AnalyzeTools>();
 builder.Services.AddSingleton<AgentRuntime>();
 builder.Services.AddSingleton<CollectionSessionStore>();
 
 // --- MW Gateway (Java MW ↔ .NET iletişimi) ---
 builder.Services.AddSingleton<GatewayService>();
 
-// --- MCP server (tek server, hesap + kart araçları; loopback /mcp) ---
+// --- MCP server (tek server, hesap + kart + ekstre analiz araçları; loopback /mcp) ---
 builder.Services.AddMcpServer()
     .WithHttpTransport()
     .WithTools<AccountsTools>()
-    .WithTools<CardsTools>();
+    .WithTools<CardsTools>()
+    .WithTools<AnalyzeTools>();
 
 // --- A2A host: uzman ajanları isimle kaydet (factory AgentRuntime'dan çözer) + A2A server kaydı ---
 // Kayıt adı, factory'nin döndürdüğü ajanın Name'i ile AYNI olmalı.
@@ -57,14 +69,19 @@ builder.Services.AddAIAgent("HesapUzmani", (sp, _) => sp.GetRequiredService<Agen
     .AddA2AServer();
 builder.Services.AddAIAgent("KrediKartiUzmani", (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist("kart"))
     .AddA2AServer();
+builder.Services.AddAIAgent("FinansalAnalizUzmani", (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist("analiz"))
+    .AddA2AServer();
 
 var app = builder.Build();
 
-// Semantik mkCode arama indeksini uygulama başlarken hafızaya al (Cold-start önleme)
+// Semantik mkCode ve Kampanya arama indekslerini uygulama başlarken hafızaya al (Cold-start önleme)
 using (var scope = app.Services.CreateScope())
 {
     var searcher = scope.ServiceProvider.GetRequiredService<SemanticMkCodeSearcher>();
     searcher.Initialize();
+
+    var campaignSearcher = scope.ServiceProvider.GetRequiredService<SemanticCampaignSearcher>();
+    campaignSearcher.Initialize();
 }
 
 app.UseDefaultFiles();
@@ -74,6 +91,7 @@ app.UseStaticFiles();
 app.MapMcp("/mcp");
 app.MapA2AJsonRpc("HesapUzmani", "/a2a/hesap");
 app.MapA2AJsonRpc("KrediKartiUzmani", "/a2a/kart");
+app.MapA2AJsonRpc("FinansalAnalizUzmani", "/a2a/analiz");
 
 // --- Q&A: orkestratör ---
 app.MapPost("/api/chat", async (ChatRequest req, AgentRuntime runtime, CancellationToken ct) =>

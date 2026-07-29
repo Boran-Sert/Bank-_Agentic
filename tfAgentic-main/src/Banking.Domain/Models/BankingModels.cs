@@ -54,3 +54,33 @@ public record PaymentReceipt(
     DateOnly Date,
     decimal RemainingDebt,
     string Status);        // "Başarılı" | "Reddedildi"
+
+/// <summary>Banka veya kredi kartı kampanyası tanımı.</summary>
+public record Campaign(
+    string Id,
+    string Title,
+    string Description,
+    string TargetMccGroup, // "MarketAndShopping", "Food", "Clothing", "Other"
+    string Benefit,         // "250 TL Bonus", "6 Taksit", "%10 Puan"
+    decimal BonusPoints,
+    decimal MinimumSpendAmount,
+    DateOnly StartDate,
+    DateOnly EndDate,
+    bool IsActive = true);
+
+/// <summary>Vektörel semantik arama (RAG) için kampanya embedding modeli.</summary>
+public record CampaignVectorItem(
+    string CampaignId,
+    string CampaignTitle,
+    string ContentText,
+    string TargetMccGroup,
+    double SimilarityScore = 0.0);
+
+/// <summary>Kart ekstre analiz özeti.</summary>
+public record CardStatementSummary(
+    string CardNo,
+    decimal TotalDebt,
+    decimal TotalExpenseAmount,
+    int ExpenseCount,
+    decimal TotalEarnedPoints);
+

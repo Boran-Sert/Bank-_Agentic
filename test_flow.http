@@ -67,7 +67,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "text": "Evet",
+  "text": "Sonu 3344 ile biten hesabıımı kullan",
   "sessionToken": "{{sessionToken}}"
 }
 

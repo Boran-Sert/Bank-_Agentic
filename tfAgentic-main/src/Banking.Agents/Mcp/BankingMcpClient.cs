@@ -16,6 +16,19 @@ public sealed class BankingMcpClient : IAsyncDisposable
     public static readonly string[] CardToolNames =
         ["list_cards", "get_card_debt", "get_available_limit", "get_card_details"];
 
+    public static readonly string[] AnalyzeToolNames =
+        [
+            "GetCreditCardStatement",
+            "AnalyzeStatementSummary",
+            "AnalyzeCategoryBreakdown",
+            "AnalyzePaymentTypeRatio",
+            "AnalyzeBonusAndPoints",
+            "AnalyzeTopMerchants",
+            "CompareSpendingPeriods",
+            "KampanyaVektorelAra",
+            "YeniKampanyaEkleVektorel"
+        ];
+
     private McpClient? _client;
     private IList<McpClientTool>? _tools;
 

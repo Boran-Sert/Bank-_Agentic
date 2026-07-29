@@ -33,8 +33,9 @@ public sealed class AgentRuntime
         <routing_rules>
         1. UZMANLARA DANIŞMA: 
            - Hesap, bakiye, IBAN, hesap hareketi/işlem soruları için SADECE 'hesap_uzmanina_sor' aracını kullan.
-           - Kredi kartı, kart borcu, asgari ödeme, limit, son ödeme tarihi soruları için SADECE 'kart_uzmanina_sor' aracını kullan.
-           - Eğer soru ikisini de kapsıyorsa sırayla iki aracı da kullan.
+           - SADECE kredi kartı borcu, kullanılabilir limit, asgari ödeme ve son ödeme tarihi soruları için 'kart_uzmanina_sor' aracını kullan.
+           - Kredi kartı harcama analizi, ekstre özetleri, puan ve bonus kazançları, taksitli/peşin harcama oranları, en çok harcama yapılan mağazalar ve kampanya/bonus önerileri için SADECE 'analiz_uzmanina_sor' aracını kullan. (DİKKAT: Kullanıcı "Kredi kartı harcamalarımı analiz et", "Ekstremi incele", "Nereye ne harcadım?" gibi tek cümlelik basit ifadeler kursa dahi BU TALEBİ KESİNLİKLE 'analiz_uzmanina_sor' ARACINA YÖNLENDİR!).
+           - Eğer soru birden fazlasını kapsıyorsa sırayla ilgili araçları kullan.
         
         2. YENİ İŞ AKIŞI BAŞLATMA (TAHSİLAT):
            - Kullanıcı yeni bir kredi kartı borcunu ÖDEMEK / kapatmak isterse (bu bir bilgi sorusu değil, EYLEM talebidir), 'tahsilat_akisini_baslat' aracını çağır.
@@ -55,9 +56,11 @@ public sealed class AgentRuntime
     private readonly TraceHub _hub;
     private readonly ILogger<AgentRuntime> _logger;
     private readonly SemanticMkCodeSearcher _semanticMkCodeSearcher;
+    private readonly AnalyzeTools _analyzeTools;
 
     private readonly DeferredSpecialistAgent _hesap;
     private readonly DeferredSpecialistAgent _kart;
+    private readonly DeferredSpecialistAgent _analiz;
 
     private readonly SemaphoreSlim _mcpLock = new(1, 1);
     private readonly SemaphoreSlim _orchLock = new(1, 1);
@@ -74,13 +77,20 @@ public sealed class AgentRuntime
     public int McpToolCount { get; private set; }
     public string SpecialistTransport { get; private set; } = "(kurulmadı)";
 
-    public AgentRuntime(AgentOptions options, ChatClient chat, TraceHub hub, ILogger<AgentRuntime> logger, SemanticMkCodeSearcher semanticMkCodeSearcher)
+    public AgentRuntime(
+        AgentOptions options,
+        ChatClient chat,
+        TraceHub hub,
+        ILogger<AgentRuntime> logger,
+        SemanticMkCodeSearcher semanticMkCodeSearcher,
+        AnalyzeTools analyzeTools)
     {
         _options = options;
         _chat = chat;
         _hub = hub;
         _logger = logger;
         _semanticMkCodeSearcher = semanticMkCodeSearcher;
+        _analyzeTools = analyzeTools;
 
         _hesap = new DeferredSpecialistAgent(
             "HesapUzmani", "Hesap, bakiye, IBAN ve hesap hareketi uzmanı.",
@@ -88,6 +98,9 @@ public sealed class AgentRuntime
         _kart = new DeferredSpecialistAgent(
             "KrediKartiUzmani", "Kredi kartı borcu, limit ve son ödeme tarihi uzmanı.",
             ct => BuildSpecialistAsync("kart", ct));
+        _analiz = new DeferredSpecialistAgent(
+            "FinansalAnalizUzmani", "Kredi kartı ekstre analizi, puan kazançları ve semantik kampanya önerileri uzmanı.",
+            ct => BuildSpecialistAsync("analiz", ct));
     }
 
     /// <summary>A2A host factory'sinin çağırdığı erişimci — startup'ta güvenli (deferred sarmalayıcı döner).</summary>
@@ -95,6 +108,7 @@ public sealed class AgentRuntime
     {
         "hesap" => _hesap,
         "kart" => _kart,
+        "analiz" or "finansalanalizuzmani" => _analiz,
         _ => throw new ArgumentException($"Bilinmeyen uzman: {name}", nameof(name))
     };
 
@@ -122,6 +136,13 @@ public sealed class AgentRuntime
     private async Task<AIAgent> BuildSpecialistAsync(string name, CancellationToken ct)
     {
         var mcp = await EnsureMcpAsync(ct);
+        if (name == "analiz")
+        {
+            _logger.LogInformation("[SPECIALIST] FinansalAnalizUzmani kuruluyor (MCP aracları baglandi).");
+            var tools = TraceMcpTools(mcp.ToolsFor(BankingMcpClient.AnalyzeToolNames), "AnalyzeService");
+            return SpecialistAgents.BuildAnalyzeAgent(TracedClient("Finansal Analiz Uzmanı"), tools);
+        }
+
         return name == "hesap"
             ? SpecialistAgents.BuildHesapAgent(
                 TracedClient("Hesap Uzmanı"),
@@ -148,6 +169,7 @@ public sealed class AgentRuntime
     {
         await _hesap.EnsureBuiltAsync(ct);
         await _kart.EnsureBuiltAsync(ct);
+        await _analiz.EnsureBuiltAsync(ct);
     }
 
     /// <summary>Orkestratörü kurar: uzmanları A2A ile bağlar (A2A başarısızsa in-process'e düşer).</summary>
@@ -159,7 +181,7 @@ public sealed class AgentRuntime
         {
             if (_orchReady) return;
 
-            AIAgent hesapAgent, kartAgent;
+            AIAgent hesapAgent, kartAgent, analizAgent;
             if (_options.UseA2AForSpecialists)
             {
                 try
@@ -168,6 +190,8 @@ public sealed class AgentRuntime
                         .AsAIAgent(name: "hesap_uzmani", description: "Hesap uzmanı (A2A).");
                     kartAgent = new A2AClient(new Uri(_options.A2AUrl("kart")))
                         .AsAIAgent(name: "kart_uzmani", description: "Kredi kartı uzmanı (A2A).");
+                    analizAgent = new A2AClient(new Uri(_options.A2AUrl("analiz")))
+                        .AsAIAgent(name: "analiz_uzmani", description: "Finansal analiz ve kampanya uzmanı (A2A).");
                     SpecialistTransport = "A2A";
                 }
                 catch (Exception ex)
@@ -175,6 +199,7 @@ public sealed class AgentRuntime
                     _logger.LogWarning(ex, "A2A uzman bağlama başarısız; in-process'e düşülüyor.");
                     hesapAgent = _hesap;
                     kartAgent = _kart;
+                    analizAgent = _analiz;
                     SpecialistTransport = "in-process (A2A yedeği)";
                 }
             }
@@ -182,6 +207,7 @@ public sealed class AgentRuntime
             {
                 hesapAgent = _hesap;
                 kartAgent = _kart;
+                analizAgent = _analiz;
                 SpecialistTransport = "in-process";
             }
 
@@ -195,11 +221,17 @@ public sealed class AgentRuntime
                 Name = "kart_uzmanina_sor",
                 Description = "Kredi kartı borcu, limit ve son ödeme tarihi sorularını kart uzmanına yönlendirir."
             });
+            var analizTool = analizAgent.AsAIFunction(new AIFunctionFactoryOptions
+            {
+                Name = "analiz_uzmanina_sor",
+                Description = "Kredi kartı ekstre analizi, puan kazançları, taksit oranları ve kampanya/bonus tavsiyeleri sorularını analiz uzmanına yönlendirir."
+            });
 
             var tools = new List<AITool>
             {
                 new TracingAIFunction(hesapTool, _hub, "A2A", "Hesap Uzmanı", $"→ {_options.A2AUrl("hesap")}"),
                 new TracingAIFunction(kartTool, _hub, "A2A", "Kart Uzmanı", $"→ {_options.A2AUrl("kart")}"),
+                new TracingAIFunction(analizTool, _hub, "A2A", "Analiz Uzmanı", $"→ {_options.A2AUrl("analiz")}"),
                 new TracingAIFunction(
                     AIFunctionFactory.Create(TahsilatAkisiniBaslat, name: "tahsilat_akisini_baslat"),
                     _hub, "WORKFLOW", "Tahsilat akışı tetiklendi"),
@@ -293,7 +325,7 @@ public sealed class AgentRuntime
                 """;
         }
 
-        _hub.Publish("SYSTEM", "Kullanıcı sorusu alındı → Orkestratör");
+        _hub.Publish("SYSTEM", $"Kullanıcı sorusu alındı → '{message}'");
         var intentBox = new StrongBox<bool>(false);
         var navBox = new StrongBox<string?>(null);
         var factBox = new StrongBox<string?>(null);
@@ -329,7 +361,7 @@ public sealed class AgentRuntime
             model = _options.Model,
             mcpUrl = _options.McpUrl,
             mcpToolCount = McpToolCount,
-            specialists = new[] { _hesap.Name, _kart.Name },
+            specialists = new[] { _hesap.Name, _kart.Name, _analiz.Name },
             specialistTransport = SpecialistTransport,
             orchestratorReady = _orchReady
         };

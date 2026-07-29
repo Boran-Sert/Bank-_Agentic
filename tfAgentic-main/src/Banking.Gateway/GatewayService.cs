@@ -45,17 +45,19 @@ public sealed class GatewayService
 
         try
         {
-            // ── Aktif collection oturumu varsa devam et ──
-            if (session.CollectionSessionId is not null)
+            // Aktif tahsilat varsa, session.CollectionSessionId orkestratöre iletilir.
+            var reply = await _runtime.AskAsync(request.Text, session.CollectionSessionId, ct);
+
+            // 1. DURUM: Orkestratör araya girdi ve kullanıcıdan aldığı "tamam ordan çek" 
+            // gibi bir bilgiyi tahsilat ajanına enjekte etmek istiyor. (FACT INJECTION)
+            if (!string.IsNullOrEmpty(reply.InjectedFact) && session.CollectionSessionId != null)
             {
-                _hub.Publish("GATEWAY", "Aktif tahsilat oturumu bulundu → devam ediliyor");
-                return await HandleCollectionResponseAsync(session, request, ct);
+                _hub.Publish("GATEWAY", "Orkestratör temiz bilgiyi tahsilat ajanına (Fact Injection) iletiyor.");
+                var result = await _collectionStore.RespondWithFactAsync(session.CollectionSessionId, reply.InjectedFact);
+                return MapCollectionResult(result, session);
             }
 
-            // ── Orkestratöre sor ──
-            var reply = await _runtime.AskAsync(request.Text, ct);
-
-            // Orkestratör tahsilat akışını tetiklediyse → Collection başlat
+            // 2. DURUM: Orkestratör tahsilat akışını İLK KEZ başlatmak istiyor.
             if (reply.StartCollection)
             {
                 _hub.Publish("GATEWAY", "Orkestratör tahsilat niyeti algıladı → Collection akışı başlatılıyor");
@@ -63,14 +65,14 @@ public sealed class GatewayService
                 return await StartCollectionAsync(session, request, ct);
             }
 
-            // Orkestratör ekran açma yönlendirmesi yaptıysa
+            // 3. DURUM: Ekran yönlendirmesi var.
             if (!string.IsNullOrEmpty(reply.OpenScreenMkCode))
             {
                 _hub.Publish("GATEWAY", $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({reply.OpenScreenMkCode})");
                 return GatewayResponse.AsOpenScreen(reply.OpenScreenMkCode);
             }
 
-            // Normal sohbet/Q&A yanıtı (TEXT)
+            // 4. DURUM: Standart Q&A metin yanıtı (veya uzmanlardan dönen cevap)
             _hub.Publish("GATEWAY", "Metin yanıtı hazır → TEXT", $"len={reply.Reply.Length}");
             return GatewayResponse.AsText(reply.Reply);
         }
@@ -96,19 +98,6 @@ public sealed class GatewayService
         session.CollectionSessionId = result.SessionId;
 
         _hub.Publish("GATEWAY", $"Collection oturumu başlatıldı: {result.SessionId}");
-        return MapCollectionResult(result, session);
-    }
-
-    private async Task<GatewayResponse> HandleCollectionResponseAsync(
-        GatewaySession session, GatewayRequest request, CancellationToken ct)
-    {
-        if (session.CollectionSessionId is null)
-        {
-            _hub.Publish("GATEWAY", "Collection oturumu bulunamadı → TEXT");
-            return GatewayResponse.AsText("Aktif bir işlem oturumu bulunamadı.");
-        }
-
-        var result = await _collectionStore.RespondAsync(session.CollectionSessionId, request.Text);
         return MapCollectionResult(result, session);
     }
 

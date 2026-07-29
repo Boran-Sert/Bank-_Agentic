@@ -1,5 +1,5 @@
 @baseUrl = http://10.141.5.253:5080
-@sessionToken = e2e-test-session-005
+@sessionToken = e2e-test-session-006
 
 ### 1. Basit Soru / TEXT Dönüşü Testi
 POST {{baseUrl}}/api/ai/chat
@@ -43,7 +43,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "text": "CARD-2001",
+  "text": "sonu 4521 ile biten kartımı öde",
   "sessionToken": "{{sessionToken}}"
 }
 
@@ -55,7 +55,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "text": "5000 TL",
+  "text": "Tamamı",
   "sessionToken": "{{sessionToken}}"
 }
 
@@ -67,7 +67,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "text": "ACC-1001",
+  "text": "Evet",
   "sessionToken": "{{sessionToken}}"
 }
 
@@ -78,7 +78,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "text": "Poliçelerimi göster",
+  "text": "Banka hesabımdaki paramı göster",
   "sessionToken": "e2e-test-session-002"
 }
 

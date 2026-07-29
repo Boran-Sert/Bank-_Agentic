@@ -13,7 +13,7 @@ using OpenAI.Chat;
 namespace Banking.Agents;
 
 /// <summary>Orkestratör yanıtı: metin + tahsilat akışının başlatılması gerekip gerekmediği + açılacak ekran mkCode (varsa).</summary>
-public sealed record OrchestratorReply(string Reply, bool StartCollection, string? OpenScreenMkCode);
+public sealed record OrchestratorReply(string Reply, bool StartCollection, string? OpenScreenMkCode, string? InjectedFact);
 
 /// <summary>
 /// Ajan grafiğini TEMBEL kurar. Uzmanlar süreç-içi MCP server'a (loopback) bağlanır; bu yüzden
@@ -23,16 +23,31 @@ public sealed record OrchestratorReply(string Reply, bool StartCollection, strin
 /// </summary>
 public sealed class AgentRuntime
 {
+    private static readonly AsyncLocal<StrongBox<string?>?> FactInjectionIntent = new();
     private const string OrchestratorInstructions =
         """
-        Sen bir banka asistanı ORKESTRATÖRÜSÜN. Kullanıcının sorusunu analiz et ve doğru uzmana yönlendir:
-        - Hesap, bakiye, IBAN, hesap hareketi/işlem soruları için 'hesap_uzmanina_sor' aracını kullan.
-        - Kredi kartı, kart borcu, asgari ödeme, limit, son ödeme tarihi soruları için 'kart_uzmanina_sor' aracını kullan.
-        - Uzmandan gelen cevabı kullanıcıya açık, kibar ve Türkçe ilet.
-        - Soru her iki alanı da kapsıyorsa iki aracı da kullan ve cevapları birleştir.
-        - Kullanıcı bir kredi kartı borcunu ÖDEMEK / kapatmak isterse (bilgi sorusu DEĞİL), 'tahsilat_akisini_baslat' aracını çağır.
-        - Kullanıcı BELİRLİ BİR EKRANI (ör: para transferi, hesaplar, kartlar, ödemeler) AÇMAK İSTERSE, ÖNCE 'ekran_kodu_ara' aracını kullanarak kullanıcının niyetini arat. Dönen sonuçlardan (en iyi skorlardan) en uygun mkCode değerini seç ve SADECE bu mkCode değeri ile 'ekran_ac' aracını çağır.
-        - Araçlardan gelmeyen bilgiyi asla uydurma.
+        <identity>
+        Sen bir Banka Asistanı Orkestratörüsün (Router). Temel görevin kullanıcının niyetini doğru analiz edip en uygun uzmana (Agent) veya araca (Tool) yönlendirmektir. ASLA KENDİ BAŞINA CEVAP UYDURMA, sadece araçları kullanarak yanıt üret.
+        </identity>
+
+        <routing_rules>
+        1. UZMANLARA DANIŞMA: 
+           - Hesap, bakiye, IBAN, hesap hareketi/işlem soruları için SADECE 'hesap_uzmanina_sor' aracını kullan.
+           - Kredi kartı, kart borcu, asgari ödeme, limit, son ödeme tarihi soruları için SADECE 'kart_uzmanina_sor' aracını kullan.
+           - Eğer soru ikisini de kapsıyorsa sırayla iki aracı da kullan.
+        
+        2. YENİ İŞ AKIŞI BAŞLATMA (TAHSİLAT):
+           - Kullanıcı yeni bir kredi kartı borcunu ÖDEMEK / kapatmak isterse (bu bir bilgi sorusu değil, EYLEM talebidir), 'tahsilat_akisini_baslat' aracını çağır.
+        
+        3. EKRAN YÖNLENDİRMESİ (NAVIGATION):
+           - SADECE KULLANICI AÇIKÇA BİR EKRANA GİTMEK/MENÜYÜ AÇMAK İSTERSE (örn: "Para transferi ekranını aç", "hesaplarım menüsüne git") ekran açma araçlarını kullan.
+           - Önce 'ekran_kodu_ara' aracıyla uygun mkCode'u bul, sonra SADECE bu kod ile 'ekran_ac' aracını çağır.
+           - DİKKAT: Kullanıcı bir bilgi istiyorsa (örn: "Kartlarımı göster", "Bakiyem ne kadar"), bu ekran açma talebi DEĞİLDİR! Uzmanlara sor.
+        </routing_rules>
+
+        <response_guidelines>
+        Uzmanlardan dönen veya araçlardan aldığın yanıtları kullanıcıya açık, kibar ve doğal bir Türkçe ile ilet.
+        </response_guidelines>
         """;
 
     private readonly AgentOptions _options;
@@ -194,6 +209,9 @@ public sealed class AgentRuntime
                 new TracingAIFunction(
                     AIFunctionFactory.Create(EkranAc, name: "ekran_ac"),
                     _hub, "WORKFLOW", "Ekran yönlendirmesi tetiklendi"),
+                new TracingAIFunction(
+                    AIFunctionFactory.Create(InjectCollectionFact, name: "inject_collection_fact"),
+                    _hub, "WORKFLOW", "Ajanın içine sentetik bilgi enjekte ediliyor.")
             };
 
             _orchestrator = TracedClient("Orkestratör")
@@ -240,25 +258,62 @@ public sealed class AgentRuntime
         return $"{mkCode} ekranı açılıyor.";
     }
 
+    [Description("Kullanıcı aktif bir tahsilat işlemiyle ilgili bilgi verdiğinde veya onayladığında (örn: 'şu hesaptan çek', 'tamamını öde') bu bilgiyi tahsilat sistemine iletmek için kullanılır. Sadece tahsilat süreci aktifken çağırın.")]
+    private string InjectCollectionFact(string fact)
+    {
+        if(FactInjectionIntent.Value is { } box) box.Value= fact;
+        return "Bilgi tahsilat sistemine iletildi";
+    }
+
     /// <summary>Q&A: kullanıcı sorusunu orkestratöre iletir; yanıt metni + tahsilat akışı başlatılmalı mı bilgisi döner.</summary>
-    public async Task<OrchestratorReply> AskAsync(string message, CancellationToken ct = default)
+    public async Task<OrchestratorReply> AskAsync(string message, string? collectionSessionId = null, CancellationToken ct = default)
     {
         await EnsureOrchestratorAsync(ct);
+
+        string actualMessage = message;
+
+        // [DİKKAT] Semantic Fact Injection Prompt Update
+        if (!string.IsNullOrEmpty(collectionSessionId))
+        {
+            actualMessage = $"""
+                <context_state>
+                AKTİF İŞ AKIŞI: "Kredi Kartı Tahsilat"
+                DURUM: Kullanıcı şu anda bu iş akışının ortasındadır ve sistem kullanıcıdan ödeme yapması için bilgi (Hangi kart, hangi hesap veya onay vb.) beklemektedir.
+                </context_state>
+
+                <active_workflow_rules>
+                1. KESİNLİKLE EKRAN AÇMA: Aktif bir tahsilat işlemi varken, kullanıcı "Kartlarımı göster", "Hesaplarıma bak" diyorsa; amacı ödeme yapacağı kartı/hesabı seçmek için bilgi almaktır. Asla 'ekran_ac' aracını ÇAĞIRMA. Bunun yerine ilgili uzmanlara ('kart_uzmanina_sor' veya 'hesap_uzmanina_sor') başvurarak bilgiyi getir ve kullanıcıya metin olarak sun.
+                2. İŞ AKIŞINI BESLE (FACT INJECTION): Kullanıcının yazdığı mesaj aktif tahsilat işlemine bir cevap/seçim/onay içeriyorsa (örn: "Şu hesabımdan çek", "tamamını öde", "evet onaylıyorum"), DOĞRUDAN CEVAP VERME. Kullanıcının verdiği bilgiyi NET BİR CÜMLEYE ÇEVİR (Örn: 'Kullanıcı vadesiz hesabından ödemek istiyor') ve 'inject_collection_fact' aracıyla sisteme gönder.
+                3. BAĞIMSIZ SORULAR: Kullanıcı tahsilatla tamamen alakasız bir soru sorarsa, uzmanlara danış ve yanıtın sonuna "Tahsilat işlemine devam etmek istiyor musunuz?" notunu ekle.
+                </active_workflow_rules>
+
+                <user_message>
+                {message}
+                </user_message>
+                """;
+        }
+
         _hub.Publish("SYSTEM", "Kullanıcı sorusu alındı → Orkestratör");
         var intentBox = new StrongBox<bool>(false);
         var navBox = new StrongBox<string?>(null);
+        var factBox = new StrongBox<string?>(null);
+
         PaymentIntent.Value = intentBox;
         NavigationIntent.Value = navBox;
+        FactInjectionIntent.Value = factBox;
+
         try
         {
-            var response = await _orchestrator!.RunAsync(message, cancellationToken: ct);
+            var response = await _orchestrator!.RunAsync(actualMessage, cancellationToken: ct);
             _hub.Publish("SYSTEM", "Yanıt kullanıcıya hazır");
-            return new OrchestratorReply(response.Text, intentBox.Value, navBox.Value);
+
+            return new OrchestratorReply(response.Text, intentBox.Value, navBox.Value, factBox.Value);
         }
-        finally 
-        { 
-            PaymentIntent.Value = null; 
-            NavigationIntent.Value = null; 
+        finally
+        {
+            PaymentIntent.Value = null;
+            NavigationIntent.Value = null;
+            FactInjectionIntent.Value = null;
         }
     }
 

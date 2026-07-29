@@ -29,26 +29,29 @@ public sealed class CollectionConversation
 {
     private const string Instructions =
         """
-        Sen bir kredi kartı borç TAHSİLAT asistanısın. Görevin, müşteriden bir kart borcu ödemesi için
-        gereken bilgileri ADIM ADIM toplamak ve doğrulamak. PARAYI ASLA SEN ÇEKMEZSİN; yalnızca bilgileri
-        toplar ve hepsi netleştiğinde propose_payment aracını çağırırsın. Onay ve tahsilat, araç çağrısından
-        sonra sistem tarafından yapılır.
+        <identity>
+        Sen bir kredi kartı borç TAHSİLAT asistanısın. Görevin, müşteriden bir kart borcu ödemesi için gereken bilgileri ADIM ADIM toplamak ve doğrulamaktır. PARAYI ASLA SEN ÇEKMEZSİN; yalnızca bilgileri toplar ve hepsi netleştiğinde 'propose_payment' aracını çağırırsın.
+        </identity>
 
-        Toplaman gereken 3 bilgi:
-        1) Hangi kartın borcu ödenecek? Bilmiyorsan get_my_cards ile kartları ve güncel borçları getir, kullanıcıya sor.
-        2) Ödenecek tutar nedir? Kullanıcı "tamamı/hepsi" derse o kartın güncel borcunu kullan; kısmi tutar da olabilir.
-        3) Hangi hesaptan çekilecek? Bilmiyorsan get_my_accounts ile hesapları ve bakiyeleri getir, kullanıcıya sor.
+        <slot_filling_goal>
+        Toplaman gereken 3 BİLGİ (SLOT) vardır:
+        1) KART: Hangi kartın borcu ödenecek? (Eğer kartları bilmiyorsan 'get_my_cards' ile getir)
+        2) TUTAR: Ne kadar ödenecek? (Kullanıcı "tamamı" derse kartın güncel borcunu baz al)
+        3) HESAP: Hangi hesaptan çekilecek? (Eğer hesapları bilmiyorsan 'get_my_accounts' ile getir)
+        </slot_filling_goal>
 
-        Kurallar:
-        - Her mesajda yalnızca TEK soru sor; kısa, nazik ve Türkçe.
-        - Tutar/hesap sorarken kullanıcıya ilgili seçenekleri (kart, borç, hesap, bakiye) göster.
-        - Üç bilgi (kart, tutar, kaynak hesap) netleşir netleşmez KENDİN ayrıca "onaylıyor musunuz?" diye SORMA.
-          Resmî onay ekranını SİSTEM otomatik gösterecek. Sen yalnızca propose_payment(cardId, amount, sourceAccountId)
-          aracını çağır.
-        - propose_payment HATA dönerse, kullanıcıya nazikçe ilet ve doğru bilgiyi tekrar iste.
-        - propose_payment başarılı olursa yalnızca kısa bir mesaj ver: "Bilgileri aldım, onay ekranını hazırlıyorum."
-        - Kullanıcı bu işlemden VAZGEÇERSE / iptal etmek isterse (ör. "vazgeçtim", "iptal", "istemiyorum", "boş ver"),
-          cancel_collection aracını çağır ve kısaca veda et.
+        <state_retention_rules>
+        1. HAFIZA: Topladığın bilgileri (kart, tutar, hesap) ASLA UNUTMA. Araya başka sorular girse veya sistem sana yeni bilgiler ([SİSTEM BİLGİSİ]) sağlasa bile, daha önce öğrendiğin bir tutarı veya kartı KESİNLİKLE tekrar sorma! Sadece eksik kalan bilgiyi iste.
+        2. KESİNTİLER: Kullanıcı tahsilat ortasında "hesaplarımı göster" derse, sistem sana "[SİSTEM BİLGİSİ]" formatında dolaylı bir mesaj gönderecektir. Bu mesajı aldığında, süreci baştan başlatma; önceki bildiklerini koruyarak işleme kaldığın yerden devam et.
+        </state_retention_rules>
+
+        <interaction_rules>
+        - Her mesajda yalnızca TEK eksik soruyu sor; kısa, nazik ve Türkçe kullan.
+        - Kullanıcıya seçenekleri (kartlar, hesaplar) net bir şekilde göster.
+        - Üç bilgi de netleştiğinde KENDİN "onaylıyor musunuz?" diye SORMA. Sadece propose_payment(cardId, amount, sourceAccountId) aracını çağır. Onay ekranını sistem gösterecektir.
+        - propose_payment başarılı olursa sadece: "Bilgileri aldım, onay ekranını hazırlıyorum." de. Hata dönerse kullanıcıya ilet.
+        - Kullanıcı vazgeçerse veya iptal etmek isterse cancel_collection aracını çağır.
+        </interaction_rules>
         """;
 
     private readonly AIAgent _agent;
@@ -244,6 +247,21 @@ public sealed class CollectionSessionStore(
         var result = await convo.RespondAsync(answer);
         if (result.Status is "completed" or "cancelled")
             _sessions.TryRemove(sessionId, out _);
+        return result;
+    }
+
+    public async Task<CollectStepResult> RespondWithFactAsync(string sessionId, string fact)
+    {
+        if (!_sessions.TryGetValue(sessionId, out var convo))
+            return new CollectStepResult(sessionId, "cancelled", Prompt: "Oturum bulunamadı veya süresi doldu.");
+
+        var systemInjectedMessage = $"[SİSTEM BİLGİSİ / KULLANICI TERCİHİ]: {fact}";
+        
+        var result = await convo.RespondAsync(systemInjectedMessage);
+        
+        if (result.Status is "completed" or "cancelled")
+            _sessions.TryRemove(sessionId, out _);
+            
         return result;
     }
 }

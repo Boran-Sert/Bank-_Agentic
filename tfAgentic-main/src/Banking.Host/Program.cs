@@ -80,7 +80,7 @@ app.MapPost("/api/chat", async (ChatRequest req, AgentRuntime runtime, Cancellat
 {
     if (string.IsNullOrWhiteSpace(req.Message))
         return Results.BadRequest(new { error = "message boş olamaz" });
-    var r = await runtime.AskAsync(req.Message, ct);
+    var r = await runtime.AskAsync(req.Message, ct: ct);
     return Results.Ok(new { reply = r.Reply, startCollection = r.StartCollection });
 });
 

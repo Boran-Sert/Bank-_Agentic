@@ -67,7 +67,7 @@ Content-Type: application/json
 Accept: application/json
 
 {
-  "text": "Sonu 3344 ile biten hesabıımı kullan",
+  "text": "Hesap ekstrerimi göster",
   "sessionToken": "{{sessionToken}}"
 }
 

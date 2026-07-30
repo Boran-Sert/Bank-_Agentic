@@ -94,6 +94,8 @@ public sealed class AgentRuntime
         _semanticMkCodeSearcher = semanticMkCodeSearcher;
         _analyzeTools = analyzeTools;
 
+        _logger.LogInformation("AgentRuntime başlatıldı. Sağlayıcı: {Provider}, Model: {Model}.", _options.Provider, _options.Model);
+
         _hesap = new DeferredSpecialistAgent(
             "HesapUzmani", "Hesap, bakiye, IBAN ve hesap hareketi uzmanı.",
             ct => BuildSpecialistAsync("hesap", ct));
@@ -106,13 +108,17 @@ public sealed class AgentRuntime
     }
 
     /// <summary>A2A host factory'sinin çağırdığı erişimci — startup'ta güvenli (deferred sarmalayıcı döner).</summary>
-    public DeferredSpecialistAgent GetSpecialist(string name) => name.ToLowerInvariant() switch
+    public DeferredSpecialistAgent GetSpecialist(string name)
     {
-        "hesap" => _hesap,
-        "kart" => _kart,
-        "analiz" or "finansalanalizuzmani" => _analiz,
-        _ => throw new ArgumentException($"Bilinmeyen uzman: {name}", nameof(name))
-    };
+        _logger.LogInformation("{Name} uzman ajanı talep edildi.", name);
+        return name.ToLowerInvariant() switch
+        {
+            "hesap" => _hesap,
+            "kart" => _kart,
+            "analiz" or "finansalanalizuzmani" => _analiz,
+            _ => throw new ArgumentException($"Bilinmeyen uzman: {name}", nameof(name))
+        };
+    }
 
     /// <summary>Süreç-içi MCP server'a (loopback) bağlanır; tek sefer. Sunucu dinlerken çağrılmalı.</summary>
     private async Task<BankingMcpClient> EnsureMcpAsync(CancellationToken ct)
@@ -127,7 +133,7 @@ public sealed class AgentRuntime
                 await mcp.ConnectAsync(_options.McpUrl, ct);
                 McpToolCount = mcp.AllTools.Count;
                 _mcp = mcp;
-                _logger.LogInformation("MCP client bağlandı ({Count} araç).", McpToolCount);
+                _logger.LogInformation("MCP istemcisi bağlandı ({Count} araç).", McpToolCount);
             }
             return _mcp;
         }
@@ -140,10 +146,13 @@ public sealed class AgentRuntime
         var mcp = await EnsureMcpAsync(ct);
         if (name == "analiz")
         {
-            _logger.LogInformation("[SPECIALIST] FinansalAnalizUzmani kuruluyor (MCP aracları baglandi).");
+            _logger.LogInformation("FinansalAnalizUzmani kuruluyor (MCP araçları bağlandı).");
             var tools = TraceMcpTools(mcp.ToolsFor(BankingMcpClient.AnalyzeToolNames), "AnalyzeService");
             return SpecialistAgents.BuildAnalyzeAgent(TracedClient("Finansal Analiz Uzmanı"), tools);
         }
+
+        string displayName = name == "hesap" ? "HesapUzmani" : "KrediKartiUzmani";
+        _logger.LogInformation("{Name} kuruluyor (MCP araçları bağlandı).", displayName);
 
         return name == "hesap"
             ? SpecialistAgents.BuildHesapAgent(
@@ -155,23 +164,31 @@ public sealed class AgentRuntime
     }
 
     /// <summary>OpenAI chat client'ını etiketli izleyici ile sarar (LLM çağrıları görünür olur).</summary>
-    private IChatClient TracedClient(string label) =>
-        new TracingChatClient(_chat.AsIChatClient(), _hub, label);
+    private IChatClient TracedClient(string label)
+    {
+        _logger.LogInformation("{Label} için izleme özellikli chat istemcisi oluşturuldu.", label);
+        return new TracingChatClient(_chat.AsIChatClient(), _hub, label);
+    }
 
     /// <summary>MCP araçlarını izleyici ile sarar: çağrıldıklarında "MCP → tool → Service" olayı yayınlanır.</summary>
-    private IList<AITool> TraceMcpTools(IList<AITool> tools, string service) =>
-        tools.Select(t =>
+    private IList<AITool> TraceMcpTools(IList<AITool> tools, string service)
+    {
+        _logger.LogInformation("{Service} için {Count} adet MCP aracı izleyici ile bağlandı.", service, tools.Count);
+        return tools.Select(t =>
         {
             var fn = (AIFunction)t;
             return (AITool)new TracingAIFunction(fn, _hub, "MCP", fn.Name, $"→ {service}");
         }).ToList();
+    }
 
     /// <summary>Uzmanları önceden kurar (MCP loopback + ajan). Tanılama/ön ısıtma için.</summary>
     public async Task WarmSpecialistsAsync(CancellationToken ct = default)
     {
+        _logger.LogInformation("Uzman ajanların ön ısıtma işlemi başlatılıyor.");
         await _hesap.EnsureBuiltAsync(ct);
         await _kart.EnsureBuiltAsync(ct);
         await _analiz.EnsureBuiltAsync(ct);
+        _logger.LogInformation("Tüm uzman ajanlar başarıyla ön ısıtıldı.");
     }
 
     /// <summary>Orkestratörü kurar: uzmanları A2A ile bağlar (A2A başarısızsa in-process'e düşer).</summary>
@@ -259,6 +276,7 @@ public sealed class AgentRuntime
     [Description("Kullanıcı bir kredi kartı borcunu ÖDEMEK veya kapatmak istediğinde çağrılır; resmî tahsilat (ödeme) akışını başlatır. Yalnızca ödeme NİYETİNDE çağır; borç/limit/tarih BİLGİSİ sorularında ASLA çağırma.")]
     private string TahsilatAkisiniBaslat()
     {
+        _logger.LogInformation("Tahsilat akışının başlatılması istendi.");
         if (PaymentIntent.Value is { } box) box.Value = true;
         return "Tahsilat akışı başlatılıyor.";
     }
@@ -269,9 +287,14 @@ public sealed class AgentRuntime
     [Description("Kullanıcı bir ekrana veya menüye gitmek istediğinde, sistemdeki geçerli ekran kodlarını aramak için kullanılır. 'niyet' parametresine kullanıcının isteğini (örn: 'hesap özeti') yazın. Size en uygun kodları skorlarıyla dönecektir.")]
     private string EkranKoduAra(string niyet)
     {
+        _logger.LogInformation("Semantik ekran kodu araması yapılıyor. Niyet: '{Niyet}'", niyet);
         var results = _semanticMkCodeSearcher.Search(niyet);
         
-        if (results.Count == 0) return "Uygun ekran kodu bulunamadı.";
+        if (results.Count == 0)
+        {
+            _logger.LogWarning("Semantik ekran kodu araması sonuç vermedi. Niyet: '{Niyet}'", niyet);
+            return "Uygun ekran kodu bulunamadı.";
+        }
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("Bulunan en uygun ekran kodları (Skorları ile birlikte):");
@@ -288,6 +311,7 @@ public sealed class AgentRuntime
     [Description("Kullanıcı belirli bir menüye veya ekrana GİTMEK/AÇMAK istediğinde çağrılır. Parametre olarak SADECE 'ekran_kodu_ara' aracından bulduğunuz en uygun mkCode değerini verin.")]
     private string EkranAc(string mkCode)
     {
+        _logger.LogInformation("Ekran yönlendirmesi tetiklendi. Hedef ekran kodu: {MkCode}", mkCode);
         if (NavigationIntent.Value is { } box) box.Value = mkCode;
         return $"{mkCode} ekranı açılıyor.";
     }
@@ -295,8 +319,33 @@ public sealed class AgentRuntime
     [Description("Kullanıcı aktif bir tahsilat işlemiyle ilgili bilgi verdiğinde veya onayladığında (örn: 'şu hesaptan çek', 'tamamını öde') bu bilgiyi tahsilat sistemine iletmek için kullanılır. Sadece tahsilat süreci aktifken çağırın.")]
     private string InjectCollectionFact(string fact)
     {
+        _logger.LogInformation("Tahsilat sistemine bilgi aktarıldı: '{Fact}'", fact);
         if(FactInjectionIntent.Value is { } box) box.Value= fact;
         return "Bilgi tahsilat sistemine iletildi";
+    }
+
+    private string PrepareMessageWithContext(string message, string? collectionSessionId)
+    {
+        if (string.IsNullOrEmpty(collectionSessionId)) return message;
+
+        _logger.LogInformation("Aktif tahsilat oturumu ({SessionId}) bağlamı mesaja eklendi.", collectionSessionId);
+
+        return $"""
+            <context_state>
+            AKTİF İŞ AKIŞI: "Kredi Kartı Tahsilat"
+            DURUM: Kullanıcı şu anda bu iş akışının ortasındadır ve sistem kullanıcıdan ödeme yapması için bilgi (Hangi kart, hangi hesap veya onay vb.) beklemektedir.
+            </context_state>
+
+            <active_workflow_rules>
+            1. KESİNLİKLE EKRAN AÇMA: Aktif bir tahsilat işlemi varken, kullanıcı "Kartlarımı göster", "Hesaplarıma bak" diyorsa; amacı ödeme yapacağı kartı/hesabı seçmek için bilgi almaktır. Asla 'ekran_ac' aracını ÇAĞIRMA. Bunun yerine ilgili uzmanlara ('kart_uzmanina_sor' veya 'hesap_uzmanina_sor') başvurarak bilgiyi getir ve kullanıcıya metin olarak sun.
+            2. İŞ AKIŞINI BESLE (FACT INJECTION): Kullanıcının yazdığı mesaj aktif tahsilat işlemine bir cevap/seçim/onay içeriyorsa (örn: "Şu hesabımdan çek", "tamamını öde", "evet onaylıyorum"), DOĞRUDAN CEVAP VERME. Kullanıcının verdiği bilgiyi NET BİR CÜMLEYE ÇEVİR (Örn: 'Kullanıcı vadesiz hesabından ödemek istiyor') ve 'inject_collection_fact' aracıyla sisteme gönder.
+            3. BAĞIMSIZ SORULAR: Kullanıcı tahsilatla tamamen alakasız bir soru sorarsa, uzmanlara danış ve yanıtın sonuna "Tahsilat işlemine devam etmek istiyor musunuz?" notunu ekle.
+            </active_workflow_rules>
+
+            <user_message>
+            {message}
+            </user_message>
+            """;
     }
 
     /// <summary>Q&A: kullanıcı sorusunu orkestratöre iletir; yanıt metni + tahsilat akışı başlatılmalı mı bilgisi döner.</summary>
@@ -304,29 +353,9 @@ public sealed class AgentRuntime
     {
         await EnsureOrchestratorAsync(ct);
 
-        string actualMessage = message;
+        string actualMessage = PrepareMessageWithContext(message, collectionSessionId);
 
-        // [DİKKAT] Semantic Fact Injection Prompt Update
-        if (!string.IsNullOrEmpty(collectionSessionId))
-        {
-            actualMessage = $"""
-                <context_state>
-                AKTİF İŞ AKIŞI: "Kredi Kartı Tahsilat"
-                DURUM: Kullanıcı şu anda bu iş akışının ortasındadır ve sistem kullanıcıdan ödeme yapması için bilgi (Hangi kart, hangi hesap veya onay vb.) beklemektedir.
-                </context_state>
-
-                <active_workflow_rules>
-                1. KESİNLİKLE EKRAN AÇMA: Aktif bir tahsilat işlemi varken, kullanıcı "Kartlarımı göster", "Hesaplarıma bak" diyorsa; amacı ödeme yapacağı kartı/hesabı seçmek için bilgi almaktır. Asla 'ekran_ac' aracını ÇAĞIRMA. Bunun yerine ilgili uzmanlara ('kart_uzmanina_sor' veya 'hesap_uzmanina_sor') başvurarak bilgiyi getir ve kullanıcıya metin olarak sun.
-                2. İŞ AKIŞINI BESLE (FACT INJECTION): Kullanıcının yazdığı mesaj aktif tahsilat işlemine bir cevap/seçim/onay içeriyorsa (örn: "Şu hesabımdan çek", "tamamını öde", "evet onaylıyorum"), DOĞRUDAN CEVAP VERME. Kullanıcının verdiği bilgiyi NET BİR CÜMLEYE ÇEVİR (Örn: 'Kullanıcı vadesiz hesabından ödemek istiyor') ve 'inject_collection_fact' aracıyla sisteme gönder.
-                3. BAĞIMSIZ SORULAR: Kullanıcı tahsilatla tamamen alakasız bir soru sorarsa, uzmanlara danış ve yanıtın sonuna "Tahsilat işlemine devam etmek istiyor musunuz?" notunu ekle.
-                </active_workflow_rules>
-
-                <user_message>
-                {message}
-                </user_message>
-                """;
-        }
-
+        _logger.LogInformation("Kullanıcı sorusu işleniyor.");
         _hub.Publish("SYSTEM", $"Kullanıcı sorusu alındı → '{message}'");
         var intentBox = new StrongBox<bool>(false);
         var navBox = new StrongBox<string?>(null);
@@ -339,6 +368,7 @@ public sealed class AgentRuntime
         try
         {
             var response = await _orchestrator!.RunAsync(actualMessage, cancellationToken: ct);
+            _logger.LogInformation("Orkestratör yanıtı üretildi.");
             _hub.Publish("SYSTEM", "Yanıt kullanıcıya hazır");
 
             return new OrchestratorReply(response.Text, intentBox.Value, navBox.Value, factBox.Value);
@@ -351,8 +381,50 @@ public sealed class AgentRuntime
         }
     }
 
+    /// <summary>Q&A (Streaming): kullanıcı sorusunu orkestratöre iletir ve token güncellemelerini akış olarak döner.</summary>
+    public async IAsyncEnumerable<string> AskStreamingAsync(
+        string message,
+        string? collectionSessionId = null,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        await EnsureOrchestratorAsync(ct);
+
+        string actualMessage = PrepareMessageWithContext(message, collectionSessionId);
+
+        _logger.LogInformation("Canlı akış (streaming) yanıt üretimi başlatıldı.");
+        _hub.Publish("SYSTEM", $"[STREAMING] Kullanıcı sorusu alındı → '{message}'");
+        var intentBox = new StrongBox<bool>(false);
+        var navBox = new StrongBox<string?>(null);
+        var factBox = new StrongBox<string?>(null);
+
+        PaymentIntent.Value = intentBox;
+        NavigationIntent.Value = navBox;
+        FactInjectionIntent.Value = factBox;
+
+        try
+        {
+            var updates = _orchestrator!.RunStreamingAsync(actualMessage, cancellationToken: ct);
+            await foreach (var update in updates.WithCancellation(ct))
+            {
+                if (!string.IsNullOrEmpty(update.Text))
+                {
+                    yield return update.Text;
+                }
+            }
+            _logger.LogInformation("Canlı akış (streaming) yanıt üretimi tamamlandı.");
+            _hub.Publish("SYSTEM", "[STREAMING] Yanıt akışı tamamlandı");
+        }
+        finally
+        {
+            PaymentIntent.Value = null;
+            NavigationIntent.Value = null;
+            FactInjectionIntent.Value = null;
+        }
+    }
+
     public async Task<object> GetDiagnosticsAsync(CancellationToken ct = default)
     {
+        _logger.LogInformation("Sistem tanı ve diagnostik durumu sorgulanıyor.");
         await EnsureOrchestratorAsync(ct);
         try { await WarmSpecialistsAsync(ct); }
         catch (Exception ex) { _logger.LogWarning(ex, "Uzman ön ısıtma (diag) başarısız."); }

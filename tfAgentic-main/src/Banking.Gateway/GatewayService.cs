@@ -54,7 +54,7 @@ public sealed class GatewayService
             {
                 _hub.Publish("GATEWAY", "Orkestratör temiz bilgiyi tahsilat ajanına (Fact Injection) iletiyor.");
                 var result = await _collectionStore.RespondWithFactAsync(session.CollectionSessionId, reply.InjectedFact);
-                return MapCollectionResult(result, session);
+                return MapCollectionResult(result, session) with { SessionToken = sessionToken };
             }
 
             // 2. DURUM: Orkestratör tahsilat akışını İLK KEZ başlatmak istiyor.
@@ -62,30 +62,32 @@ public sealed class GatewayService
             {
                 _hub.Publish("GATEWAY", "Orkestratör tahsilat niyeti algıladı → Collection akışı başlatılıyor");
                 _logger.LogInformation("Tahsilat akışı başlatılıyor: session={SessionToken}", sessionToken);
-                return await StartCollectionAsync(session, request, ct);
+                var collectionResponse = await StartCollectionAsync(session, request, ct);
+                return collectionResponse with { SessionToken = sessionToken };
             }
 
             // 3. DURUM: Ekran yönlendirmesi var.
             if (!string.IsNullOrEmpty(reply.OpenScreenMkCode))
             {
                 _hub.Publish("GATEWAY", $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({reply.OpenScreenMkCode})");
-                return GatewayResponse.AsOpenScreen(reply.OpenScreenMkCode);
+                return GatewayResponse.AsOpenScreen(reply.OpenScreenMkCode) with { SessionToken = sessionToken };
             }
 
             // 4. DURUM: Standart Q&A metin yanıtı (veya uzmanlardan dönen cevap)
-            _hub.Publish("GATEWAY", "Metin yanıtı hazır → TEXT", $"len={reply.Reply.Length}");
-            return GatewayResponse.AsText(reply.Reply);
+            var response = GatewayResponse.AsText(reply.Reply) with { SessionToken = sessionToken };
+            _hub.Publish("GATEWAY", "Metin yanıtı hazır -> TEXT", response);
+            return response;
         }
         catch (OperationCanceledException)
         {
             _logger.LogWarning("Gateway isteği iptal edildi: session={SessionToken}", sessionToken);
-            return GatewayResponse.AsText("İstek zaman aşımına uğradı.");
+            return GatewayResponse.AsText("İstek zaman aşımına uğradı.") with { SessionToken = sessionToken };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Gateway hatası: session={SessionToken}", sessionToken);
             _hub.Publish("GATEWAY", $"HATA: {ex.Message}");
-            return GatewayResponse.AsText("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin."); // Hata da TEXT olarak döner
+            return GatewayResponse.AsText("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.") with { SessionToken = sessionToken }; // Hata da TEXT olarak döner
         }
     }
 

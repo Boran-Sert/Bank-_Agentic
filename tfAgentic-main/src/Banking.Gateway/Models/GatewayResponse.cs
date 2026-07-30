@@ -19,6 +19,9 @@ public sealed record GatewayResponse
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? MkCodeValue { get; init; }
 
+    [JsonPropertyName("sessionToken")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SessionToken { get; init; }
 
     // MW'nin beklediği diğer alanlar (tahsilat onayında veya ekranda gerekirse)
     [JsonPropertyName("cardNumber")]

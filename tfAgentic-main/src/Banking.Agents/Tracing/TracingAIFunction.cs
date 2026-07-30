@@ -4,9 +4,8 @@ using Microsoft.Extensions.AI;
 namespace Banking.Agents.Tracing;
 
 /// <summary>
-/// Bir aracı (AIFunction) sarar ve her çağrıldığında ilgili katman olayını TraceHub'a yayınlar.
-/// Orkestratörün A2A araçlarını, uzmanların MCP araçlarını ve tahsilat araçlarını izlemek için kullanılır.
-/// Şema/ad/açıklama iç araca delege edilir; davranış değişmez.
+/// Bir aracı (AIFunction) sarar ve her çağrıldığında girdi parametreleri ile dönen sonuç verisini (payload)
+/// merkezi TraceHub sistemine detaylıca raporlar.
 /// </summary>
 public sealed class TracingAIFunction(AIFunction inner, TraceHub hub, string layer, string text, string? detail = null)
     : AIFunction
@@ -18,7 +17,20 @@ public sealed class TracingAIFunction(AIFunction inner, TraceHub hub, string lay
     protected override async ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments, CancellationToken cancellationToken)
     {
-        hub.Publish(layer, text, detail);
-        return await inner.InvokeAsync(arguments, cancellationToken);
+        string infoTag = string.IsNullOrWhiteSpace(detail) ? text : $"{text} {detail}";
+
+        if (arguments != null && arguments.Count > 0)
+            hub.Publish(layer, $"{Name} Aracı Tetiklendi ({infoTag})", arguments);
+        else
+            hub.Publish(layer, $"{Name} Aracı Tetiklendi ({infoTag})");
+
+        var result = await inner.InvokeAsync(arguments, cancellationToken);
+
+        if (result != null)
+            hub.Publish(layer, $"{Name} Aracı Tamamlandı ({text})", result);
+        else
+            hub.Publish(layer, $"{Name} Aracı Tamamlandı ({text})");
+
+        return result;
     }
 }

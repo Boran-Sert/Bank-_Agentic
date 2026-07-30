@@ -30,8 +30,8 @@ builder.Configuration.GetSection(AgentOptions.SectionName).Bind(agentOptions);
 agentOptions.ApiKey ??= Environment.GetEnvironmentVariable("OPENAI_API_KEY");
 builder.Services.AddSingleton(agentOptions);
 
-// Kestrel'i, loopback MCP/A2A çağrılarının hedefiyle aynı adreste dinlet.
-builder.WebHost.UseUrls(agentOptions.SelfBaseUrl);
+// Kestrel'i tüm ağ arayüzlerinde dinlet (hem localhost Web UI hem de dış 10.x IP'leri API erişimi sağlayabilsin)
+builder.WebHost.UseUrls("http://*:5080");
 
 // --- Domain (in-memory bankacılık simülasyonu) ---
 builder.Services.AddSingleton<InMemoryBankStore>();
@@ -55,6 +55,9 @@ builder.Services.AddSingleton<CollectionSessionStore>();
 
 // --- MW Gateway (Java MW ↔ .NET iletişimi) ---
 builder.Services.AddSingleton<GatewayService>();
+
+// --- Güvenlik: Deterministik çıktı bariyeri (Output Guard — Defense-in-Depth Katman 3) ---
+builder.Services.AddSingleton<ResponseSanitizer>();
 
 // --- MCP server (tek server, hesap + kart + ekstre analiz araçları; loopback /mcp) ---
 builder.Services.AddMcpServer()

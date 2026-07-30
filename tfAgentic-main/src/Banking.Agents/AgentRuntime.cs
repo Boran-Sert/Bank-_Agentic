@@ -9,6 +9,8 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using OpenAI.Chat;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using ChatRole = Microsoft.Extensions.AI.ChatRole;
 
 namespace Banking.Agents;
 
@@ -324,36 +326,43 @@ public sealed class AgentRuntime
         return "Bilgi tahsilat sistemine iletildi";
     }
 
-    private string PrepareMessageWithContext(string message, string? collectionSessionId)
+    private List<ChatMessage> BuildNativeContext(string message, IList<ChatMessage>? history, string? collectionSessionId)
     {
-        if (string.IsNullOrEmpty(collectionSessionId)) return message;
+        var messages = new List<ChatMessage>();
+        if (history != null)
+        {
+            foreach (var h in history)
+            {
+                messages.Add(new ChatMessage(h.Role, h.Text));
+            }
+        }
+        else
+        {
+            messages.Add(new ChatMessage(ChatRole.User, message));
+        }
 
-        _logger.LogInformation("Aktif tahsilat oturumu ({SessionId}) bağlamı mesaja eklendi.", collectionSessionId);
-
-        return $"""
-            <context_state>
-            AKTİF İŞ AKIŞI: "Kredi Kartı Tahsilat"
-            DURUM: Kullanıcı şu anda bu iş akışının ortasındadır ve sistem kullanıcıdan ödeme yapması için bilgi (Hangi kart, hangi hesap veya onay vb.) beklemektedir.
-            </context_state>
-
-            <active_workflow_rules>
-            1. KESİNLİKLE EKRAN AÇMA: Aktif bir tahsilat işlemi varken, kullanıcı "Kartlarımı göster", "Hesaplarıma bak" diyorsa; amacı ödeme yapacağı kartı/hesabı seçmek için bilgi almaktır. Asla 'ekran_ac' aracını ÇAĞIRMA. Bunun yerine ilgili uzmanlara ('kart_uzmanina_sor' veya 'hesap_uzmanina_sor') başvurarak bilgiyi getir ve kullanıcıya metin olarak sun.
-            2. İŞ AKIŞINI BESLE (FACT INJECTION): Kullanıcının yazdığı mesaj aktif tahsilat işlemine bir cevap/seçim/onay içeriyorsa (örn: "Şu hesabımdan çek", "tamamını öde", "evet onaylıyorum"), DOĞRUDAN CEVAP VERME. Kullanıcının verdiği bilgiyi NET BİR CÜMLEYE ÇEVİR (Örn: 'Kullanıcı vadesiz hesabından ödemek istiyor') ve 'inject_collection_fact' aracıyla sisteme gönder.
-            3. BAĞIMSIZ SORULAR: Kullanıcı tahsilatla tamamen alakasız bir soru sorarsa, uzmanlara danış ve yanıtın sonuna "Tahsilat işlemine devam etmek istiyor musunuz?" notunu ekle.
-            </active_workflow_rules>
-
-            <user_message>
-            {message}
-            </user_message>
-            """;
+        if (!string.IsNullOrEmpty(collectionSessionId))
+        {
+            _logger.LogInformation("Aktif tahsilat oturumu ({SessionId}) native SystemMessage olarak eklendi.", collectionSessionId);
+            messages.Add(new ChatMessage(ChatRole.System, """
+                AKTİF İŞ AKIŞI DURUMU: "Kredi Kartı Tahsilat"
+                Kullanıcı şu anda bu iş akışının ortasındadır ve sistem kullanıcıdan ödeme yapması için bilgi (Hangi kart, hangi hesap veya onay vb.) beklemektedir.
+                
+                AKTİF İŞ AKIŞI KURALLARI:
+                1. KESİNLİKLE EKRAN AÇMA: Kullanıcı "Kartlarımı göster" diyorsa amacı ödeme yapacağı kartı seçmek için bilgi almaktır. İlgili uzmanlara başvur.
+                2. İŞ AKIŞINI BESLE (FACT INJECTION): Kullanıcının yanıtı ödeme onayı veya seçimi içeriyorsa (örn: "tamamını öde", "vadesiz hesabımdan çek"), 'inject_collection_fact' aracıyla sisteme gönder.
+                3. BAĞIMSIZ SORULAR: Kullanıcı alakasız soru sorarsa uzmanlara danış ve yanıtın sonuna "Tahsilat işlemine devam etmek istiyor musunuz?" ekle.
+                """));
+        }
+        return messages;
     }
 
     /// <summary>Q&A: kullanıcı sorusunu orkestratöre iletir; yanıt metni + tahsilat akışı başlatılmalı mı bilgisi döner.</summary>
-    public async Task<OrchestratorReply> AskAsync(string message, string? collectionSessionId = null, CancellationToken ct = default)
+    public async Task<OrchestratorReply> AskAsync(string message, IList<ChatMessage>? history = null, string? collectionSessionId = null, CancellationToken ct = default)
     {
         await EnsureOrchestratorAsync(ct);
 
-        string actualMessage = PrepareMessageWithContext(message, collectionSessionId);
+        var messages = BuildNativeContext(message, history, collectionSessionId);
 
         _logger.LogInformation("Kullanıcı sorusu işleniyor.");
         _hub.Publish("SYSTEM", $"Kullanıcı sorusu alındı → '{message}'");
@@ -367,7 +376,7 @@ public sealed class AgentRuntime
 
         try
         {
-            var response = await _orchestrator!.RunAsync(actualMessage, cancellationToken: ct);
+            var response = await _orchestrator!.RunAsync(messages, cancellationToken: ct);
             _logger.LogInformation("Orkestratör yanıtı üretildi.");
             _hub.Publish("SYSTEM", "Yanıt kullanıcıya hazır");
 
@@ -384,12 +393,13 @@ public sealed class AgentRuntime
     /// <summary>Q&A (Streaming): kullanıcı sorusunu orkestratöre iletir ve token güncellemelerini akış olarak döner.</summary>
     public async IAsyncEnumerable<string> AskStreamingAsync(
         string message,
+        IList<ChatMessage>? history = null,
         string? collectionSessionId = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         await EnsureOrchestratorAsync(ct);
 
-        string actualMessage = PrepareMessageWithContext(message, collectionSessionId);
+        var messages = BuildNativeContext(message, history, collectionSessionId);
 
         _logger.LogInformation("Canlı akış (streaming) yanıt üretimi başlatıldı.");
         _hub.Publish("SYSTEM", $"[STREAMING] Kullanıcı sorusu alındı → '{message}'");
@@ -403,7 +413,7 @@ public sealed class AgentRuntime
 
         try
         {
-            var updates = _orchestrator!.RunStreamingAsync(actualMessage, cancellationToken: ct);
+            var updates = _orchestrator!.RunStreamingAsync(messages, cancellationToken: ct);
             await foreach (var update in updates.WithCancellation(ct))
             {
                 if (!string.IsNullOrEmpty(update.Text))

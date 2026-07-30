@@ -16,6 +16,11 @@ public static class SpecialistAgents
         - Hesap kimliğini bilmiyorsan önce list_accounts ile hesapları getir.
         - Tutarları Türk Lirası (₺) ve binlik ayraçla, kısa ve net yaz.
         - Kredi kartı borcu/limit konuları senin alanın DEĞİL; bunları yanıtlama.
+
+        Format ve Görünüm Kuralları (ZORUNLU):
+        - Tüm yanıtlarını KESİNLİKLE Markdown formatında oluştur.
+        - Hesapları, bakiyeleri veya hesap hareketlerini sıralarken/listelerken KESİNLİKLE Markdown liste formatı (`- ` veya `1. `) kullanarak her ögeyi ALT ALTA göster. Asla tek satırda birleştirme veya yan yana sıralama.
+        - Önemli başlık ve etiketleri Markdown kalın yazı (`**...**`) veya başlık (`###`) ile vurgula.
         """;
 
     private const string KartInstructions =
@@ -28,6 +33,11 @@ public static class SpecialistAgents
         - Kart kimliğini bilmiyorsan önce list_cards ile kartları getir.
         - Tutarları Türk Lirası (₺) ve binlik ayraçla, kısa ve net yaz.
         - Tahsilat/ödeme İŞLEMİ yapma; sadece bilgi ver.
+
+        Format ve Görünüm Kuralları (ZORUNLU):
+        - Tüm yanıtlarını KESİNLİKLE Markdown formatında oluştur.
+        - Kartları, limitleri, borçları veya kart bilgilerini sıralarken/listelerken KESİNLİKLE Markdown liste formatı (`- ` veya `1. `) kullanarak her ögeyi ALT ALTA göster. Asla yan yana veya tek satırda sıralama.
+        - Önemli bilgileri Markdown kalın yazı (`**...**`) veya başlık (`###`) kullanarak vurgula.
         """;
 
     private const string AnalyzeInstructions =
@@ -125,13 +135,16 @@ public static class SpecialistAgents
             <rule>ASLA kendi kafandan kampanya adı, harcama tutarı veya bonus miktarı uydurma. Sadece araçlardan (Tools) dönen verileri kullan.</rule>
             <rule>Harcama analizlerinde tutarları açık ve net biçimde TL formatında (Örn: 1.250,50 TL) göster.</rule>
             <rule>Kampanya önerilerini mutlaka `KampanyaVektorelAra` aracından dönen sonuçlara dayandır ve eşleşme sebebini kullanıcının harcama verisiyle ilişkilendir.</rule>
+            <rule>Tüm yanıtlarını KESİNLİKLE tam Markdown formatında oluştur. Sıralı veya liste halindeki tüm harcama verilerini, kategorileri ve kampanyaları KESİNLİKLE alt alta, Markdown liste formatında (`- ` veya `1. `) düzenle.</rule>
           </guardrails>
 
           <response_format>
-            Yanıtlarını kullanıcıya sunarken aşağıdaki net ve profesyonel Türkçe Markdown yapısını takip et (Emoji KULLANMA):
+            Yanıtlarını kullanıcıya sunarken KESİNLİKLE aşağıdaki net ve profesyonel Türkçe Markdown yapısını takip et. Sıralı veya çoklu verileri (kategoriler, kampanyalar, harcamalar) KESİNLİKLE alt alta Markdown listeleri halinde sun (Emoji KULLANMA):
 
             ### Harcama Özeti ve Analiz
-            - **En Çok Harcanan Kategoriler:** [Kategori isimleri, TL ve % dağılımı]
+            - **En Çok Harcanan Kategoriler:**
+              - [Kategori 1]: [TL tutarı] (% [dağılım oranı])
+              - [Kategori 2]: [TL tutarı] (% [dağılım oranı])
             - **Harcama Alışkanlığı:** [Peşin/Taksit oranı ve Öne çıkan markalar]
             - **Kazanılan Puanlar:** [Kazanılan toplam bonus/puan]
 
@@ -142,7 +155,8 @@ public static class SpecialistAgents
                - **Eşleşme Sebebi:** [Örn: "Son dönemdeki Market ve Alışveriş harcamalarınız sebebiyle"]
                - **Fayda:** [Kampanyanın sağladığı bonus/indirim detayı]
             2. **[Kampanya Adı 2]**
-               - ...
+               - **Eşleşme Sebebi:** [...]
+               - **Fayda:** [...]
           </response_format>
 
           <examples>

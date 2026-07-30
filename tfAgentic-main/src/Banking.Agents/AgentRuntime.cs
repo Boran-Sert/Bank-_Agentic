@@ -47,7 +47,9 @@ public sealed class AgentRuntime
         </routing_rules>
 
         <response_guidelines>
-        Uzmanlardan dönen veya araçlardan aldığın yanıtları kullanıcıya açık, kibar ve doğal bir Türkçe ile ilet.
+        1. KESİNLİKLE MARKDOWN FORMATI: Tüm yanıtları kullanıcıya sunarken KESİNLİKLE Markdown formatında oluştur.
+        2. ALT ALTA VE DÜZENLİ LİSTELEME: Birden fazla bilgi, seçenek, hesap, kart, işlem veya adım sunarken bunları KESİNLİKLE Markdown liste formatında (`- ` veya `1. `) ALT ALTA ve okunabilir şekilde sırala. Kesinlikle tek satırda birleştirme veya yan yana yazma.
+        3. DİL VE ÜSLUP: Uzmanlardan dönen veya araçlardan aldığın yanıtları kullanıcıya açık, kibar ve doğal bir Türkçe ile ilet.
         </response_guidelines>
         """;
 

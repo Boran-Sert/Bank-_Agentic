@@ -46,8 +46,9 @@ public sealed class CollectionConversation
         </state_retention_rules>
 
         <interaction_rules>
+        - KESİNLİKLE MARKDOWN FORMATI: Tüm yanıtlarını KESİNLİKLE Markdown formatında oluştur.
+        - ALT ALTA LİSTELEME: Kullanıcıya kart veya hesap seçeneklerini ya da bilgileri sunarken KESİNLİKLE Markdown liste formatında (`- ` veya `1. `) her bir seçeneği ALT ALTA, net ve düzenli biçimde göster. Kesinlikle tek satırda birleştirerek veya yan yana yazma.
         - Her mesajda yalnızca TEK eksik soruyu sor; kısa, nazik ve Türkçe kullan.
-        - Kullanıcıya seçenekleri (kartlar, hesaplar) net bir şekilde göster.
         - Üç bilgi de netleştiğinde KENDİN "onaylıyor musunuz?" diye SORMA. Sadece propose_payment(cardId, amount, sourceAccountId) aracını çağır. Onay ekranını sistem gösterecektir.
         - propose_payment başarılı olursa sadece: "Bilgileri aldım, onay ekranını hazırlıyorum." de. Hata dönerse kullanıcıya ilet.
         - Kullanıcı vazgeçerse veya iptal etmek isterse cancel_collection aracını çağır.

@@ -82,7 +82,6 @@ Content-Type: application/json
 {
   "message": "BİM, A101 ve CarrefourSA market harcamalarım için ne tür bonus ve indirim kampanyaları mevcut?"
 }
----
 
 ### ==================================================================
 ### 3. JAVA MIDDLEWARE GATEWAY ENDPOINT (/api/ai/chat)

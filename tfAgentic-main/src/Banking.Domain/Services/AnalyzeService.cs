@@ -181,50 +181,22 @@ public sealed class AnalyzeService : IAnalyzeService
 
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         var root = doc.RootElement;
-        
-        var list = new List<CardTransactionItem>();
 
-        if (root.TryGetProperty("GetCreditCardCycleInfoForAllCardsResult", out var resultObj) &&
-            resultObj.TryGetProperty("Result", out var innerRes) &&
-            innerRes.TryGetProperty("MainCardTransaction", out var mainCards) &&
-            mainCards.ValueKind == System.Text.Json.JsonValueKind.Array)
+        if (!root.TryGetProperty("GetCreditCardCycleInfoForAllCardsResult", out var resultObj) ||
+            !resultObj.TryGetProperty("Result", out var innerRes) ||
+            !innerRes.TryGetProperty("MainCardTransaction", out var mainCards) ||
+            mainCards.ValueKind != System.Text.Json.JsonValueKind.Array)
         {
-            foreach (var cardItem in mainCards.EnumerateArray())
-            {
-                if (cardItem.TryGetProperty("CardTransactionList", out var txList) &&
-                    txList.ValueKind == System.Text.Json.JsonValueKind.Array)
-                {
-                    foreach (var t in txList.EnumerateArray())
-                    {
-                        var item = new CardTransactionItem(
-                            AllCycleGuid: t.GetProperty("AllCycleGuid").GetInt64(),
-                            Amount: t.GetProperty("Amount").GetDecimal(),
-                            CardNo: t.GetProperty("CardNo").GetString() ?? "",
-                            CardType: t.GetProperty("CardType").GetString() ?? "",
-                            CardLevel: t.GetProperty("Cardlevel").GetString() ?? "",
-                            EmbossName: t.GetProperty("EmbossName").GetString() ?? "",
-                            Explanation: t.GetProperty("Explanation").GetString() ?? "",
-                            FinancialTransactionType: t.GetProperty("FinancialTransactionType").GetString() ?? "",
-                            HasDigitalSlip: t.GetProperty("HasDigitalSlip").GetBoolean(),
-                            IsInstallmentCampaignSuitable: t.GetProperty("IsInstallmentCampaignSuitable").GetBoolean(),
-                            OverLimitAmount: t.GetProperty("OverLimitAmount").GetDecimal(),
-                            PaymentTermRevenue: t.GetProperty("PaymentTermRevenue").GetDecimal(),
-                            Point: t.GetProperty("Point").GetDecimal(),
-                            PointFinancialTransactionType: t.GetProperty("PointFinancialTransactionType").GetString() ?? "",
-                            PointRedemptionAmount: t.GetProperty("PointRedemptionAmount").GetDecimal(),
-                            ProcessedDate: t.GetProperty("ProcessedDate").GetInt64(),
-                            StatementMccGroupType: t.GetProperty("StatementMccGroupType").GetString() ?? "Other",
-                            TrxDate: t.GetProperty("TrxDate").GetInt64(),
-                            TxnAllOnusGuid: t.GetProperty("TxnAllOnusGuid").GetInt64(),
-                            TxnDefiniton: t.GetProperty("TxnDefiniton").GetString() ?? ""
-                        );
-                        list.Add(item);
-                    }
-                }
-            }
+            return Array.Empty<CardTransactionItem>();
         }
-        return list;
+
+        return mainCards.EnumerateArray()
+            .Where(card => card.TryGetProperty("CardTransactionList", out var txList) && txList.ValueKind == System.Text.Json.JsonValueKind.Array)
+            .SelectMany(card => card.GetProperty("CardTransactionList").EnumerateArray())
+            .Select(MapToCardTransactionItem)
+            .ToList();
     }
+
     /// <summary>Ekstrenin tüm kategoriler, ödeme tipleri, puanlar ve işyerleri bazındaki genel özet analizini üretir.</summary>
     public StatementAnalysisSummary AnalyzeStatement(IEnumerable<CardTransactionItem> transactions)
     {
@@ -249,7 +221,6 @@ public sealed class AnalyzeService : IAnalyzeService
         if (totalCount == 0) return Array.Empty<CategoryAnalysisResult>();
 
         decimal grandTotal = expenses.Sum(t => t.Amount);
-        bool isMasked = grandTotal == 0;
 
         return expenses
             .GroupBy(t => string.IsNullOrWhiteSpace(t.StatementMccGroupType) ? "Other" : t.StatementMccGroupType)
@@ -257,18 +228,14 @@ public sealed class AnalyzeService : IAnalyzeService
             {
                 decimal categoryTotal = g.Sum(t => t.Amount);
                 int count = g.Count();
-                double percentage = isMasked
-                    ? (double)count / totalCount * 100
-                    : (double)(categoryTotal / grandTotal) * 100;
-
                 return new CategoryAnalysisResult(
                     Category: g.Key,
                     TotalAmount: categoryTotal,
                     TransactionCount: count,
-                    PercentageShare: Math.Round(percentage, 2)
+                    PercentageShare: CalculatePercentage(categoryTotal, grandTotal, count, totalCount)
                 );
             })
-            .OrderByDescending(r => isMasked ? (double)r.TransactionCount : (double)r.TotalAmount)
+            .OrderByDescending(r => grandTotal == 0 ? (double)r.TransactionCount : (double)r.TotalAmount)
             .ToList();
     }
 
@@ -279,26 +246,21 @@ public sealed class AnalyzeService : IAnalyzeService
         int totalCount = expenses.Count;
         if (totalCount == 0) return new PaymentTypeAnalysisResult(0, 0, 0, 0, 0, 0);
 
-        var grouped = expenses
-            .GroupBy(t => t.IsInstallment)
-            .ToDictionary(g => g.Key, g => (Total: g.Sum(t => t.Amount), Count: g.Count()));
+        decimal grandTotal = expenses.Sum(t => t.Amount);
 
-        var (installmentTotal, installmentCount) = grouped.GetValueOrDefault(true, (0m, 0));
-        var (cashTotal, cashCount) = grouped.GetValueOrDefault(false, (0m, 0));
+        var installmentExpenses = expenses.Where(t => t.IsInstallment).ToList();
+        var cashExpenses = expenses.Where(t => !t.IsInstallment).ToList();
 
-        decimal grandTotal = cashTotal + installmentTotal;
-        bool isMasked = grandTotal == 0;
-
-        double cashPercentage = isMasked ? (double)cashCount / totalCount * 100 : (double)(cashTotal / grandTotal) * 100;
-        double installmentPercentage = isMasked ? (double)installmentCount / totalCount * 100 : (double)(installmentTotal / grandTotal) * 100;
+        decimal installmentTotal = installmentExpenses.Sum(t => t.Amount);
+        decimal cashTotal = cashExpenses.Sum(t => t.Amount);
 
         return new PaymentTypeAnalysisResult(
             CashTotalAmount: cashTotal,
-            CashTransactionCount: cashCount,
-            CashPercentage: Math.Round(cashPercentage, 2),
+            CashTransactionCount: cashExpenses.Count,
+            CashPercentage: CalculatePercentage(cashTotal, grandTotal, cashExpenses.Count, totalCount),
             InstallmentTotalAmount: installmentTotal,
-            InstallmentTransactionCount: installmentCount,
-            InstallmentPercentage: Math.Round(installmentPercentage, 2)
+            InstallmentTransactionCount: installmentExpenses.Count,
+            InstallmentPercentage: CalculatePercentage(installmentTotal, grandTotal, installmentExpenses.Count, totalCount)
         );
     }
 
@@ -307,17 +269,18 @@ public sealed class AnalyzeService : IAnalyzeService
     {
         var list = transactions.ToList();
 
-        var grouped = list
-            .GroupBy(t => t.TxnDefiniton.Contains("Bonus", StringComparison.OrdinalIgnoreCase) ||
-                          t.Explanation.Contains("Bonus", StringComparison.OrdinalIgnoreCase))
-            .ToDictionary(g => g.Key, g => g.Sum(t => t.Point));
+        decimal campaignPoints = list
+            .Where(t => t.TxnDefiniton.Contains("Bonus", StringComparison.OrdinalIgnoreCase) ||
+                        t.Explanation.Contains("Bonus", StringComparison.OrdinalIgnoreCase))
+            .Sum(t => t.Point);
 
-        decimal campaignPoints = grouped.GetValueOrDefault(true, 0m);
-        decimal standardPoints = grouped.GetValueOrDefault(false, 0m);
-        decimal totalEarnedPoints = standardPoints + campaignPoints;
+        decimal totalEarnedPoints = list.Sum(t => t.Point);
+        decimal standardPoints = totalEarnedPoints - campaignPoints;
         decimal redeemedPoints = list.Sum(t => t.PointRedemptionAmount);
 
-        double efficiency = totalEarnedPoints > 0 ? Math.Round((double)(campaignPoints / totalEarnedPoints) * 100, 2) : 0;
+        double efficiency = totalEarnedPoints > 0
+            ? Math.Round((double)(campaignPoints / totalEarnedPoints) * 100, 2)
+            : 0;
 
         return new BonusAnalysisResult(
             StandardPoints: standardPoints,
@@ -357,15 +320,15 @@ public sealed class AnalyzeService : IAnalyzeService
             .Where(t => t.IsExpense)
             .Where(t => string.IsNullOrWhiteSpace(mccGroupType) || t.StatementMccGroupType.Equals(mccGroupType, StringComparison.OrdinalIgnoreCase));
 
-        var periodTotals = expenses
-            .GroupBy(t => t.TransactionDateTime >= currentStart && t.TransactionDateTime <= currentEnd ? "Current" :
-                          t.TransactionDateTime >= previousStart && t.TransactionDateTime <= previousEnd ? "Previous" : "Other")
-            .ToDictionary(g => g.Key, g => g.Sum(t => t.Amount));
+        decimal currentTotal = expenses
+            .Where(t => t.TransactionDateTime >= currentStart && t.TransactionDateTime <= currentEnd)
+            .Sum(t => t.Amount);
 
-        decimal currentTotal = periodTotals.GetValueOrDefault("Current", 0m);
-        decimal previousTotal = periodTotals.GetValueOrDefault("Previous", 0m);
+        decimal previousTotal = expenses
+            .Where(t => t.TransactionDateTime >= previousStart && t.TransactionDateTime <= previousEnd)
+            .Sum(t => t.Amount);
+
         decimal difference = currentTotal - previousTotal;
-
         double percentageChange = previousTotal > 0 ? Math.Round((double)(difference / previousTotal) * 100, 2) : 0;
 
         return new PeriodComparisonResult(
@@ -376,6 +339,46 @@ public sealed class AnalyzeService : IAnalyzeService
             PercentageChange: percentageChange
         );
     }
+
+    /// <summary>JsonElement nesnesinden CardTransactionItem oluşturan LINQ projeksiyon yardımcısı.</summary>
+    private static CardTransactionItem MapToCardTransactionItem(System.Text.Json.JsonElement t) => new(
+        AllCycleGuid: t.GetProperty("AllCycleGuid").GetInt64(),
+        Amount: t.GetProperty("Amount").GetDecimal(),
+        CardNo: GetStringOrDefault(t, "CardNo"),
+        CardType: GetStringOrDefault(t, "CardType"),
+        CardLevel: GetStringOrDefault(t, "Cardlevel"),
+        EmbossName: GetStringOrDefault(t, "EmbossName"),
+        Explanation: GetStringOrDefault(t, "Explanation"),
+        FinancialTransactionType: GetStringOrDefault(t, "FinancialTransactionType"),
+        HasDigitalSlip: t.GetProperty("HasDigitalSlip").GetBoolean(),
+        IsInstallmentCampaignSuitable: t.GetProperty("IsInstallmentCampaignSuitable").GetBoolean(),
+        OverLimitAmount: t.GetProperty("OverLimitAmount").GetDecimal(),
+        PaymentTermRevenue: t.GetProperty("PaymentTermRevenue").GetDecimal(),
+        Point: t.GetProperty("Point").GetDecimal(),
+        PointFinancialTransactionType: GetStringOrDefault(t, "PointFinancialTransactionType"),
+        PointRedemptionAmount: t.GetProperty("PointRedemptionAmount").GetDecimal(),
+        ProcessedDate: t.GetProperty("ProcessedDate").GetInt64(),
+        StatementMccGroupType: GetStringOrDefault(t, "StatementMccGroupType", "Other"),
+        TrxDate: t.GetProperty("TrxDate").GetInt64(),
+        TxnAllOnusGuid: t.GetProperty("TxnAllOnusGuid").GetInt64(),
+        TxnDefiniton: GetStringOrDefault(t, "TxnDefiniton")
+    );
+
+    /// <summary>Tutar veya adet bazlı yüzde hesaplayan LINQ yardımcısı.</summary>
+    private static double CalculatePercentage(decimal value, decimal grandTotal, int count, int totalCount)
+    {
+        if (totalCount == 0) return 0;
+        double percentage = grandTotal == 0
+            ? (double)count / totalCount * 100
+            : (double)(value / grandTotal) * 100;
+        return Math.Round(percentage, 2);
+    }
+
+    /// <summary>JsonElement nesnesinden string özelliği güvenli şekilde okuyan yardımcı.</summary>
+    private static string GetStringOrDefault(System.Text.Json.JsonElement element, string propertyName, string defaultValue = "")
+        => element.TryGetProperty(propertyName, out var prop) && prop.ValueKind == System.Text.Json.JsonValueKind.String
+            ? prop.GetString() ?? defaultValue
+            : defaultValue;
 
     /// <summary>İşlem açıklamasındaki gereksiz ifadeleri ve taksit bilgilerini temizleyerek sade işyeri adını döner.</summary>
     private static string CleanMerchantName(string rawExplanation)

@@ -61,6 +61,7 @@ public record Campaign(
     string Title,
     string Description,
     string TargetMccGroup, // "MarketAndShopping", "Food", "Clothing", "Other"
+    string TermsOfUse,
     string Benefit,         // "250 TL Bonus", "6 Taksit", "%10 Puan"
     decimal BonusPoints,
     decimal MinimumSpendAmount,
@@ -83,4 +84,14 @@ public record CardStatementSummary(
     decimal TotalExpenseAmount,
     int ExpenseCount,
     decimal TotalEarnedPoints);
+
+/// <summary> Finansman Önerileri tanımı </summary>
+public record FinancingOption(
+    string Id,
+    string Title,
+    string Description,
+    string Type, // Limit artırımı, Borç yapılandırması
+    decimal InterestRate,
+    int MaxInstallments
+    );
 

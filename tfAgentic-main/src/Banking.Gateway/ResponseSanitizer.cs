@@ -102,19 +102,23 @@ public sealed class ResponseSanitizer
     /// </summary>
     private static readonly Regex ThinkingPattern = new(
         @"(" +
-            // Türkçe "aracını/aracı kullanacağım/çağıracağım/çağırıyorum" kalıpları
-            @"[\w'""'`]+\s+arac[ıi]n[ıi]\s+(kullan|çağ[ıi]r|tetikle)" +
-            @"|arac[ıi]\s+(kullan|çağ[ıi]r|tetikle)" +
+            // Türkçe "aracı/araçları/aracını kullanacağım/çağıracağım/çağırıyorum/tetikleyeceğim" kalıpları
+            @"(?:araç|aracı|aracını|aracın|araçları|araçların)\w*\s+.*?(?:kullan|çağır|tetikle|çalıştır)" +
             @"|araç\s+çağr[ıi]s[ıi]" +
-            // "uzman ajanına/uzmana sor/danış/yönlendir" kalıpları
-            @"|uzman\s*(?:ajan[ıi]na|a)?\s*(?:sor|danış|yönlendir|ilet)" +
-            @"|uzmana\s+(?:sor|danış|yönlendir|ilet)" +
+            // "uzman/uzmanına/uzmana sor/danış/yönlendir/gerekiyor" kalıpları
+            @"|uzman\w*\s+.*?(?:sor|danış|yönlendir|ilet|bağlan|aktar)" +
+            @"|uzman\w*\s+.*?(?:gerekiyor|ihtiyaç|lazım)" +
+            @"|(?:hesap|kart|analiz|tahsilat)\s+uzman\w*" +
+            // "Bu soru X içeriyor", "Öncelikle X gerekiyor" gibi durum/ön-sunuş cümleleri
+            @"|bu\s+soru\b.*?(?:içeriyor|gerektiriyor|kapsıyor)" +
+            @"|bunun\s+için\s+öncelikle" +
+            @"|bir\s+dakika\s+lütfen" +
+            @"|lütfen\s+bekle(?:yin)?" +
+            // "yönlendiriyorum/soruyorum/aktarıyorum" (ajan bağlamında)
+            @"|(?:ajan|uzman|servis|service)\w*\s*(?:ına|ine|a|e)?\s*(?:yönlendiriyorum|soruyorum|aktarıyorum)" +
             // "tool/function call" İngilizce kalıpları
             @"|(?:tool|function)\s*call" +
             @"|calling\s+(?:tool|function)" +
-            // "yönlendiriyorum/soruyorum" (ajan bağlamında)
-            @"|(?:ajan|uzman|servis|service)\w*\s*(?:ına|ine|a|e)?\s*yönlendiriyorum" +
-            @"|(?:ajan|uzman)\w*\s*(?:ına|ine|a|e)?\s*soruyorum" +
             // "bekleyin" araç bağlamında
             @"|(?:bilgi|veri|cevap|yanıt)\s+(?:almak|getirmek|çekmek)\s+için\s+.*?(?:bekle)" +
             // "chain of thought / reasoning / internal" İngilizce kalıplar

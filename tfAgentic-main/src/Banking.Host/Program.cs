@@ -9,6 +9,7 @@ using Banking.Domain.Services;
 using Banking.Mcp;
 using Banking.Gateway;
 using Banking.Gateway.Models;
+using Banking.Domain.Financing;
 using Microsoft.Agents.AI.Hosting;
 using SmartComponents.LocalEmbeddings;
 
@@ -45,6 +46,8 @@ builder.Services.AddSingleton<IAnalyzeService, AnalyzeService>();
 builder.Services.AddSingleton<LocalEmbedder>();
 builder.Services.AddSingleton<SemanticMkCodeSearcher>();
 builder.Services.AddSingleton<SemanticCampaignSearcher>();
+builder.Services.AddSingleton<SemanticFinancingSearcher>();
+
 
 // --- LLM + ajan altyapısı ---
 builder.Services.AddSingleton<TraceHub>();
@@ -77,7 +80,7 @@ builder.Services.AddAIAgent("FinansalAnalizUzmani", (sp, _) => sp.GetRequiredSer
 
 var app = builder.Build();
 
-// Semantik mkCode ve Kampanya arama indekslerini uygulama başlarken hafızaya al (Cold-start önleme)
+// Semantik mkCode, Kampanya ve Finansman arama indekslerini uygulama başlarken hafızaya al (Cold-start önleme)
 using (var scope = app.Services.CreateScope())
 {
     var searcher = scope.ServiceProvider.GetRequiredService<SemanticMkCodeSearcher>();
@@ -85,6 +88,9 @@ using (var scope = app.Services.CreateScope())
 
     var campaignSearcher = scope.ServiceProvider.GetRequiredService<SemanticCampaignSearcher>();
     campaignSearcher.Initialize();
+
+    var financingSearcher = scope.ServiceProvider.GetRequiredService<Banking.Domain.Financing.SemanticFinancingSearcher>();
+    financingSearcher.Initialize();
 }
 
 app.UseDefaultFiles();

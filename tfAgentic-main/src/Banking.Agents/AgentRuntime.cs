@@ -35,7 +35,7 @@ public sealed class AgentRuntime
         1. UZMANLARA DANIŞMA: 
            - Hesap, bakiye, IBAN, hesap hareketi/işlem soruları için SADECE 'hesap_uzmanina_sor' aracını kullan.
            - SADECE kredi kartı borcu, kullanılabilir limit, asgari ödeme ve son ödeme tarihi soruları için 'kart_uzmanina_sor' aracını kullan.
-           - Kredi kartı harcama analizi, ekstre özetleri, puan ve bonus kazançları, taksitli/peşin harcama oranları, en çok harcama yapılan mağazalar ve kampanya/bonus önerileri için SADECE 'analiz_uzmanina_sor' aracını kullan. (DİKKAT: Kullanıcı "Kredi kartı harcamalarımı analiz et", "Ekstremi incele", "Nereye ne harcadım?" gibi tek cümlelik basit ifadeler kursa dahi BU TALEBİ KESİNLİKLE 'analiz_uzmanina_sor' ARACINA YÖNLENDİR!).
+           - Kredi kartı harcama analizi, ekstre özetleri, puan ve bonus kazançları, taksitli/peşin harcama oranları, en çok harcama yapılan mağazalar, kampanya/bonus önerileri ile FINANSMAN, KREDİ, BANA UYGUN FİNANSMANLAR veya BORÇ YAPILANDIRMA TAVSİYELERİ için SADECE 'analiz_uzmanina_sor' aracını kullan. (DİKKAT: Kullanıcı "Finansmanları göster", "Bana uygun krediler", "Kredi kartı harcamalarımı analiz et", "Ekstremi incele" gibi ifadeler kullandığında BU TALEBİ KESİNLİKLE 'analiz_uzmanina_sor' ARACINA YÖNLENDİR!).
            - Eğer soru birden fazlasını kapsıyorsa sırayla ilgili araçları kullan.
         
         2. YENİ İŞ AKIŞI BAŞLATMA (TAHSİLAT):
@@ -50,7 +50,10 @@ public sealed class AgentRuntime
         <response_guidelines>
         1. KESİNLİKLE MARKDOWN FORMATI: Tüm yanıtları kullanıcıya sunarken KESİNLİKLE Markdown formatında oluştur.
         2. ALT ALTA VE DÜZENLİ LİSTELEME: Birden fazla bilgi, seçenek, hesap, kart, işlem veya adım sunarken bunları KESİNLİKLE Markdown liste formatında (`- ` veya `1. `) ALT ALTA ve okunabilir şekilde sırala. Kesinlikle tek satırda birleştirme veya yan yana yazma.
-        3. DİL VE ÜSLUP: Uzmanlardan dönen veya araçlardan aldığın yanıtları kullanıcıya açık, kibar ve doğal bir Türkçe ile ilet.
+        3. DİL VE ÜSLUP & HİÇBİR DURUM MESAJI / GİRİŞ CÜMLESİ YAZMA:
+           - ASLA "Bu soru X içeriyor", "Hesap uzmanına danışmam gerekiyor", "Bir dakika lütfen", "Öncelikle uzmana soruyorum", "Araç çağırıyorum" gibi HİÇBİR durum mesajı, yönlendirme açıklaması veya ön sunuş cümlesi YAZMA!
+           - ASLA yanıtın başında veya içinde 'UZMAN', 'ARAÇ', 'DANIŞMAM GEREKİYOR', 'BİR DAKİKA LÜTFEN' gibi ifadeler geçmemeli.
+           - Sadece ve doğrudan nihai sonucu/bilgiyi açık, kibar ve doğal bir Türkçe ile ilet.
         </response_guidelines>
         """;
 

@@ -10,7 +10,7 @@ namespace Banking.Mcp;
 public sealed class CardsTools(ICardService cards, CustomerContext context)
 {
     [McpServerTool(Name = CardToolNames.ListCards)]
-    [Description("Müşterinin tüm kredi kartlarını (maskeli numara, limit, borç, asgari ödeme, son ödeme tarihi) listeler.")]
+    [Description("Müşterinin tüm kredi kartlarını limit ve borç özetleriyle listeler. Tetikleyici niyetler: 'Hangi kartlarım var?', 'Kartlarımı göster'. İstisna: Detaylı harcama veya kampanya analizi istendiğinde ilgili analiz araçlarına başvurun.")]
     public object ListCards()
     {
         var list = cards.GetCards(context.CurrentCustomerId)
@@ -30,7 +30,7 @@ public sealed class CardsTools(ICardService cards, CustomerContext context)
     }
 
     [McpServerTool(Name = CardToolNames.GetCardDebt)]
-    [Description("Belirli bir kredi kartının güncel borcunu, asgari ödeme tutarını ve son ödeme tarihini döner.")]
+    [Description("Belirli bir kredi kartının sadece güncel borç ve asgari ödeme bilgilerini döner. Tetikleyici niyetler: 'Kart borcum ne kadar?', 'Asgari ne kadar ödemeliyim?'. İstisna: Vadesiz hesap bakiyesi veya finansman yapılandırması istendiğinde bu araç kullanılmamalıdır.")]
     public object GetCardDebt(
         [Description("Kart kimliği, örn. CARD-2001")] string cardId)
     {
@@ -48,7 +48,7 @@ public sealed class CardsTools(ICardService cards, CustomerContext context)
     }
 
     [McpServerTool(Name = CardToolNames.GetAvailableLimit)]
-    [Description("Belirli bir kredi kartının kullanılabilir limitini ve toplam limitini döner.")]
+    [Description("Kredi kartının kullanılabilir limit bilgisini döner. Tetikleyici niyetler: 'Kartımda ne kadar limitim kaldı?', 'Limitim yeterli mi?'. İstisna: Borç yapılandırma gibi konularda diğer araçlara yönelin.")]
     public object GetAvailableLimit(
         [Description("Kart kimliği, örn. CARD-2001")] string cardId)
     {
@@ -59,7 +59,7 @@ public sealed class CardsTools(ICardService cards, CustomerContext context)
     }
 
     [McpServerTool(Name = CardToolNames.GetCardDetails)]
-    [Description("Belirli bir kredi kartının tüm detaylarını döner (limit, borç, ekstre/son ödeme tarihleri).")]
+    [Description("Kredi kartının limit, borç ve tarih bilgilerini topluca döner. Kullanıcının kartıyla ilgili genel ve detaylı bir durum özeti istediği senaryolarda kullanılır.")]
     public object GetCardDetails(
         [Description("Kart kimliği, örn. CARD-2001")] string cardId)
     {

@@ -16,6 +16,7 @@ public sealed class InMemoryBankStore
     private readonly ConcurrentDictionary<string, Card> _cards = new();
     private readonly ConcurrentDictionary<string, Campaign> _campaigns = new();
     private readonly List<Transaction> _transactions = new();
+    private readonly ConcurrentDictionary<string, FinancingOption> _financingOptions = new();
     private readonly object _gate = new();
 
     public InMemoryBankStore()
@@ -26,6 +27,8 @@ public sealed class InMemoryBankStore
     public IReadOnlyCollection<Account> Accounts => _accounts.Values.ToList();
     public IReadOnlyCollection<Card> Cards => _cards.Values.ToList();
     public IReadOnlyCollection<Campaign> Campaigns => _campaigns.Values.ToList();
+
+    public IReadOnlyCollection<FinancingOption> FinancingOptions => _financingOptions.Values.ToList();
 
     public Customer? GetCustomer(string id) =>
         _customers.TryGetValue(id, out var c) ? c : null;
@@ -106,6 +109,7 @@ public sealed class InMemoryBankStore
             "Market Alışverişlerinize 250 TL Bonus",
             "BİM, CarrefourSA ve A101 gibi anlaşmalı market harcamalarınıza özel tek seferde 500 TL üzeri alışverişe 250 TL Bonus hediye!",
             "MarketAndShopping",
+            "- 1 Temmuz - 31 Ağustos tarihleri arasında yapılacak harcamalar için geçerlidir.\n- Kampanyadan her müşteri en fazla 1 kez yararlanabilir ve maksimum 250 TL bonus kazanabilir.\n- Sadece yurt içi ve fiziki POS üzerinden yapılan harcamalar dahildir.\n- Kazanılan bonuslar 5 Eylül tarihinde karta yüklenecektir.",
             "250 TL Bonus",
             BonusPoints: 250m,
             MinimumSpendAmount: 500m,
@@ -117,6 +121,7 @@ public sealed class InMemoryBankStore
             "Giyim ve Tekstilde Peşin Fiyatına 6 Taksit",
             "Seçili giyim, tuhafiye ve tekstil mağazalarındaki 300 TL ve üzeri peşin harcamalarınıza vade farksız 6 taksit imkânı!",
             "Clothing",
+            "- E-ticaret siteleri üzerinden yapılan online giyim alışverişleri kampanyaya dahildir.\n- Altın, kuyum, kozmetik ve hediye kartı alımları yasal mevzuat gereği taksitlendirilemez.\n- İşlem sonrasında bankamıza SMS göndererek veya mobil uygulama üzerinden taksitlendirme onaylanmalıdır.",
             "Peşin Fiyatına 6 Taksit",
             BonusPoints: 0m,
             MinimumSpendAmount: 300m,
@@ -128,6 +133,7 @@ public sealed class InMemoryBankStore
             "Gıda ve Fırın Harcamalarında %10 Ekstra Puan",
             "Fırın, ekmek ve gıda restoranı harcamalarınızda her alışverişe %10 oranında ekstra puan kazanma fırsatı!",
             "Food",
+            "- Toplu yemek siparişleri (Catering) ve alkollü içecek harcamaları kampanyaya dahil değildir.\n- Bir ay içerisinde kazanılabilecek maksimum ekstra puan 500 TL ile sınırlıdır.\n- Puanlar anında yüklenir ve bir sonraki alışverişte kullanılabilir.",
             "%10 Ekstra Puan",
             BonusPoints: 50m,
             MinimumSpendAmount: 50m,
@@ -139,6 +145,7 @@ public sealed class InMemoryBankStore
             "Yurt Dışı ve Seyahat Harcamalarına Sıfır Komisyon",
             "Yurt dışı çıkış harçları ve seyahat harcamalarınızda döviz komisyonu ve ek işlem ücreti sıfırlanıyor!",
             "Other",
+            "- Sadece USD, EUR ve GBP cinsinden yapılan harcamalarda kur farkı yansıtılmaz.\n- Uçak bileti, otel rezervasyonu ve araç kiralama işlemlerinde geçerlidir.\n- Yurt dışı ATM'lerinden nakit çekim işlemleri kampanya kapsamı dışındadır.",
             "Sıfır Komisyon ve Masrafsızlık",
             BonusPoints: 0m,
             MinimumSpendAmount: 100m,
@@ -149,6 +156,24 @@ public sealed class InMemoryBankStore
         _campaigns[camp2.Id] = camp2;
         _campaigns[camp3.Id] = camp3;
         _campaigns[camp4.Id] = camp4;
+
+        // Dummy finansman önerileri
+        var fin1 = new FinancingOption("FIN-1001", "Kredi Kartı Limit Artırımı", "Düzenli ödeme yapan müşterilerimiz için anında %50 limit artırımı.\n\nKullanım Koşulları:\n- Son 6 ay içerisinde asgari ödeme tutarı gecikmemiş müşteriler yararlanabilir.\n- Limit artırımı anında gerçekleşir ve hemen kullanılabilir.\n- Banka gerekli gördüğü durumlarda SGK dökümü veya gelir belgesi talep edebilir.", "LimitIncrease", 0m, 0);
+        var fin2 = new FinancingOption("FIN-1002", "Borç Yapılandırma Kredisi", "Yüksek kredi kartı borçlarınızı 36 aya varan vadelerle yapılandırın.\n\nKullanım Koşulları:\n- Sadece bankamız kredi kartlarına ait gecikmiş veya ödenmekte zorlanılan borçlar yapılandırılabilir.\n- Yapılandırma süresince kredi kartınız nakit çekime ve yeni taksitli işlemlere kapatılabilir.\n- Erken kapama yapılması durumunda faiz indirimi uygulanır.", "DebtRestructuring", 3.49m, 36);
+        var fin3 = new FinancingOption("FIN-1003", "Taksitli Nakit Avans", "Acil nakit ihtiyaçlarınız için 12 aya varan taksitli nakit avans.\n\nKullanım Koşulları:\n- Çekilebilecek maksimum tutar, kartın kullanılabilir nakit avans limitine bağlıdır.\n- İşlem anında %1 oranında nakit çekim ücreti yansıtılır.\n- Taksitler kredi kartı ekstresine aylık olarak yansır.", "CashAdvance", 4.42m, 12);
+        
+        var fin4 = new FinancingOption("FIN-1004", "Tüketici İhtiyaç Kredisi", "Tüm bireysel nakit ihtiyaçlarınız için 3 ay ertelemeli ve 36 aya varan vadeli kredi.\n\nKullanım Koşulları:\n- Kredi tahsis ücreti, kredi tutarının binde 5'i olarak hesaplanır.\n- İlk taksit ödemesi isteğe bağlı olarak 3 aya kadar ertelenebilir.\n- Onaylanan kredi tutarı anında vadesiz hesabınıza aktarılır.", "ConsumerLoan", 3.89m, 36);
+        var fin5 = new FinancingOption("FIN-1005", "Esnek Hesap (KMH)", "Hesabınızda para olmasa bile elektrik, su faturalarınızı veya acil ödemelerinizi yapabileceğiniz Kredili Mevduat Hesabı.\n\nKullanım Koşulları:\n- Sadece kullanılan tutar ve gün üzerinden faiz işletilir.\n- KMH limitiniz maaş yattığında otomatik olarak tahsil edilir.\n- Hafta sonu dahil 7/24 EFT/Havale veya fatura ödemesi yapılabilir.", "Overdraft", 5.00m, 1);
+        var fin6 = new FinancingOption("FIN-1006", "İkinci El Taşıt Kredisi", "Hayalinizdeki araca sahip olmak için 48 aya varan vade seçenekleriyle taşıt kredisi.\n\nKullanım Koşulları:\n- Satın alınacak aracın maksimum 10 yaşında olması gereklidir.\n- Kasko zorunluluğu bulunmaktadır, kasko tutarı kredi tutarına dahil edilebilir.\n- Ruhsat üzerinde bankamız lehine rehin tesis edilir.", "VehicleLoan", 3.15m, 48);
+        var fin7 = new FinancingOption("FIN-1007", "Eğitim Finansmanı", "Okul, kurs ve eğitim masraflarınız için düşük faizli özel eğitim kredisi.\n\nKullanım Koşulları:\n- Kredi tutarı doğrudan eğitim kurumunun banka hesabına EFT/Havale yoluyla gönderilir.\n- Eğitimi kanıtlayan fatura veya öğrenci belgesi ibrazı zorunludur.\n- 12 veya 24 ay vade seçeneklerinden biri tercih edilebilir.", "EducationLoan", 2.99m, 24);
+
+        _financingOptions[fin1.Id] = fin1;
+        _financingOptions[fin2.Id] = fin2;
+        _financingOptions[fin3.Id] = fin3;
+        _financingOptions[fin4.Id] = fin4;
+        _financingOptions[fin5.Id] = fin5;
+        _financingOptions[fin6.Id] = fin6;
+        _financingOptions[fin7.Id] = fin7;
 
         _transactions.AddRange(new[]
         {

@@ -18,15 +18,18 @@ public sealed class BankingMcpClient : IAsyncDisposable
 
     public static readonly string[] AnalyzeToolNames =
         [
-            "GetCreditCardStatement",
-            "AnalyzeStatementSummary",
-            "AnalyzeCategoryBreakdown",
-            "AnalyzePaymentTypeRatio",
-            "AnalyzeBonusAndPoints",
-            "AnalyzeTopMerchants",
-            "CompareSpendingPeriods",
-            "KampanyaVektorelAra",
-            "YeniKampanyaEkleVektorel"
+            Banking.Mcp.Constants.AnalyzeToolNames.GetCreditCardStatement,
+            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzeStatementSummary,
+            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzeCategoryBreakdown,
+            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzePaymentTypeRatio,
+            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzeBonusAndPoints,
+            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzeTopMerchants,
+            Banking.Mcp.Constants.AnalyzeToolNames.CompareSpendingPeriods,
+            Banking.Mcp.Constants.AnalyzeToolNames.KampanyaVektorelAra,
+            Banking.Mcp.Constants.AnalyzeToolNames.YeniKampanyaEkleVektorel,
+            Banking.Mcp.Constants.AnalyzeToolNames.RecommendFinancing,
+            Banking.Mcp.Constants.AnalyzeToolNames.GetCampaings,
+            Banking.Mcp.Constants.AnalyzeToolNames.GetFinancingOptions
         ];
 
     private McpClient? _client;

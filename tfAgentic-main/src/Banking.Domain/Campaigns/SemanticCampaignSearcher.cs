@@ -41,8 +41,8 @@ public class SemanticCampaignSearcher
 
         foreach (var campaign in campaigns)
         {
-            // Kampanyadaki tüm metinsel alanlar birleştirilerek tam içeriğe semantik embedding oluşturulur
-            string fullContentText = $"Kampanya: {campaign.Title}. Açıklama: {campaign.Description}. Sektör Kategori: {campaign.TargetMccGroup}. Kazanım Fayda: {campaign.Benefit}.";
+            // Kampanyadaki tüm metinsel alanlar (şartlar dahil) birleştirilerek tam içeriğe semantik embedding oluşturulur
+            string fullContentText = $"Kampanya: {campaign.Title}. Açıklama: {campaign.Description}. Sektör Kategori: {campaign.TargetMccGroup}. Koşullar: {campaign.TermsOfUse}. Kazanım Fayda: {campaign.Benefit}.";
 
             var embedding = _embedder.Embed(fullContentText);
             _cache.Add((embedding, campaign));

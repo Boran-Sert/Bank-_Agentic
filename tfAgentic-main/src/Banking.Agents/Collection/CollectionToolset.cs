@@ -30,7 +30,7 @@ public sealed class CollectionToolset(
     public object GetMyCards()
     {
         var list = cards.GetCards(context.CurrentCustomerId)
-            .Select(c => new { c.Id, c.MaskedNumber, c.CurrentDebt, c.MinimumPayment })
+            .Select(c => new { c.Id, c.MaskedNumber, c.Brand, c.CurrentDebt, c.MinimumPayment })
             .ToList();
         return new { cards = list };
     }

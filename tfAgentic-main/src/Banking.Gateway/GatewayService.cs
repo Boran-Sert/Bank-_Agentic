@@ -12,6 +12,12 @@ namespace Banking.Gateway;
 /// <summary>
 /// MW ↔ .NET gateway orkestrasyon servisi.
 /// <para>
+/// Deterministik akış yönlendirme (Deterministic Flow Routing):
+/// Aktif tahsilat oturumu varken kullanıcı mesajları DOĞRUDAN CollectionConversation'a
+/// gönderilir; orkestratör BYPASS edilir. Bu, fintech standartlarına uygun olarak
+/// aktif iş akışı sırasında routing kararlarının LLM'e bırakılmamasını sağlar.
+/// </para>
+/// <para>
 /// Tüm kullanıcı yanıtları <see cref="ResponseSanitizer"/> tarafından deterministik olarak
 /// güvenlik taramasından geçirilir (Output Guard — Defense-in-Depth Katman 3).
 /// </para>
@@ -41,12 +47,12 @@ public sealed class GatewayService
     }
 
     /// <summary>
-    /// Kullanıcı isteğini işler, orkestratör/tahsilat ajanına yönlendirir ve yanıtı
-    /// <see cref="ResponseSanitizer"/> ile güvenlik taramasından geçirerek döndürür.
+    /// Kullanıcı isteğini işler. Deterministik akış yönlendirme ile:
+    /// <list type="number">
+    ///   <item>Aktif tahsilat oturumu varsa → doğrudan CollectionConversation'a gönderir</item>
+    ///   <item>Yoksa → orkestratöre yönlendirir</item>
+    /// </list>
     /// </summary>
-    /// <param name="request">Java MW'den gelen kullanıcı isteği.</param>
-    /// <param name="ct">İptal belirteci.</param>
-    /// <returns>Güvenlik taramasından geçirilmiş gateway yanıtı.</returns>
     public async Task<GatewayResponse> ProcessAsync(GatewayRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -60,23 +66,33 @@ public sealed class GatewayService
 
         try
         {
-            // 1. Kullanıcı mesajını History'ye ekle ve Kayan Pencere sınırını koru
+            // Kullanıcı mesajını History'ye ekle ve Kayan Pencere sınırını koru
             session.History.Enqueue(new ChatMessage(ChatRole.User, request.Text));
             while (session.History.Count > 8) { session.History.Dequeue(); }
 
-            // Aktif tahsilat varsa, session.State.CollectionSessionId orkestratöre iletilir.
-            var reply = await _runtime.AskAsync(request.Text, session.History.ToList(), session.State.CollectionSessionId, ct);
-
-            // 1. DURUM: Orkestratör araya girdi ve kullanıcıdan aldığı "tamam ordan çek" 
-            // gibi bir bilgiyi tahsilat ajanına enjekte etmek istiyor. (FACT INJECTION)
-            if (!string.IsNullOrEmpty(reply.InjectedFact) && session.State.CollectionSessionId != null)
+            if (session.State.CollectionSessionId is not null)
             {
-                _hub.Publish("GATEWAY", "Orkestratör temiz bilgiyi tahsilat ajanına (Fact Injection) iletiyor.");
-                var result = await _collectionStore.RespondWithFactAsync(session.State.CollectionSessionId, reply.InjectedFact);
-                return SanitizeResponse(MapCollectionResult(result, session) with { SessionToken = sessionToken });
+                _hub.Publish("GATEWAY", "Aktif tahsilat oturumu → mesaj doğrudan tahsilat ajanına yönlendiriliyor (deterministic routing)");
+                _logger.LogInformation("Deterministic routing: session={SessionToken}, collectionSession={CollectionSessionId}",
+                    sessionToken, session.State.CollectionSessionId);
+
+                var result = await _collectionStore.RespondAsync(session.State.CollectionSessionId, request.Text);
+
+                // Tahsilat bitti mi? (completed veya cancelled)
+                if (result.Status is "completed" or "cancelled")
+                {
+                    _hub.Publish("GATEWAY", $"Tahsilat oturumu sonlandı (durum: {result.Status}) → session temizleniyor");
+                    ClearCollectionSession(session);
+                }
+
+                var collResponse = MapCollectionResult(result, session) with { SessionToken = sessionToken };
+                return SanitizeResponse(collResponse);
             }
 
-            // 2. DURUM: Orkestratör tahsilat akışını İLK KEZ başlatmak istiyor.
+            //  NORMAL ORKESTRATÖR AKIŞI (aktif tahsilat YOK
+            var reply = await _runtime.AskAsync(request.Text, session.History.ToList(), ct: ct);
+
+            // DURUM 1: Orkestratör tahsilat akışını İLK KEZ başlatmak istiyor.
             if (reply.StartCollection)
             {
                 _hub.Publish("GATEWAY", "Orkestratör tahsilat niyeti algıladı → Collection akışı başlatılıyor");
@@ -85,21 +101,21 @@ public sealed class GatewayService
                 return SanitizeResponse(collectionResponse with { SessionToken = sessionToken });
             }
 
-            // 3. DURUM: Ekran yönlendirmesi var.
+            // DURUM 2: Ekran yönlendirmesi var.
             if (!string.IsNullOrEmpty(reply.OpenScreenMkCode))
             {
                 _hub.Publish("GATEWAY", $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({reply.OpenScreenMkCode})");
                 return SanitizeResponse(GatewayResponse.AsOpenScreen(reply.OpenScreenMkCode) with { SessionToken = sessionToken });
             }
 
-            // 4. DURUM: Standart Q&A metin yanıtı (veya uzmanlardan dönen cevap)
+            // DURUM 3: Standart Q&A metin yanıtı (veya uzmanlardan dönen cevap)
             var response = GatewayResponse.AsText(reply.Reply) with { SessionToken = sessionToken };
             _hub.Publish("GATEWAY", "Metin yanıtı hazır -> TEXT", response);
-            
+
             // Asistan yanıtını da History'ye ekle
             session.History.Enqueue(new ChatMessage(ChatRole.Assistant, reply.Reply));
             while (session.History.Count > 8) { session.History.Dequeue(); }
-            
+
             return SanitizeResponse(response);
         }
         catch (OperationCanceledException)
@@ -169,7 +185,7 @@ public sealed class GatewayService
         return GatewayResponse.AsConfirmPayment(
             mkCodeValue: mkCodeDef.Value,
             cardNumber: confirmation.CardMasked,
-            cardProductName: null, // Not available in ConfirmationView directly
+            cardProductName: null,
             amount: confirmation.Amount.ToString("F2"),
             accountNo: confirmation.SourceAccountMasked
         );
@@ -178,19 +194,14 @@ public sealed class GatewayService
     private void ClearCollectionSession(GatewaySession session)
     {
         session.State.CollectionSessionId = null;
+        // Tahsilat mesajlarının Q&A history'sini kirletmemesi için temizle
+        session.ClearForNewFlow();
     }
 
     /// <summary>
     /// Gateway yanıtının <see cref="GatewayResponse.Text"/> alanını <see cref="ResponseSanitizer"/>
-    /// ile güvenlik taramasından geçirir. Diğer alanlar (MkCodeValue, CardNumber vb.) dokunulmaz.
-    /// <para>
-    /// Bu metot tüm <see cref="ProcessAsync"/> çıkış noktalarında çağrılarak,
-    /// AI'ın iç düşünce süreci, araç adları ve sistem bilgilerinin son kullanıcıya
-    /// sızmasını deterministik olarak engeller.
-    /// </para>
+    /// ile güvenlik taramasından geçirir.
     /// </summary>
-    /// <param name="response">Taranacak ham gateway yanıtı.</param>
-    /// <returns>Text alanı temizlenmiş güvenli yanıt.</returns>
     private GatewayResponse SanitizeResponse(GatewayResponse response)
     {
         if (response.Text is null)

@@ -10,7 +10,7 @@ public sealed class AppState
 {
     public string? Flow { get; set; }
     public string? Step { get; set; }
-    
+
     /// <summary>Aktif tahsilat oturumunun kimliği (yoksa null).</summary>
     public string? CollectionSessionId { get; set; }
 
@@ -45,4 +45,16 @@ public sealed class GatewaySession
 
     /// <summary>Son aktivite zamanını günceller.</summary>
     public void Touch() => LastActivityAt = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// Bir iş akışı (tahsilat vb.) tamamlandıktan sonra History'yi temizler.
+    /// Slot-filling mesajlarının gelecek Q&A bağlamını kirletmesini önler.
+    /// </summary>
+    public void ClearForNewFlow()
+    {
+        History.Clear();
+        State.Flow = null;
+        State.Step = null;
+        State.ContextData.Clear();
+    }
 }

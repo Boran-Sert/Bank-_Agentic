@@ -15,7 +15,7 @@ using ChatRole = Microsoft.Extensions.AI.ChatRole;
 namespace Banking.Agents;
 
 /// <summary>Orkestratör yanıtı: metin + tahsilat akışının başlatılması gerekip gerekmediği + açılacak ekran mkCode (varsa).</summary>
-public sealed record OrchestratorReply(string Reply, bool StartCollection, string? OpenScreenMkCode, string? InjectedFact);
+public sealed record OrchestratorReply(string Reply, bool StartCollection, string? OpenScreenMkCode);
 
 /// <summary>
 /// Ajan grafiğini TEMBEL kurar. Uzmanlar süreç-içi MCP server'a (loopback) bağlanır; bu yüzden
@@ -25,7 +25,6 @@ public sealed record OrchestratorReply(string Reply, bool StartCollection, strin
 /// </summary>
 public sealed class AgentRuntime
 {
-    private static readonly AsyncLocal<StrongBox<string?>?> FactInjectionIntent = new();
     private const string OrchestratorInstructions =
         """
         <identity>
@@ -74,7 +73,7 @@ public sealed class AgentRuntime
 
     // Orkestratör 'tahsilat_akisini_baslat' aracını çağırınca bu istek için işaretlenir (AsyncLocal → istek-izole).
     private static readonly AsyncLocal<StrongBox<bool>?> PaymentIntent = new();
-    
+
     // Orkestratör 'ekran_ac' aracını çağırınca açılacak mkCode'u tutar.
     private static readonly AsyncLocal<StrongBox<string?>?> NavigationIntent = new();
 
@@ -262,9 +261,6 @@ public sealed class AgentRuntime
                 new TracingAIFunction(
                     AIFunctionFactory.Create(EkranAc, name: "ekran_ac"),
                     _hub, "WORKFLOW", "Ekran yönlendirmesi tetiklendi"),
-                new TracingAIFunction(
-                    AIFunctionFactory.Create(InjectCollectionFact, name: "inject_collection_fact"),
-                    _hub, "WORKFLOW", "Ajanın içine sentetik bilgi enjekte ediliyor.")
             };
 
             _orchestrator = TracedClient("Orkestratör")
@@ -291,7 +287,7 @@ public sealed class AgentRuntime
     {
         _logger.LogInformation("Semantik ekran kodu araması yapılıyor. Niyet: '{Niyet}'", niyet);
         var results = _semanticMkCodeSearcher.Search(niyet);
-        
+
         if (results.Count == 0)
         {
             _logger.LogWarning("Semantik ekran kodu araması sonuç vermedi. Niyet: '{Niyet}'", niyet);
@@ -318,15 +314,7 @@ public sealed class AgentRuntime
         return $"{mkCode} ekranı açılıyor.";
     }
 
-    [Description("Kullanıcı aktif bir tahsilat işlemiyle ilgili bilgi verdiğinde veya onayladığında (örn: 'şu hesaptan çek', 'tamamını öde') bu bilgiyi tahsilat sistemine iletmek için kullanılır. Sadece tahsilat süreci aktifken çağırın.")]
-    private string InjectCollectionFact(string fact)
-    {
-        _logger.LogInformation("Tahsilat sistemine bilgi aktarıldı: '{Fact}'", fact);
-        if(FactInjectionIntent.Value is { } box) box.Value= fact;
-        return "Bilgi tahsilat sistemine iletildi";
-    }
-
-    private List<ChatMessage> BuildNativeContext(string message, IList<ChatMessage>? history, string? collectionSessionId)
+    private List<ChatMessage> BuildNativeContext(string message, IList<ChatMessage>? history)
     {
         var messages = new List<ChatMessage>();
         if (history != null)
@@ -340,39 +328,23 @@ public sealed class AgentRuntime
         {
             messages.Add(new ChatMessage(ChatRole.User, message));
         }
-
-        if (!string.IsNullOrEmpty(collectionSessionId))
-        {
-            _logger.LogInformation("Aktif tahsilat oturumu ({SessionId}) native SystemMessage olarak eklendi.", collectionSessionId);
-            messages.Add(new ChatMessage(ChatRole.System, """
-                AKTİF İŞ AKIŞI DURUMU: "Kredi Kartı Tahsilat"
-                Kullanıcı şu anda bu iş akışının ortasındadır ve sistem kullanıcıdan ödeme yapması için bilgi (Hangi kart, hangi hesap veya onay vb.) beklemektedir.
-                
-                AKTİF İŞ AKIŞI KURALLARI:
-                1. KESİNLİKLE EKRAN AÇMA: Kullanıcı "Kartlarımı göster" diyorsa amacı ödeme yapacağı kartı seçmek için bilgi almaktır. İlgili uzmanlara başvur.
-                2. İŞ AKIŞINI BESLE (FACT INJECTION): Kullanıcının yanıtı ödeme onayı veya seçimi içeriyorsa (örn: "tamamını öde", "vadesiz hesabımdan çek"), 'inject_collection_fact' aracıyla sisteme gönder.
-                3. BAĞIMSIZ SORULAR: Kullanıcı alakasız soru sorarsa uzmanlara danış ve yanıtın sonuna "Tahsilat işlemine devam etmek istiyor musunuz?" ekle.
-                """));
-        }
         return messages;
     }
 
     /// <summary>Q&A: kullanıcı sorusunu orkestratöre iletir; yanıt metni + tahsilat akışı başlatılmalı mı bilgisi döner.</summary>
-    public async Task<OrchestratorReply> AskAsync(string message, IList<ChatMessage>? history = null, string? collectionSessionId = null, CancellationToken ct = default)
+    public async Task<OrchestratorReply> AskAsync(string message, IList<ChatMessage>? history = null, CancellationToken ct = default)
     {
         await EnsureOrchestratorAsync(ct);
 
-        var messages = BuildNativeContext(message, history, collectionSessionId);
+        var messages = BuildNativeContext(message, history);
 
         _logger.LogInformation("Kullanıcı sorusu işleniyor.");
         _hub.Publish("SYSTEM", $"Kullanıcı sorusu alındı → '{message}'");
         var intentBox = new StrongBox<bool>(false);
         var navBox = new StrongBox<string?>(null);
-        var factBox = new StrongBox<string?>(null);
 
         PaymentIntent.Value = intentBox;
         NavigationIntent.Value = navBox;
-        FactInjectionIntent.Value = factBox;
 
         try
         {
@@ -380,13 +352,12 @@ public sealed class AgentRuntime
             _logger.LogInformation("Orkestratör yanıtı üretildi.");
             _hub.Publish("SYSTEM", "Yanıt kullanıcıya hazır");
 
-            return new OrchestratorReply(response.Text, intentBox.Value, navBox.Value, factBox.Value);
+            return new OrchestratorReply(response.Text, intentBox.Value, navBox.Value);
         }
         finally
         {
             PaymentIntent.Value = null;
             NavigationIntent.Value = null;
-            FactInjectionIntent.Value = null;
         }
     }
 
@@ -394,22 +365,19 @@ public sealed class AgentRuntime
     public async IAsyncEnumerable<string> AskStreamingAsync(
         string message,
         IList<ChatMessage>? history = null,
-        string? collectionSessionId = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         await EnsureOrchestratorAsync(ct);
 
-        var messages = BuildNativeContext(message, history, collectionSessionId);
+        var messages = BuildNativeContext(message, history);
 
         _logger.LogInformation("Canlı akış (streaming) yanıt üretimi başlatıldı.");
         _hub.Publish("SYSTEM", $"[STREAMING] Kullanıcı sorusu alındı → '{message}'");
         var intentBox = new StrongBox<bool>(false);
         var navBox = new StrongBox<string?>(null);
-        var factBox = new StrongBox<string?>(null);
 
         PaymentIntent.Value = intentBox;
         NavigationIntent.Value = navBox;
-        FactInjectionIntent.Value = factBox;
 
         try
         {
@@ -428,7 +396,6 @@ public sealed class AgentRuntime
         {
             PaymentIntent.Value = null;
             NavigationIntent.Value = null;
-            FactInjectionIntent.Value = null;
         }
     }
 

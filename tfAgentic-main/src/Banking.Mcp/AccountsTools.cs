@@ -1,17 +1,15 @@
 using System.ComponentModel;
 using Banking.Domain.Services;
 using ModelContextProtocol.Server;
+using Banking.Mcp.Constants;
 
 namespace Banking.Mcp;
 
 /// <summary>
-/// Hesap (mevduat/vadesiz) ile ilgili MCP araçları. Accounts MCP server'ı tarafından yayınlanır.
-/// Tüm sorgular o an oturum açmış müşteri bağlamında çalışır.
-/// </summary>
 [McpServerToolType]
 public sealed class AccountsTools(IAccountService accounts, CustomerContext context)
 {
-    [McpServerTool(Name = "list_accounts")]
+    [McpServerTool(Name = AccountToolNames.ListAccounts)]
     [Description("Müşterinin tüm banka hesaplarını (IBAN, tür, bakiye) listeler.")]
     public object ListAccounts()
     {
@@ -21,7 +19,7 @@ public sealed class AccountsTools(IAccountService accounts, CustomerContext cont
         return new { count = list.Count, accounts = list };
     }
 
-    [McpServerTool(Name = "get_account_balance")]
+    [McpServerTool(Name = AccountToolNames.GetAccountBalance)]
     [Description("Belirli bir hesabın güncel bakiyesini döner.")]
     public object GetAccountBalance(
         [Description("Hesap kimliği, örn. ACC-1001")] string accountId)
@@ -32,7 +30,7 @@ public sealed class AccountsTools(IAccountService accounts, CustomerContext cont
         return new { account.Id, account.Iban, account.Balance, account.Currency };
     }
 
-    [McpServerTool(Name = "get_transactions")]
+    [McpServerTool(Name = AccountToolNames.GetTransactions)]
     [Description("Bir hesabın son hareketlerini döner. Tarih aralığı opsiyoneldir (yyyy-MM-dd).")]
     public object GetTransactions(
         [Description("Hesap kimliği, örn. ACC-1001")] string accountId,

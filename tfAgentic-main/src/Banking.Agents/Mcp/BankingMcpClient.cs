@@ -11,10 +11,10 @@ namespace Banking.Agents.Mcp;
 public sealed class BankingMcpClient : IAsyncDisposable
 {
     public static readonly string[] AccountToolNames =
-        ["list_accounts", "get_account_balance", "get_transactions"];
+        [Banking.Mcp.Constants.AccountToolNames.ListAccounts, Banking.Mcp.Constants.AccountToolNames.GetAccountBalance, Banking.Mcp.Constants.AccountToolNames.GetTransactions];
 
     public static readonly string[] CardToolNames =
-        ["list_cards", "get_card_debt", "get_available_limit", "get_card_details"];
+        [Banking.Mcp.Constants.CardToolNames.ListCards, Banking.Mcp.Constants.CardToolNames.GetCardDebt, Banking.Mcp.Constants.CardToolNames.GetAvailableLimit, Banking.Mcp.Constants.CardToolNames.GetCardDetails];
 
     public static readonly string[] AnalyzeToolNames =
         [

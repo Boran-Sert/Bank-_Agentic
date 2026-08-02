@@ -28,17 +28,17 @@ public static class CollectionWorkflow
         var workflowName = typeof(TSlots).Name.ToLowerInvariant();
 
         // 1. Aktif olan TSlots Record türüne göre dinamik MAF Slot Filling Adımı
-        var slotStep = new GenericSlotFillingStep<TSlots>(sessionId, collectionAgent, agentSession, sessionStore, hub);
+        var slotStep = new GenericSlotFillingStep<TSlots>(sessionId, collectionAgent, agentSession, sessionStore, hub); // Slot doldurma adımı
 
         // 2. Deterministik Servis Çalıştırıcı Adım
-        var actionStep = new GenericActionExecutorStep<TSlots, TConfirmation, TOutcome>(
+        var actionStep = new GenericActionExecutorStep<TSlots, TConfirmation, TOutcome>( // Servis çalıştırma adımı
             $"{workflowName}-executor", null!, actionExecutor, hub);
 
         // ── SENARYO A: Onay İstenmiyorsa (requiresApproval = false) ──
-        if (!requiresApproval)
+        if (!requiresApproval) // Onay zorunluluğu kontrolü
         {
             hub.Publish("WORKFLOW", $"{workflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
-            return new WorkflowBuilder(slotStep)
+            return new WorkflowBuilder(slotStep) // Doğrudan workflow oluşturma
                 .AddEdge(slotStep, actionStep)
                 .WithOutputFrom(actionStep)
                 .Build();
@@ -47,9 +47,9 @@ public static class CollectionWorkflow
         // ── SENARYO B: Onay İsteniyorsa (requiresApproval = true - HITL Gate) ──
         hub.Publish("WORKFLOW", $"{workflowName}: MAF RequestPort onay gate'i oluşturuldu");
         var approvalPortId = $"{workflowName}-approval-port";
-        var approvalPort = RequestPort.Create<TConfirmation, bool>(approvalPortId);
+        var approvalPort = RequestPort.Create<TConfirmation, bool>(approvalPortId); // Onay gate portu
 
-        return new WorkflowBuilder(slotStep)
+        return new WorkflowBuilder(slotStep) // Onaylı workflow oluşturma
             .AddEdge(slotStep, approvalPort)
             .AddEdge(approvalPort, actionStep)
             .WithOutputFrom(actionStep)
@@ -88,28 +88,28 @@ public sealed class GenericSlotFillingStep<TSlots> : Executor<string, TSlots>
     public override async ValueTask<TSlots> HandleAsync(string userMessage, IWorkflowContext context, CancellationToken ct = default)
     {
         // 1. Reflection ile aktif TSlots nesnesinin dolu/eksik parametre özetini alır
-        var summary = _sessionStore.BuildSlotSummary<TSlots>(_sessionId);
-        var response = await _agent.RunAsync($"{userMessage}\n\n({summary})", _session);
+        var summary = _sessionStore.BuildSlotSummary<TSlots>(_sessionId); // Slot özetini alma
+        var response = await _agent.RunAsync($"{userMessage}\n\n({summary})", _session); // Ajanı çalıştırma
 
         // 2. Dinamik slot doluluk durumunu kontrol et
-        var status = _sessionStore.GetSlotStatus<TSlots>(_sessionId);
+        var status = _sessionStore.GetSlotStatus<TSlots>(_sessionId); // Slot doluluğunu alma
 
         // 3. Aktif TSlots nesnesinin TÜM alanları dolduysa (IsComplete == true), onay/eylem adımına geçer
-        if (status.IsComplete && _sessionStore.GetOrCreate(_sessionId).PendingSlots is TSlots completedSlots)
+        if (status.IsComplete && _sessionStore.GetOrCreate(_sessionId).PendingSlots is TSlots completedSlots) // Tüm slotlar doldu mu
         {
-            await context.QueueStateUpdateAsync("Slots", completedSlots, scopeName: "WorkflowSlots", ct);
+            await context.QueueStateUpdateAsync("Slots", completedSlots, scopeName: "WorkflowSlots", ct); // Slot durumunu güncelleme
             _hub.Publish("WORKFLOW", $"Workflow Adımı: '{typeof(TSlots).Name}' İçin Tüm Slotlar Dinamik Olarak Tamamlandı ({status.FilledSlots.Count} alan dolu).");
             return completedSlots;
         }
 
         // 4. LLM teklif JSON'ı ürettiyse parse edip kaydet
-        if (response.Text?.Contains("PROPOSAL_READY:") == true)
+        if (response.Text?.Contains("PROPOSAL_READY:") == true) // JSON teklif kontrolü
         {
             var jsonIndex = response.Text.IndexOf("PROPOSAL_READY:", StringComparison.Ordinal) + "PROPOSAL_READY:".Length;
             var json = response.Text[jsonIndex..].Trim();
-            var slots = System.Text.Json.JsonSerializer.Deserialize<TSlots>(json)!;
+            var slots = System.Text.Json.JsonSerializer.Deserialize<TSlots>(json)!; // Slotları JSON'dan alma
 
-            _sessionStore.SaveSlots(_sessionId, typeof(TSlots).Name, slots);
+            _sessionStore.SaveSlots(_sessionId, typeof(TSlots).Name, slots); // Slotları kaydetme
             _hub.Publish("WORKFLOW", $"Workflow Adımı: '{typeof(TSlots).Name}' JSON Teklifi Ayrıştırıldı ve Saklandı.");
             return slots;
         }

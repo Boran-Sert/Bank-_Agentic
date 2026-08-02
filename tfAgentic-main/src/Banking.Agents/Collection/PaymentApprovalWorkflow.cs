@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel;
 using Banking.Agents.Records;
 using Banking.Agents.Tracing;
@@ -7,16 +8,6 @@ using Banking.Domain.Services;
 
 namespace Banking.Agents.Collection;
 
-
-// --- Kullanıcıya Gösterilen Onay Özeti View -----------
-public sealed record ConfirmationView(
-    string CardMasked,
-    decimal TotalDebt,
-    decimal Amount,
-    bool Partial,
-    string SourceAccountMasked,
-    string Date);
-
 // --- Onay Reddedildiğinde İptal Çıktısı -----------
 public sealed record PaymentCancelled(string Reason);
 
@@ -24,7 +15,7 @@ public sealed record PaymentCancelled(string Reason);
 public sealed record PaymentOutcome(PaymentReceipt? Receipt, PaymentCancelled? Cancelled);
 
 // --- Deterministik Ödeme Eksekütörü (Sıfır LLM) -----------
-public sealed class PaymentActionExecutor : IDeterministicActionExecutor<PaymentSlots, ConfirmationView, PaymentOutcome>
+public sealed class PaymentActionExecutor : IDeterministicActionExecutor<PaymentSlots, GenericConfirmationView, PaymentOutcome>
 {
     private readonly ICollectionService _collections;
     private readonly ICardService _cards;
@@ -39,19 +30,23 @@ public sealed class PaymentActionExecutor : IDeterministicActionExecutor<Payment
         _hub = hub;
     }
 
-    public ConfirmationView BuildConfirmationView(PaymentSlots slots)
+    public GenericConfirmationView BuildConfirmationView(PaymentSlots slots)
     {
-        var card = _cards.GetCard(slots.CardId)!;
-        var account = _accounts.GetAccount(slots.SourceAccountId)!;
-        var maskedIban = account.Iban.Length <= 4 ? account.Iban : $"…{account.Iban[^4..]}";
+        var baseView = GenericConfirmationView.FromSlots(slots);
+        var parameters = new Dictionary<string, object?>(baseView.Parameters, StringComparer.OrdinalIgnoreCase);
 
-        return new ConfirmationView(
-            CardMasked: card.MaskedNumber,
-            TotalDebt: card.CurrentDebt,
-            Amount: slots.Amount,
-            Partial: slots.Amount < card.CurrentDebt,
-            SourceAccountMasked: maskedIban,
-            Date: slots.Date.ToString("dd.MM.yyyy"));
+        if (_cards.GetCard(slots.CardId) is { } card)
+        {
+            parameters["CardMasked"] = card.MaskedNumber;
+            parameters["TotalDebt"] = card.CurrentDebt;
+        }
+
+        if (_accounts.GetAccount(slots.SourceAccountId) is { } account)
+        {
+            parameters["SourceAccountMasked"] = account.Iban.Length > 4 ? $"…{account.Iban[^4..]}" : account.Iban;
+        }
+
+        return new GenericConfirmationView(baseView.WorkflowName, parameters);
     }
 
     public ValueTask<PaymentOutcome> ExecuteAsync(PaymentSlots slots, bool approved, CancellationToken ct)

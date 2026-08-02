@@ -45,32 +45,32 @@ public sealed class FlowRouter
         CancellationToken ct = default)
     {
         // 1. AKTİF İŞ AKIŞI KONTROLÜ (Deterministik Routing)
-        if (_collectionStore.HasActiveSession(sessionToken))
+        if (_collectionStore.HasActiveSession(sessionToken)) // Aktif akış kontrolü
         {
             _hub.Publish("FLOWROUTER", "Aktif iş akışı oturumu → mesaj doğrudan workflow ajanına yönlendiriliyor");
             _logger.LogInformation("Deterministic routing: session={SessionToken}", sessionToken);
 
-            var result = await _collectionStore.RespondAsync(sessionToken, text);
-            bool finished = result.Status is "completed" or "cancelled";
+            var result = await _collectionStore.RespondAsync(sessionToken, text); // Workflow adımını çalıştırma
+            bool finished = result.Status is "completed" or "cancelled"; // Akış sonlanma kontrolü
 
             if (finished)
             {
                 _hub.Publish("FLOWROUTER", $"İş akışı oturumu sonlandı (durum: {result.Status})");
             }
 
-            return new FlowExecutionResult("workflow_step", WorkflowResult: result, IsWorkflowFinished: finished);
+            return new FlowExecutionResult("workflow_step", WorkflowResult: result, IsWorkflowFinished: finished); // Workflow sonucu dönme
         }
 
         // 2. ORKESTRATÖR AKIŞI
-        var reply = await _runtime.AskAsync(text, sessionToken, ct: ct);
+        var reply = await _runtime.AskAsync(text, sessionToken, ct: ct); // LLM Orkestratörü çalıştırma
 
         // Eğer Orkestratör araç çalıştırarak iş akışını başlattıysa, oturum aktif hale gelmiştir.
-        if (_collectionStore.HasActiveSession(sessionToken))
+        if (_collectionStore.HasActiveSession(sessionToken)) // Yeni akış kontrolü
         {
-            session.State.CollectionSessionId = sessionToken;
+            session.State.CollectionSessionId = sessionToken; // Oturuma akış bağlama
             _hub.Publish("FLOWROUTER", $"İş akışı başarıyla başlatıldı ve bağlandı: {sessionToken}");
         }
 
-        return new FlowExecutionResult("orchestrator_reply", OrchestratorReply: reply);
+        return new FlowExecutionResult("orchestrator_reply", OrchestratorReply: reply); // Orkestratör yanıtı dönme
     }
 }

@@ -22,7 +22,7 @@ public sealed class WorkflowSessionBag
     // Toplanan parametreler saklanır (Asla kaybolmaz)
     public ConcurrentDictionary<string, object?> SlotBag { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public ConfirmationView? PendingConfirmation { get; set; }
+    public GenericConfirmationView? PendingConfirmation { get; set; }
     public object? PendingSlots { get; set; }
 
     public bool HasSlots => !SlotBag.IsEmpty;
@@ -39,6 +39,14 @@ public sealed class WorkflowSessionStore
     {
         _logger = logger;
         _hub = hub;
+    }
+
+    public GenericConfirmationView BuildGenericConfirmationView<TSlots>(string sessionId)
+        where TSlots : class
+    {
+        var status = GetSlotStatus<TSlots>(sessionId);
+        var dict = status.FilledSlots.ToDictionary(kvp => kvp.Key, kvp => (object?)kvp.Value, StringComparer.OrdinalIgnoreCase);
+        return new GenericConfirmationView(typeof(TSlots).Name, dict);
     }
 
     public WorkflowSessionBag GetOrCreate(string sessionId)

@@ -44,9 +44,9 @@ public sealed class GatewayService
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var sessionToken = NormalizeSessionToken(request.SessionToken);
-        var session = _sessions.GetOrAdd(sessionToken, _ => new GatewaySession());
-        session.Touch();
+        var sessionToken = NormalizeSessionToken(request.SessionToken); // Oturum ID doğrulama
+        var session = _sessions.GetOrAdd(sessionToken, _ => new GatewaySession()); // Oturum alma/oluşturma
+        session.Touch(); // Son erişimi güncelleme
         session.ThemeValue = request.ThemeValue;
 
         _hub.Publish("GATEWAY", "İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
@@ -54,7 +54,7 @@ public sealed class GatewayService
 
         try
         {
-            var result = await _router.RouteAsync(sessionToken, request.Text, session, ct);
+            var result = await _router.RouteAsync(sessionToken, request.Text, session, ct); // Akış yönlendirme çağrısı
 
             GatewayResponse rawResponse;
 
@@ -62,10 +62,10 @@ public sealed class GatewayService
             {
                 if (result.IsWorkflowFinished)
                 {
-                    ClearCollectionSession(session);
+                    ClearCollectionSession(session); // Workflow oturumunu sıfırlama
                 }
 
-                rawResponse = MapCollectionResult(result.WorkflowResult, session);
+                rawResponse = MapCollectionResult(result.WorkflowResult, session); // Workflow yanıtı dönüştürme
             }
             else if (result.OrchestratorReply is { } reply)
             {
@@ -76,11 +76,11 @@ public sealed class GatewayService
                 if (!string.IsNullOrEmpty(openScreenMkCode))
                 {
                     _hub.Publish("GATEWAY", $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({openScreenMkCode})");
-                    rawResponse = GatewayResponse.AsOpenScreen(openScreenMkCode);
+                    rawResponse = GatewayResponse.AsOpenScreen(openScreenMkCode); // Ekran yönlendirme yanıtı
                 }
                 else
                 {
-                    rawResponse = GatewayResponse.AsText(reply.Reply ?? "");
+                    rawResponse = GatewayResponse.AsText(reply.Reply ?? ""); // Metin yanıtı hazırlama
                     _hub.Publish("GATEWAY", "Metin yanıtı hazır -> TEXT", rawResponse);
                 }
             }
@@ -89,7 +89,7 @@ public sealed class GatewayService
                 rawResponse = GatewayResponse.AsText("Yanıt üretilemedi.");
             }
 
-            return SanitizeResponse(rawResponse with { SessionToken = sessionToken });
+            return SanitizeResponse(rawResponse with { SessionToken = sessionToken }); // Yanıtı güvenlikten geçirme
         }
         catch (OperationCanceledException)
         {
@@ -134,21 +134,14 @@ public sealed class GatewayService
         }
     }
 
-    private GatewayResponse BuildConfirmationScreen(ConfirmationView confirmation)
+    private GatewayResponse BuildConfirmationScreen(GenericConfirmationView confirmation)
     {
-        var mkCodeDef = MkCodesRegistry.Get("CreditCardPayment");
-        if (mkCodeDef is null)
-        {
-            _logger.LogError("CreditCardPayment mkCode tanımı bulunamadı");
-            return GatewayResponse.AsText("Ekran kodu tanımı bulunamadı.");
-        }
+        var mkCodeDef = MkCodesRegistry.Get(confirmation.WorkflowName) ?? MkCodesRegistry.Get("CreditCardPayment");
+        string? mkCodeValue = mkCodeDef?.Value ?? confirmation.WorkflowName;
 
-        return GatewayResponse.AsConfirmPayment(
-            mkCodeValue: mkCodeDef.Value,
-            cardNumber: confirmation.CardMasked,
-            cardProductName: null,
-            amount: confirmation.Amount.ToString("F2"),
-            accountNo: confirmation.SourceAccountMasked
+        return GatewayResponse.AsGenericConfirmation(
+            mkCodeValue: mkCodeValue,
+            parameters: confirmation.Parameters
         );
     }
 

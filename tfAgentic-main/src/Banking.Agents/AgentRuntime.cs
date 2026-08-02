@@ -379,7 +379,7 @@ public sealed class AgentRuntime
         return $"{mkCode} ekranı açılıyor.";
     }
 
-    private List<ChatMessage> BuildNativeContext(string message, IList<ChatMessage>? history)
+    private static List<ChatMessage> BuildNativeContext(string message, IList<ChatMessage>? history)
     {
         var messages = new List<ChatMessage>();
         if (history != null)
@@ -399,19 +399,19 @@ public sealed class AgentRuntime
     /// <summary>Q&A: kullanıcı sorusunu orkestratöre iletir; yanıt metni + tahsilat akışı başlatılmalı mı bilgisi döner.</summary>
     public async Task<OrchestratorReply> AskAsync(string message, string? sessionId = null, IList<ChatMessage>? history = null, CancellationToken ct = default)
     {
-        await EnsureOrchestratorAsync(ct);
+        await EnsureOrchestratorAsync(ct); // Orkestratör hazırlığı
 
         _currentSessionId = !string.IsNullOrWhiteSpace(sessionId) ? sessionId : $"gw-{Guid.NewGuid():N}"[..16];
         _currentMessage = message;
 
-        var messages = BuildNativeContext(message, history);
+        var messages = BuildNativeContext(message, history); // Bağlam biçimlendirme
 
         _logger.LogInformation("Kullanıcı sorusu işleniyor.");
         _hub.Publish("SYSTEM", $"Kullanıcı sorusu alındı → '{message}'");
 
-        _session ??= await _orchestrator!.CreateSessionAsync(cancellationToken: ct);
+        _session ??= await _orchestrator!.CreateSessionAsync(cancellationToken: ct); // LLM oturumu başlatma
 
-        var response = await _orchestrator!.RunAsync(messages, session: _session, cancellationToken: ct);
+        var response = await _orchestrator!.RunAsync(messages, session: _session, cancellationToken: ct); // LLM modelini çalıştırma
         
         _logger.LogInformation("Orkestratör yanıtı üretildi.");
         _hub.Publish("SYSTEM", "Yanıt kullanıcıya hazır");
@@ -421,7 +421,7 @@ public sealed class AgentRuntime
 
         if (response.Messages != null)
         {
-            var functionCalls = response.Messages.SelectMany(m => m.Contents.OfType<Microsoft.Extensions.AI.FunctionCallContent>()).ToList();
+            var functionCalls = response.Messages.SelectMany(m => m.Contents.OfType<Microsoft.Extensions.AI.FunctionCallContent>()).ToList(); // Araç çağrılarını ayıklama
             var lastCall = functionCalls.LastOrDefault();
             if (lastCall != null)
             {
@@ -439,14 +439,14 @@ public sealed class AgentRuntime
         IList<ChatMessage>? history = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
-        await EnsureOrchestratorAsync(ct);
+        await EnsureOrchestratorAsync(ct); // Orkestratör hazırlığı
 
-        var messages = BuildNativeContext(message, history);
+        var messages = BuildNativeContext(message, history); // Bağlam biçimlendirme
 
         _logger.LogInformation("Canlı akış (streaming) yanıt üretimi başlatıldı.");
         _hub.Publish("SYSTEM", $"[STREAMING] Kullanıcı sorusu alındı → '{message}'");
 
-        var updates = _orchestrator!.RunStreamingAsync(messages, cancellationToken: ct);
+        var updates = _orchestrator!.RunStreamingAsync(messages, cancellationToken: ct); // Akışlı LLM çağrısı
         await foreach (var update in updates.WithCancellation(ct))
         {
             if (!string.IsNullOrEmpty(update.Text))

@@ -1,9 +1,12 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Banking.Gateway.Models;
 
 /// <summary>
-/// .NET'ten Java MW'ye dönen response. Java MW'nin beklediği flat JSON'a uygundur.
+/// .NET'ten Java MW'ye dönen response. Java MW'nin beklediği flat JSON yapısına birebir uygundur.
+/// Top-level sabit alanlar haricindeki tüm Record parametreleri düz (flat) JSON alanları olarak serileştirilir.
 /// </summary>
 public sealed record GatewayResponse
 {
@@ -23,22 +26,12 @@ public sealed record GatewayResponse
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SessionToken { get; init; }
 
-    // MW'nin beklediği diğer alanlar (tahsilat onayında veya ekranda gerekirse)
-    [JsonPropertyName("cardNumber")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? CardNumber { get; init; }
-
-    [JsonPropertyName("cardProductName")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? CardProductName { get; init; }
-
-    [JsonPropertyName("amount")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Amount { get; init; }
-
-    [JsonPropertyName("accountNo")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? AccountNo { get; init; }
+    /// <summary>
+    /// Sabit 4 alan dışındaki tüm Record parametreleri (amount, cardNumber, accountNo, receiverIban vb.)
+    /// JSON'ın KÖK (root) seviyesine düz (flat) property olarak yazılır.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, object?> AdditionalProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public static GatewayResponse AsText(string text) => new()
     {
@@ -46,25 +39,26 @@ public sealed record GatewayResponse
         Text = text
     };
 
-    public static GatewayResponse AsOpenScreen(string mkCodeValue) 
+    public static GatewayResponse AsOpenScreen(string mkCodeValue) => new()
     {
-        return new GatewayResponse
-        {
-            Type = GatewayResponseType.OPEN_SCREEN,
-            MkCodeValue = mkCodeValue
-        };
-    }
+        Type = GatewayResponseType.OPEN_SCREEN,
+        MkCodeValue = mkCodeValue
+    };
 
-    public static GatewayResponse AsConfirmPayment(string mkCodeValue, string cardNumber, string? cardProductName, string amount, string accountNo) 
+    public static GatewayResponse AsGenericConfirmation(string? mkCodeValue, IReadOnlyDictionary<string, object?> parameters)
     {
-        return new GatewayResponse
+        var response = new GatewayResponse
         {
             Type = GatewayResponseType.CONFIRM_PAYMENT,
-            MkCodeValue = mkCodeValue,
-            CardNumber = cardNumber,
-            CardProductName = cardProductName,
-            Amount = amount,
-            AccountNo = accountNo
+            MkCodeValue = mkCodeValue
         };
+
+        foreach (var (key, value) in parameters)
+        {
+            string jsonKey = char.ToLowerInvariant(key[0]) + key[1..];
+            response.AdditionalProperties[jsonKey] = value;
+        }
+
+        return response;
     }
 }

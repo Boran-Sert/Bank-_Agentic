@@ -35,7 +35,7 @@ public class TopicContextProvider : AIContextProvider
     {
         if (context.Session == null) return new ValueTask<AIContext>(new AIContext());
 
-        var state = _sessionState.GetOrInitializeState(context.Session);
+        var state = _sessionState.GetOrInitializeState(context.Session); // Oturum durumunu alma
 
         if (string.IsNullOrWhiteSpace(state.LastAssistantResponse))
         {
@@ -49,7 +49,7 @@ public class TopicContextProvider : AIContextProvider
 
         return new ValueTask<AIContext>(new AIContext
         {
-            Messages = [new ChatMessage(ChatRole.System, message)]
+            Messages = [new ChatMessage(ChatRole.System, message)] // Sistem bağlamını enjekte etme
         });
     }
 
@@ -57,9 +57,9 @@ public class TopicContextProvider : AIContextProvider
     {
         if (context.Session == null) return ValueTask.CompletedTask;
 
-        var state = _sessionState.GetOrInitializeState(context.Session);
+        var state = _sessionState.GetOrInitializeState(context.Session); // Oturum durumunu alma
         
-        var text = string.Join("\n", context.ResponseMessages?.Select(m => m.Text) ?? Array.Empty<string>());
+        var text = string.Join("\n", context.ResponseMessages?.Select(m => m.Text) ?? Array.Empty<string>()); // Yanıt metinlerini toplama
         if (!string.IsNullOrWhiteSpace(text))
         {
             // Aksiyon, onay ekranı, ekran yönlendirmesi veya iş akışı tamamlanması durumlarında bağlam saklanmaz, temizlenir!
@@ -69,17 +69,17 @@ public class TopicContextProvider : AIContextProvider
                 text.Contains("Onay ekranı") || 
                 text.Contains("tamamlandı") || 
                 text.Contains("iptal edildi") ||
-                text.Contains("start_workflow"))
+                text.Contains("start_workflow")) // Özel aksiyon kontrolü
             {
-                state.LastAssistantResponse = null;
-                _sessionState.SaveState(context.Session, state);
+                state.LastAssistantResponse = null; // Bağlamı temizleme
+                _sessionState.SaveState(context.Session, state); // Durumu kaydetme
                 _logger?.LogInformation("TopicContextProvider: Action/Screen/Workflow completion response detected, cleared last assistant response.");
                 _hub?.Publish("CONTEXT", "[TopicContextProvider] Aksiyon/Ekran/Tamamlanma yanıtı → Bağlam temizlendi");
                 return ValueTask.CompletedTask;
             }
 
-            state.LastAssistantResponse = text;
-            _sessionState.SaveState(context.Session, state);
+            state.LastAssistantResponse = text; // Yanıtı bağlama kaydetme
+            _sessionState.SaveState(context.Session, state); // Durumu kaydetme
             _logger?.LogInformation("TopicContextProvider: Saved last assistant response to session state.");
             _hub?.Publish("CONTEXT", $"[TopicContextProvider] Asistan yanıtı bağlam olarak saklandı ({text.Length} karakter)");
         }

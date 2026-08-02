@@ -1,40 +1,32 @@
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
+using Banking.Mcp.Registry;
 
 namespace Banking.Agents.Mcp;
 
 /// <summary>
-/// Süreç içindeki MCP server'a (loopback HTTP) bir MCP <b>client</b> olarak bağlanır,
-/// araçları listeler ve isimlerine göre uzman gruplarına ayırır.
-/// Uzman ajanlar araçlara böylece gerçek MCP protokolü üzerinden erişir.
+/// Süreç içindeki MCP server'a (loopback HTTP) bir MCP client olarak bağlanır,
+/// araçları listeler ve ToolRegistry üzerinden isimlerine/gruplarına göre ayırır.
+/// Uzman ajanlar araçlara böylece gerçek MCP protokolü ve yerleşik AITool arayüzü üzerinden erişir.
 /// </summary>
 public sealed class BankingMcpClient : IAsyncDisposable
 {
-    public static readonly string[] AccountToolNames =
-        [Banking.Mcp.Constants.AccountToolNames.ListAccounts, Banking.Mcp.Constants.AccountToolNames.GetAccountBalance, Banking.Mcp.Constants.AccountToolNames.GetTransactions];
-
-    public static readonly string[] CardToolNames =
-        [Banking.Mcp.Constants.CardToolNames.ListCards, Banking.Mcp.Constants.CardToolNames.GetCardDebt, Banking.Mcp.Constants.CardToolNames.GetAvailableLimit, Banking.Mcp.Constants.CardToolNames.GetCardDetails];
-
-    public static readonly string[] AnalyzeToolNames =
-        [
-            Banking.Mcp.Constants.AnalyzeToolNames.GetCreditCardStatement,
-            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzeStatementSummary,
-            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzeCategoryBreakdown,
-            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzePaymentTypeRatio,
-            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzeBonusAndPoints,
-            Banking.Mcp.Constants.AnalyzeToolNames.AnalyzeTopMerchants,
-            Banking.Mcp.Constants.AnalyzeToolNames.CompareSpendingPeriods,
-            Banking.Mcp.Constants.AnalyzeToolNames.KampanyaVektorelAra,
-            Banking.Mcp.Constants.AnalyzeToolNames.YeniKampanyaEkleVektorel,
-            Banking.Mcp.Constants.AnalyzeToolNames.RecommendFinancing,
-            Banking.Mcp.Constants.AnalyzeToolNames.GetCampaings,
-            Banking.Mcp.Constants.AnalyzeToolNames.GetFinancingOptions
-        ];
-
+    private readonly IToolRegistry _registry;
     private McpClient? _client;
     private IList<McpClientTool>? _tools;
 
+    // --- Constructor Injection (DIP Principle) -----------
+    public BankingMcpClient(IToolRegistry? registry = null)
+    {
+        _registry = registry ?? ToolRegistry.Instance;
+    }
+
+    // --- Dynamic Group Tool Name Properties -----------
+    public IReadOnlyList<string> AccountToolNames => _registry.GetNamesByGroup(ToolGroup.Account);
+    public IReadOnlyList<string> CardToolNames => _registry.GetNamesByGroup(ToolGroup.Card);
+    public IReadOnlyList<string> AnalyzeToolNames => _registry.GetNamesByGroup(ToolGroup.Analyze);
+
+    // --- Connect To MCP Server -----------
     public async Task ConnectAsync(string mcpUrl, CancellationToken ct = default)
     {
         var transport = new HttpClientTransport(new HttpClientTransportOptions
@@ -48,10 +40,18 @@ public sealed class BankingMcpClient : IAsyncDisposable
         _tools = await _client.ListToolsAsync(cancellationToken: ct);
     }
 
+    // --- Get All Discovered MCP Tools -----------
     public IReadOnlyList<McpClientTool> AllTools =>
         (IReadOnlyList<McpClientTool>?)_tools ?? throw NotConnected();
 
-    /// <summary>İsim listesine göre filtrelenmiş araçları AITool olarak döner.</summary>
+    // --- Get AITool List By ToolGroup -----------
+    public IList<AITool> ToolsForGroup(ToolGroup group)
+    {
+        var names = _registry.GetNamesByGroup(group);
+        return ToolsFor(names);
+    }
+
+    // --- Filter Tools By Name List -----------
     public IList<AITool> ToolsFor(IEnumerable<string> names)
     {
         if (_tools is null) throw NotConnected();
@@ -59,9 +59,11 @@ public sealed class BankingMcpClient : IAsyncDisposable
         return _tools.Where(t => set.Contains(t.Name)).Cast<AITool>().ToList();
     }
 
+    // --- Not Connected Exception Helper -----------
     private static InvalidOperationException NotConnected() =>
         new("MCP client henüz bağlanmadı. Önce ConnectAsync çağrılmalı.");
 
+    // --- Async Resource Disposal -----------
     public async ValueTask DisposeAsync()
     {
         if (_client is not null)

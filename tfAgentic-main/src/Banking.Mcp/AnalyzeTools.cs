@@ -10,6 +10,7 @@ using ModelContextProtocol.Server;
 using Banking.Mcp.Constants;
 using Banking.Domain.Financing;
 using Banking.Domain.Data;
+using Banking.Mcp.Registry;
 
 namespace Banking.Agents.Specialists;
 
@@ -17,6 +18,7 @@ namespace Banking.Agents.Specialists;
 /// Finansal Analiz Ajanı (AnalyzeAgent) tarafından çağrılacak olan analiz ve kampanya araçları sınıfı.
 /// </summary>
 [McpServerToolType]
+[ToolGroup(ToolGroup.Analyze)]
 public sealed class AnalyzeTools
 {
     private readonly IAnalyzeService _analyzeService;
@@ -208,7 +210,6 @@ public sealed class AnalyzeTools
     [Description("Müşteri niyeti veya durumu (örn: 'kredi kartı borcumu ödeyemiyorum', 'nakit ihtiyacım var', 'bana uygun finansmanlar')")] string query,
     [Description("Maksimum sonuç sayısı")] int topK = 3)
     {
-        // 1. Harcama analizi yap
         var transactions = GetTransactions(null).ToList();
         var totalDebt = transactions.Sum(x => x.Amount);
         
@@ -219,8 +220,6 @@ public sealed class AnalyzeTools
             .ToList();
             
         string topCategories = string.Join(", ", categorySummary.Take(2).Select(x => x.Category));
-        
-        // 2. Query'i harcama profiliyle zenginleştir
         string enrichedQuery = $"{query}. Kullanıcının toplam borcu: {totalDebt} TL. En çok harcama yaptığı sektörler: {topCategories}.";
 
         if (_financingSearcher is not null)
@@ -269,10 +268,6 @@ public sealed class AnalyzeTools
         };
     }
 
-
-    /// <summary>
-    /// AnalyzeTools nesnesi içindeki tüm metotları Microsoft.Extensions.AI AITool listesi olarak döndürür.
-    /// </summary>
     public IList<AITool> AsTools()
     {
         return new List<AITool>

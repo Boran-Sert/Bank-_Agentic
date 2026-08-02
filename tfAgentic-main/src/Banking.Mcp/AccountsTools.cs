@@ -2,11 +2,15 @@ using System.ComponentModel;
 using Banking.Domain.Services;
 using ModelContextProtocol.Server;
 using Banking.Mcp.Constants;
+using Banking.Mcp.Registry;
 
 namespace Banking.Mcp;
 
 /// <summary>
+/// Banka hesapları ile ilgili MCP araç seti.
+/// </summary>
 [McpServerToolType]
+[ToolGroup(ToolGroup.Account)]
 public sealed class AccountsTools(IAccountService accounts, CustomerContext context)
 {
     [McpServerTool(Name = AccountToolNames.ListAccounts)]

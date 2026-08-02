@@ -2,11 +2,15 @@ using System.ComponentModel;
 using Banking.Domain.Services;
 using ModelContextProtocol.Server;
 using Banking.Mcp.Constants;
+using Banking.Mcp.Registry;
 
 namespace Banking.Mcp;
 
 /// <summary>
+/// Kredi kartları ile ilgili MCP araç seti.
+/// </summary>
 [McpServerToolType]
+[ToolGroup(ToolGroup.Card)]
 public sealed class CardsTools(ICardService cards, CustomerContext context)
 {
     [McpServerTool(Name = CardToolNames.ListCards)]

@@ -7,6 +7,7 @@ using Banking.Domain.Data;
 using Banking.Domain.MkCodes;
 using Banking.Domain.Services;
 using Banking.Mcp;
+using Banking.Mcp.Registry;
 using Banking.Gateway;
 using Banking.Gateway.Models;
 using Banking.Domain.Financing;
@@ -49,6 +50,9 @@ builder.Services.AddSingleton<SemanticCampaignSearcher>();
 builder.Services.AddSingleton<SemanticFinancingSearcher>();
 
 
+// --- Tool Registry (Merkezi araç haritası & otomatik keşif) ---
+builder.Services.AddSingleton<IToolRegistry>(ToolRegistry.Instance);
+
 // --- LLM + ajan altyapısı ---
 builder.Services.AddSingleton<TraceHub>();
 builder.Services.AddSingleton(sp => ChatClientFactory.Create(sp.GetRequiredService<AgentOptions>()));
@@ -57,6 +61,7 @@ builder.Services.AddSingleton<AgentRuntime>();
 builder.Services.AddSingleton<CollectionSessionStore>();
 
 // --- MW Gateway (Java MW ↔ .NET iletişimi) ---
+builder.Services.AddSingleton<FlowRouter>();
 builder.Services.AddSingleton<GatewayService>();
 
 // --- Güvenlik: Deterministik çıktı bariyeri (Output Guard — Defense-in-Depth Katman 3) ---
@@ -102,13 +107,15 @@ app.MapA2AJsonRpc("HesapUzmani", "/a2a/hesap");
 app.MapA2AJsonRpc("KrediKartiUzmani", "/a2a/kart");
 app.MapA2AJsonRpc("FinansalAnalizUzmani", "/a2a/analiz");
 
-// --- Q&A: orkestratör ---
-app.MapPost("/api/chat", async (ChatRequest req, AgentRuntime runtime, CancellationToken ct) =>
+// --- Q&A: orkestratör (GatewayService üzerinden tekil oturum yönetimi) ---
+app.MapPost("/api/chat", async (ChatRequest req, GatewayService gw, CancellationToken ct) =>
 {
-    if (string.IsNullOrWhiteSpace(req.Message))
-        return Results.BadRequest(new { error = "message boş olamaz" });
-    var r = await runtime.AskAsync(req.Message, ct: ct);
-    return Results.Ok(new { reply = r.Reply, startCollection = r.StartCollection, openScreen = r.OpenScreenMkCode });
+    var text = req.Text ?? req.Message;
+    if (string.IsNullOrWhiteSpace(text))
+        return Results.BadRequest(new { error = "message veya text boş olamaz" });
+
+    var response = await gw.ProcessAsync(new GatewayRequest { Text = text, SessionToken = req.SessionToken }, ct);
+    return Results.Ok(response);
 });
 
 // ── MW Gateway Endpoint (Java MW için) ──
@@ -176,6 +183,6 @@ app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
 
 app.Run();
 
-internal sealed record ChatRequest(string Message);
+internal sealed record ChatRequest(string? Message, string? Text, string? SessionToken);
 internal sealed record CollectStartRequest(string? Message);
 internal sealed record CollectRespondRequest(string SessionId, string Answer);

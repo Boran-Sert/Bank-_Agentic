@@ -24,9 +24,9 @@ public sealed class TraceHub
         WriteIndented = false
     };
 
-    public TraceHub(ILogger<TraceHub> logger)
+    public TraceHub(ILogger<TraceHub>? logger = null)
     {
-        _logger = logger;
+        _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<TraceHub>.Instance;
     }
 
     public (Guid id, ChannelReader<string> reader) Subscribe()

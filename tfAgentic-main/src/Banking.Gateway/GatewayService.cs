@@ -1,31 +1,24 @@
 using System.Collections.Concurrent;
-using Banking.Agents;
 using Banking.Agents.Collection;
 using Banking.Agents.Tracing;
 using Banking.Domain.MkCodes;
 using Banking.Gateway.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.AI;
 
 namespace Banking.Gateway;
 
 /// <summary>
-/// MW ↔ .NET gateway orkestrasyon servisi.
+/// MW ↔ .NET Gateway Servisi (Facade & Protocol Mapper).
 /// <para>
-/// Deterministik akış yönlendirme (Deterministic Flow Routing):
-/// Aktif tahsilat oturumu varken kullanıcı mesajları DOĞRUDAN CollectionConversation'a
-/// gönderilir; orkestratör BYPASS edilir. Bu, fintech standartlarına uygun olarak
-/// aktif iş akışı sırasında routing kararlarının LLM'e bırakılmamasını sağlar.
-/// </para>
-/// <para>
-/// Tüm kullanıcı yanıtları <see cref="ResponseSanitizer"/> tarafından deterministik olarak
-/// güvenlik taramasından geçirilir (Output Guard — Defense-in-Depth Katman 3).
+/// <b>Single Responsibility Principle (SRP):</b>
+/// Akış yönlendirme (routing) kararlarını <see cref="FlowRouter"/> servisine devreder.
+/// Kendisi yalnızca istekleri karşılar, UI protokol yanıtlarını (<see cref="GatewayResponse"/>)
+/// haritalar ve <see cref="ResponseSanitizer"/> güvenlik katmanını çalıştırır.
 /// </para>
 /// </summary>
 public sealed class GatewayService
 {
-    private readonly AgentRuntime _runtime;
-    private readonly CollectionSessionStore _collectionStore;
+    private readonly FlowRouter _router;
     private readonly TraceHub _hub;
     private readonly ILogger<GatewayService> _logger;
     private readonly ResponseSanitizer _sanitizer;
@@ -33,25 +26,19 @@ public sealed class GatewayService
     private readonly ConcurrentDictionary<string, GatewaySession> _sessions = new();
 
     public GatewayService(
-        AgentRuntime runtime,
-        CollectionSessionStore collectionStore,
+        FlowRouter router,
         TraceHub hub,
         ILogger<GatewayService> logger,
         ResponseSanitizer sanitizer)
     {
-        _runtime = runtime;
-        _collectionStore = collectionStore;
+        _router = router;
         _hub = hub;
         _logger = logger;
         _sanitizer = sanitizer;
     }
 
     /// <summary>
-    /// Kullanıcı isteğini işler. Deterministik akış yönlendirme ile:
-    /// <list type="number">
-    ///   <item>Aktif tahsilat oturumu varsa → doğrudan CollectionConversation'a gönderir</item>
-    ///   <item>Yoksa → orkestratöre yönlendirir</item>
-    /// </list>
+    /// Kullanıcı isteğini karşılar, FlowRouter'a yönlendirir ve sonucu UI formatına dönüştürüp temizler.
     /// </summary>
     public async Task<GatewayResponse> ProcessAsync(GatewayRequest request, CancellationToken ct = default)
     {
@@ -60,63 +47,49 @@ public sealed class GatewayService
         var sessionToken = NormalizeSessionToken(request.SessionToken);
         var session = _sessions.GetOrAdd(sessionToken, _ => new GatewaySession());
         session.Touch();
+        session.ThemeValue = request.ThemeValue;
 
-        _hub.Publish("GATEWAY", $"İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
+        _hub.Publish("GATEWAY", "İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
         _logger.LogInformation("Gateway istek: session={SessionToken}, text={Text}", sessionToken, Truncate(request.Text, 100));
 
         try
         {
-            // Kullanıcı mesajını History'ye ekle ve Kayan Pencere sınırını koru
-            session.History.Enqueue(new ChatMessage(ChatRole.User, request.Text));
-            while (session.History.Count > 8) { session.History.Dequeue(); }
+            var result = await _router.RouteAsync(sessionToken, request.Text, session, ct);
 
-            if (session.State.CollectionSessionId is not null)
+            GatewayResponse rawResponse;
+
+            if (result.ExecutionType == "workflow_step" && result.WorkflowResult is not null)
             {
-                _hub.Publish("GATEWAY", "Aktif tahsilat oturumu → mesaj doğrudan tahsilat ajanına yönlendiriliyor (deterministic routing)");
-                _logger.LogInformation("Deterministic routing: session={SessionToken}, collectionSession={CollectionSessionId}",
-                    sessionToken, session.State.CollectionSessionId);
-
-                var result = await _collectionStore.RespondAsync(session.State.CollectionSessionId, request.Text);
-
-                // Tahsilat bitti mi? (completed veya cancelled)
-                if (result.Status is "completed" or "cancelled")
+                if (result.IsWorkflowFinished)
                 {
-                    _hub.Publish("GATEWAY", $"Tahsilat oturumu sonlandı (durum: {result.Status}) → session temizleniyor");
                     ClearCollectionSession(session);
                 }
 
-                var collResponse = MapCollectionResult(result, session) with { SessionToken = sessionToken };
-                return SanitizeResponse(collResponse);
+                rawResponse = MapCollectionResult(result.WorkflowResult, session);
             }
-
-            //  NORMAL ORKESTRATÖR AKIŞI (aktif tahsilat YOK
-            var reply = await _runtime.AskAsync(request.Text, session.History.ToList(), ct: ct);
-
-            // DURUM 1: Orkestratör tahsilat akışını İLK KEZ başlatmak istiyor.
-            if (reply.StartCollection)
+            else if (result.OrchestratorReply is { } reply)
             {
-                _hub.Publish("GATEWAY", "Orkestratör tahsilat niyeti algıladı → Collection akışı başlatılıyor");
-                _logger.LogInformation("Tahsilat akışı başlatılıyor: session={SessionToken}", sessionToken);
-                var collectionResponse = await StartCollectionAsync(session, request, ct);
-                return SanitizeResponse(collectionResponse with { SessionToken = sessionToken });
-            }
+                string? openScreenMkCode = reply.TriggeredToolName == "ekran_ac" && reply.TriggeredToolArguments != null 
+                    ? reply.TriggeredToolArguments.TryGetValue("mkCode", out var mkCode) ? mkCode?.ToString() : null 
+                    : null;
 
-            // DURUM 2: Ekran yönlendirmesi var.
-            if (!string.IsNullOrEmpty(reply.OpenScreenMkCode))
+                if (!string.IsNullOrEmpty(openScreenMkCode))
+                {
+                    _hub.Publish("GATEWAY", $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({openScreenMkCode})");
+                    rawResponse = GatewayResponse.AsOpenScreen(openScreenMkCode);
+                }
+                else
+                {
+                    rawResponse = GatewayResponse.AsText(reply.Reply ?? "");
+                    _hub.Publish("GATEWAY", "Metin yanıtı hazır -> TEXT", rawResponse);
+                }
+            }
+            else
             {
-                _hub.Publish("GATEWAY", $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({reply.OpenScreenMkCode})");
-                return SanitizeResponse(GatewayResponse.AsOpenScreen(reply.OpenScreenMkCode) with { SessionToken = sessionToken });
+                rawResponse = GatewayResponse.AsText("Yanıt üretilemedi.");
             }
 
-            // DURUM 3: Standart Q&A metin yanıtı (veya uzmanlardan dönen cevap)
-            var response = GatewayResponse.AsText(reply.Reply) with { SessionToken = sessionToken };
-            _hub.Publish("GATEWAY", "Metin yanıtı hazır -> TEXT", response);
-
-            // Asistan yanıtını da History'ye ekle
-            session.History.Enqueue(new ChatMessage(ChatRole.Assistant, reply.Reply));
-            while (session.History.Count > 8) { session.History.Dequeue(); }
-
-            return SanitizeResponse(response);
+            return SanitizeResponse(rawResponse with { SessionToken = sessionToken });
         }
         catch (OperationCanceledException)
         {
@@ -129,18 +102,6 @@ public sealed class GatewayService
             _hub.Publish("GATEWAY", $"HATA: {ex.Message}");
             return SanitizeResponse(GatewayResponse.AsText("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.") with { SessionToken = sessionToken });
         }
-    }
-
-    private async Task<GatewayResponse> StartCollectionAsync(
-        GatewaySession session, GatewayRequest request, CancellationToken ct)
-    {
-        session.ThemeValue = request.ThemeValue;
-
-        var result = await _collectionStore.StartAsync(request.Text);
-        session.State.CollectionSessionId = result.SessionId;
-
-        _hub.Publish("GATEWAY", $"Collection oturumu başlatıldı: {result.SessionId}");
-        return MapCollectionResult(result, session);
     }
 
     private GatewayResponse MapCollectionResult(
@@ -191,10 +152,9 @@ public sealed class GatewayService
         );
     }
 
-    private void ClearCollectionSession(GatewaySession session)
+    private static void ClearCollectionSession(GatewaySession session)
     {
         session.State.CollectionSessionId = null;
-        // Tahsilat mesajlarının Q&A history'sini kirletmemesi için temizle
         session.ClearForNewFlow();
     }
 

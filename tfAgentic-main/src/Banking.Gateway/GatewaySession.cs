@@ -1,5 +1,5 @@
+using System;
 using System.Collections.Generic;
-using Microsoft.Extensions.AI;
 
 namespace Banking.Gateway;
 
@@ -11,7 +11,7 @@ public sealed class AppState
     public string? Flow { get; set; }
     public string? Step { get; set; }
 
-    /// <summary>Aktif tahsilat oturumunun kimliği (yoksa null).</summary>
+    /// <summary>Aktif tahsilat/iş akışı oturumunun kimliği (yoksa null).</summary>
     public string? CollectionSessionId { get; set; }
 
     /// <summary>İş akışlarına özel dinamik değişkenler (Örn: SelectedCard, ActiveTopic, PendingOperationId vb.)</summary>
@@ -19,7 +19,7 @@ public sealed class AppState
 }
 
 /// <summary>
-/// Tek bir MW oturumunun state'ini tutar.
+/// Tek bir MW oturumunun state'ini tutar. MAF AgentSession yerleşik hafızayı yönettiği için konuşma geçmişi burada saklanmaz.
 /// </summary>
 public sealed class GatewaySession
 {
@@ -27,12 +27,6 @@ public sealed class GatewaySession
     /// LLM kararlarından bağımsız olarak yönetilen Uygulama Durumu (App State).
     /// </summary>
     public AppState State { get; } = new();
-
-    /// <summary>
-    /// LLM'in bağlamını korumak için tutulan Kayan Pencere (Sliding Window) mesaj geçmişi.
-    /// Maksimum N mesaj tutulacak şekilde GatewayService tarafından sınırlandırılır.
-    /// </summary>
-    public Queue<ChatMessage> History { get; } = new();
 
     /// <summary>MW'den gelen tema bilgisi (SCREEN_COMMAND'da geri dönmek için saklanır).</summary>
     public string? ThemeValue { get; set; }
@@ -47,12 +41,10 @@ public sealed class GatewaySession
     public void Touch() => LastActivityAt = DateTimeOffset.UtcNow;
 
     /// <summary>
-    /// Bir iş akışı (tahsilat vb.) tamamlandıktan sonra History'yi temizler.
-    /// Slot-filling mesajlarının gelecek Q&A bağlamını kirletmesini önler.
+    /// Bir iş akışı tamamlandıktan sonra durumu sıfırlar.
     /// </summary>
     public void ClearForNewFlow()
     {
-        History.Clear();
         State.Flow = null;
         State.Step = null;
         State.ContextData.Clear();

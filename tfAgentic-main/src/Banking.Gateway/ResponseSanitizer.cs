@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Banking.Agents.Tracing;
+using Banking.Mcp.Registry;
 using Microsoft.Extensions.Logging;
 
 namespace Banking.Gateway;
@@ -36,61 +37,19 @@ public sealed class ResponseSanitizer
 {
     private readonly ILogger<ResponseSanitizer> _logger;
     private readonly TraceHub _hub;
+    private readonly IToolRegistry _registry;
+    private readonly Regex _toolNamePattern;
 
     /// <summary>Temizleme sonrası metin tamamen boşaldığında kullanıcıya döndürülen güvenli fallback mesajı.</summary>
     private const string FallbackMessage = "Talebiniz işleniyor. Lütfen sorunuzu tekrar yazınız.";
 
-    // ════════════════════════════════════════════════════════════════════
-    //  KATEGORİ 1: Dahili araç / fonksiyon adı sızıntısı
-    // ════════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Sistemde tanımlı tüm dahili araç (tool) adları.
-    /// Bu adların herhangi biri kullanıcı yanıtında geçerse güvenlik ihlali olarak değerlendirilir.
-    /// Yeni bir araç eklendiğinde bu listeye de eklenmesi <b>zorunludur</b>.
-    /// </summary>
-    private static readonly string[] InternalToolNames =
-    [
-        // Orkestratör araçları
-        "hesap_uzmanina_sor",
-        "kart_uzmanina_sor",
-        "analiz_uzmanina_sor",
-        "tahsilat_akisini_baslat",
-        "ekran_kodu_ara",
-        "ekran_ac",
-        "inject_collection_fact",
-
-        // Tahsilat (collection) araçları
-        "get_my_cards",
-        "get_my_accounts",
-        "propose_payment",
-        "cancel_collection",
-
-        // MCP Account araçları
-        "list_accounts",
-        "get_account_balance",
-        "get_transactions",
-
-        // MCP Card araçları
-        "list_cards",
-        "get_card_debt",
-        "get_available_limit",
-        "get_card_details",
-
-        // MCP Analyze araçları
-        "GetCreditCardStatement",
-        "AnalyzeStatementSummary",
-        "AnalyzeCategoryBreakdown",
-        "AnalyzePaymentTypeRatio",
-        "AnalyzeBonusAndPoints",
-        "AnalyzeTopMerchants",
-        "CompareSpendingPeriods",
-        "KampanyaVektorelAra",
-        "YeniKampanyaEkleVektorel"
-    ];
-
-    /// <summary>Tool adlarını büyük/küçük harf duyarsız ve kelime sınırıyla yakalayan derlenmiş regex.</summary>
-    private static readonly Regex ToolNamePattern = BuildToolNameRegex();
+    public ResponseSanitizer(ILogger<ResponseSanitizer> logger, TraceHub hub, IToolRegistry? registry = null)
+    {
+        _logger = logger;
+        _hub = hub;
+        _registry = registry ?? ToolRegistry.Instance;
+        _toolNamePattern = BuildToolNameRegex(_registry.GetAllSanitizableToolNames());
+    }
 
     // ════════════════════════════════════════════════════════════════════
     //  KATEGORİ 2: Düşünce süreci / planlama ifadesi sızıntısı
@@ -119,6 +78,10 @@ public sealed class ResponseSanitizer
             // "tool/function call" İngilizce kalıpları
             @"|(?:tool|function)\s*call" +
             @"|calling\s+(?:tool|function)" +
+            // "iş akışı / workflow nasıl çalışır", "bu konuda bilgi veremem" kalıpları
+            @"|iş\s+akış\w*\s+nasıl" +
+            @"|workflow\s+nasıl" +
+            @"|bu\s+konuda\s+bilgi\s+veremem" +
             // "bekleyin" araç bağlamında
             @"|(?:bilgi|veri|cevap|yanıt)\s+(?:almak|getirmek|çekmek)\s+için\s+.*?(?:bekle)" +
             // "chain of thought / reasoning / internal" İngilizce kalıplar
@@ -217,9 +180,8 @@ public sealed class ResponseSanitizer
     /// <param name="logger">Güvenlik uyarılarının yazılacağı yapılandırılmış logger.</param>
     /// <param name="hub">Canlı izleme (SSE) kanalına güvenlik olaylarını yayınlayan merkezi TraceHub.</param>
     public ResponseSanitizer(ILogger<ResponseSanitizer> logger, TraceHub hub)
+        : this(logger, hub, null)
     {
-        _logger = logger;
-        _hub = hub;
     }
 
     /// <summary>
@@ -286,7 +248,7 @@ public sealed class ResponseSanitizer
     /// <summary>Dahili araç adlarını içeren cümleleri tamamen kaldırır.</summary>
     private string StripToolNames(string text, ref int violations)
     {
-        return StripSentencesContaining(text, ToolNamePattern, "TOOL_NAME", ref violations);
+        return StripSentencesContaining(text, _toolNamePattern, "TOOL_NAME", ref violations);
     }
 
     /// <summary>Düşünce süreci ve planlama ifadelerini içeren cümleleri kaldırır.</summary>
@@ -411,10 +373,10 @@ public sealed class ResponseSanitizer
     /// yakalayan derlenmiş regex oluşturur. Araç adları <c>'</c>, <c>"</c>, <c>`</c>
     /// gibi tırnak işaretleriyle sarılmış olsa bile yakalanır.
     /// </summary>
-    private static Regex BuildToolNameRegex()
+    private static Regex BuildToolNameRegex(IEnumerable<string> internalToolNames)
     {
         // Araç adlarını escape edip alternation (|) ile birleştir.
-        var escaped = InternalToolNames
+        var escaped = internalToolNames
             .Select(Regex.Escape)
             .ToArray();
 

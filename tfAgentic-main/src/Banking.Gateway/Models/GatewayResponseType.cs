@@ -4,5 +4,5 @@ public enum GatewayResponseType
 {
     TEXT,
     OPEN_SCREEN,
-    CONFIRM_PAYMENT
+    CONFIRM_PAYMENT,
 }

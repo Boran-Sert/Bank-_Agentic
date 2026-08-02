@@ -1,14 +1,14 @@
+using System.ComponentModel;
+using Banking.Agents.Records;
 using Banking.Agents.Tracing;
+using Banking.Agents.Workflows;
 using Banking.Domain.Models;
 using Banking.Domain.Services;
-using Microsoft.Agents.AI.Workflows;
 
 namespace Banking.Agents.Collection;
 
-/// <summary>Onaylanmış ödeme için gereken doğrulanmış bilgiler.</summary>
-public sealed record PaymentSlots(string CardId, decimal Amount, string SourceAccountId, DateOnly Date);
 
-/// <summary>Kullanıcıya gösterilen onay özeti (RequestPort'tan geçer).</summary>
+// --- Kullanıcıya Gösterilen Onay Özeti View -----------
 public sealed record ConfirmationView(
     string CardMasked,
     decimal TotalDebt,
@@ -17,61 +17,54 @@ public sealed record ConfirmationView(
     string SourceAccountMasked,
     string Date);
 
-/// <summary>Onay reddedildiğinde workflow çıktısı.</summary>
+// --- Onay Reddedildiğinde İptal Çıktısı -----------
 public sealed record PaymentCancelled(string Reason);
 
-/// <summary>Onay gate'inin tek tip çıktısı: ya makbuz ya iptal.</summary>
+// --- Workflow Çıktı Nesnesi -----------
 public sealed record PaymentOutcome(PaymentReceipt? Receipt, PaymentCancelled? Cancelled);
 
-/// <summary>
-/// İnsan onayından gelen <c>bool</c>'u alır ve onaylanmışsa GERİ ALINAMAZ tahsilat servisini
-/// DETERMİNİSTİK olarak çağırır. Bu adımda LLM devre dışıdır. Çıktı tipi (PaymentOutcome)
-/// Executor&lt;TInput,TOutput&gt; ile bildirildiğinden workflow çıktısı olarak yayınlanabilir.
-/// </summary>
-internal sealed class ChargeExecutor : Executor<bool, PaymentOutcome>
+// --- Deterministik Ödeme Eksekütörü (Sıfır LLM) -----------
+public sealed class PaymentActionExecutor : IDeterministicActionExecutor<PaymentSlots, ConfirmationView, PaymentOutcome>
 {
     private readonly ICollectionService _collections;
-    private readonly PaymentSlots _slots;
+    private readonly ICardService _cards;
+    private readonly IAccountService _accounts;
     private readonly TraceHub _hub;
 
-    public ChargeExecutor(string id, ICollectionService collections, PaymentSlots slots, TraceHub hub) : base(id)
+    public PaymentActionExecutor(ICollectionService collections, ICardService cards, IAccountService accounts, TraceHub hub)
     {
         _collections = collections;
-        _slots = slots;
+        _cards = cards;
+        _accounts = accounts;
         _hub = hub;
     }
 
-    public override ValueTask<PaymentOutcome> HandleAsync(bool approved, IWorkflowContext context, CancellationToken cancellationToken = default)
+    public ConfirmationView BuildConfirmationView(PaymentSlots slots)
+    {
+        var card = _cards.GetCard(slots.CardId)!;
+        var account = _accounts.GetAccount(slots.SourceAccountId)!;
+        var maskedIban = account.Iban.Length <= 4 ? account.Iban : $"…{account.Iban[^4..]}";
+
+        return new ConfirmationView(
+            CardMasked: card.MaskedNumber,
+            TotalDebt: card.CurrentDebt,
+            Amount: slots.Amount,
+            Partial: slots.Amount < card.CurrentDebt,
+            SourceAccountMasked: maskedIban,
+            Date: slots.Date.ToString("dd.MM.yyyy"));
+    }
+
+    public ValueTask<PaymentOutcome> ExecuteAsync(PaymentSlots slots, bool approved, CancellationToken ct)
     {
         if (approved)
         {
-            _hub.Publish("WORKFLOW", "Onay alındı → tahsilat servisi çağrılıyor (deterministik)");
-            var receipt = _collections.Charge(_slots.CardId, _slots.Amount, _slots.SourceAccountId, _slots.Date);
-            _hub.Publish("SERVICE", "CollectionService.Charge", $"{_slots.Amount:N0} ₺ tahsil edildi · kalan {receipt.RemainingDebt:N0} ₺");
+            _hub.Publish("WORKFLOW", "Onay alındı → CollectionService.Charge deterministik çağrılıyor");
+            var receipt = _collections.Charge(slots.CardId, slots.Amount, slots.SourceAccountId, slots.Date);
+            _hub.Publish("SERVICE", "CollectionService.Charge", $"{slots.Amount:N0} ₺ tahsil edildi · kalan {receipt.RemainingDebt:N0} ₺");
             return ValueTask.FromResult(new PaymentOutcome(receipt, null));
         }
 
-        _hub.Publish("WORKFLOW", "Onay reddedildi → hiçbir tutar tahsil edilmedi");
+        _hub.Publish("WORKFLOW", "Onay reddedildi → Hiçbir tutar tahsil edilmedi");
         return ValueTask.FromResult(new PaymentOutcome(null, new PaymentCancelled("Kullanıcı ödemeyi onaylamadı.")));
-    }
-}
-
-/// <summary>
-/// Tahsilat onay gate'ini bir MAF Workflow olarak kurar:
-/// giriş (ConfirmationView) → RequestPort (insana onay sorusu) → bool → ChargeExecutor → makbuz/iptal.
-/// </summary>
-public static class PaymentApprovalWorkflow
-{
-    public const string ApprovalPortId = "payment-approval";
-
-    public static Workflow Build(ICollectionService collections, PaymentSlots slots, TraceHub hub)
-    {
-        var approvalPort = RequestPort.Create<ConfirmationView, bool>(ApprovalPortId);
-        var charge = new ChargeExecutor("charge", collections, slots, hub);
-
-        return new WorkflowBuilder(approvalPort)
-            .AddEdge(approvalPort, charge)
-            .WithOutputFrom(charge)
-            .Build();
     }
 }

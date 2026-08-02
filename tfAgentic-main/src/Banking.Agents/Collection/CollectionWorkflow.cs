@@ -1,0 +1,119 @@
+using Banking.Agents.Records;
+using Banking.Agents.Tracing;
+using Banking.Agents.Workflows;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
+
+namespace Banking.Agents.Collection;
+
+/// <summary>
+/// Jenerik Dinamik MAF Workflow Boru Hattı:
+/// Aktif olan herhangi bir TSlots Record nesnesine (PaymentSlots, TransferSlots vb.)
+/// ve parametre sayısına otomatik adapte olur. Sadece tek bir Record türüne bağımlı DEĞİLDİR.
+/// </summary>
+public static class CollectionWorkflow
+{
+    public static Workflow Build<TSlots, TConfirmation, TOutcome>(
+        string sessionId,
+        AIAgent collectionAgent,
+        AgentSession agentSession,
+        WorkflowSessionStore sessionStore,
+        IDeterministicActionExecutor<TSlots, TConfirmation, TOutcome> actionExecutor,
+        TraceHub hub,
+        bool requiresApproval = true)
+        where TSlots : class
+        where TConfirmation : class
+        where TOutcome : class
+    {
+        var workflowName = typeof(TSlots).Name.ToLowerInvariant();
+
+        // 1. Aktif olan TSlots Record türüne göre dinamik MAF Slot Filling Adımı
+        var slotStep = new GenericSlotFillingStep<TSlots>(sessionId, collectionAgent, agentSession, sessionStore, hub);
+
+        // 2. Deterministik Servis Çalıştırıcı Adım
+        var actionStep = new GenericActionExecutorStep<TSlots, TConfirmation, TOutcome>(
+            $"{workflowName}-executor", null!, actionExecutor, hub);
+
+        // ── SENARYO A: Onay İstenmiyorsa (requiresApproval = false) ──
+        if (!requiresApproval)
+        {
+            hub.Publish("WORKFLOW", $"{workflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
+            return new WorkflowBuilder(slotStep)
+                .AddEdge(slotStep, actionStep)
+                .WithOutputFrom(actionStep)
+                .Build();
+        }
+
+        // ── SENARYO B: Onay İsteniyorsa (requiresApproval = true - HITL Gate) ──
+        hub.Publish("WORKFLOW", $"{workflowName}: MAF RequestPort onay gate'i oluşturuldu");
+        var approvalPortId = $"{workflowName}-approval-port";
+        var approvalPort = RequestPort.Create<TConfirmation, bool>(approvalPortId);
+
+        return new WorkflowBuilder(slotStep)
+            .AddEdge(slotStep, approvalPort)
+            .AddEdge(approvalPort, actionStep)
+            .WithOutputFrom(actionStep)
+            .Build();
+    }
+}
+
+/// <summary>
+/// Jenerik MAF Workflow İçindeki Dinamik Slot Filling Executor Adımı.
+/// Aktif olan TSlots record nesnesinin (PaymentSlots, TransferSlots vb.)
+/// tüm alanlarının dolup dolmadığını Reflection ile otomatik denetler.
+/// </summary>
+public sealed class GenericSlotFillingStep<TSlots> : Executor<string, TSlots>
+    where TSlots : class
+{
+    private readonly string _sessionId;
+    private readonly AIAgent _agent;
+    private readonly AgentSession _session;
+    private readonly WorkflowSessionStore _sessionStore;
+    private readonly TraceHub _hub;
+
+    public GenericSlotFillingStep(
+        string sessionId,
+        AIAgent agent,
+        AgentSession session,
+        WorkflowSessionStore sessionStore,
+        TraceHub hub) : base("generic-slot-filling-step")
+    {
+        _sessionId = sessionId;
+        _agent = agent;
+        _session = session;
+        _sessionStore = sessionStore;
+        _hub = hub;
+    }
+
+    public override async ValueTask<TSlots> HandleAsync(string userMessage, IWorkflowContext context, CancellationToken ct = default)
+    {
+        // 1. Reflection ile aktif TSlots nesnesinin dolu/eksik parametre özetini alır
+        var summary = _sessionStore.BuildSlotSummary<TSlots>(_sessionId);
+        var response = await _agent.RunAsync($"{userMessage}\n\n({summary})", _session);
+
+        // 2. Dinamik slot doluluk durumunu kontrol et
+        var status = _sessionStore.GetSlotStatus<TSlots>(_sessionId);
+
+        // 3. Aktif TSlots nesnesinin TÜM alanları dolduysa (IsComplete == true), onay/eylem adımına geçer
+        if (status.IsComplete && _sessionStore.GetOrCreate(_sessionId).PendingSlots is TSlots completedSlots)
+        {
+            await context.QueueStateUpdateAsync("Slots", completedSlots, scopeName: "WorkflowSlots", ct);
+            _hub.Publish("WORKFLOW", $"Workflow Adımı: '{typeof(TSlots).Name}' İçin Tüm Slotlar Dinamik Olarak Tamamlandı ({status.FilledSlots.Count} alan dolu).");
+            return completedSlots;
+        }
+
+        // 4. LLM teklif JSON'ı ürettiyse parse edip kaydet
+        if (response.Text?.Contains("PROPOSAL_READY:") == true)
+        {
+            var jsonIndex = response.Text.IndexOf("PROPOSAL_READY:", StringComparison.Ordinal) + "PROPOSAL_READY:".Length;
+            var json = response.Text[jsonIndex..].Trim();
+            var slots = System.Text.Json.JsonSerializer.Deserialize<TSlots>(json)!;
+
+            _sessionStore.SaveSlots(_sessionId, typeof(TSlots).Name, slots);
+            _hub.Publish("WORKFLOW", $"Workflow Adımı: '{typeof(TSlots).Name}' JSON Teklifi Ayrıştırıldı ve Saklandı.");
+            return slots;
+        }
+
+        throw new InvalidOperationException(response.Text ?? "Eksik parametreler var, slot doldurulmaya devam ediliyor.");
+    }
+}

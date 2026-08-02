@@ -1,137 +1,122 @@
-# Bankacılık Asistanı — MAF Agentic (.NET)
+# Bankacılık Asistanı — MAF Agentic Architecture (.NET 9)
 
-Microsoft Agent Framework (MAF) tabanlı, **tam agentic** bir bankacılık asistanı. Bir **orkestratör** ajan
-soruları karşılar ve **A2A** üzerinden uzman ajanlara yönlendirir; uzman ajanlar bankacılık servislerine
-**MCP** araçları üzerinden erişir. Ayrıca **human-in-the-loop** bir kredi kartı borç tahsilat akışı içerir:
-ajan eksik bilgileri kendisi sorar, sonunda deterministik bir **onay ekranı** çıkar, kullanıcı onaylarsa
-tahsilat servisi çağrılır.
+> **Microsoft Agent Framework (MAF)**, **Model Context Protocol (MCP)** ve **Agent-to-Agent (A2A)** standartları ile geliştirilmiş; **deterministik iş akışı (Workflow)**, **izole araç yönetimi (Tool Registry)** ve **6 katmanlı fintech güvenlik süzgeci (Output Guard)** içeren kurumsal bankacılık asistanı.
 
-> Tasarımın tamamı: [ANALIZ.md](ANALIZ.md) · Doğrulanmış MAF/MCP/A2A API notları: [docs/MAF-API-NOTES.md](docs/MAF-API-NOTES.md)
+---
 
-## Mimari özet
+## 1. Mimari Genel Bakış ve Çalışma Prensibi
+
+Sistem, kullanıcı sorularını karşılayan bir **Orkestratör Ajan**, uzmanlık alanlarına göre ayrılmış **Uzman Ajanlar** (Hesap, Kredi Kartı, Finansal Analiz), veriye güvenli erişen **MCP Araçları** ve borç ödeme gibi kritik akışları yöneten **MAF Workflows** bileşenlerinden oluşur.
 
 ```
-Tarayıcı ──/api/chat──►  ORKESTRATÖR ajan ──A2A──►  HesapUzmani ──MCP──►  ┐
-                          (router/handoff)   └─A2A─►  KrediKartiUzmani─MCP─► Banking.Domain
-                                                                            (in-memory simülasyon)
-Tarayıcı ──/api/collect──► TAHSİLAT: CollectionAgent (slot-filling, LLM)  ──┘
-                           → MAF Workflow + RequestPort (onay gate, HITL) → ICollectionService.Charge
+ Tarayıcı (Web UI) ──/api/chat──►  GatewayService (ResponseSanitizer)
+                                        │
+                                   FlowRouter (Deterministik Yönlendirici)
+                                   ┌────┴──────────────────────────┐
+                       (Aktif Oturum YOK)                      (Aktif Oturum VAR)
+                               │                                   │
+                               ▼                                   ▼
+                      Orkestratör Ajan                     MAF Workflow
+                     (AgentRuntime & A2A)             (GenericSlotFillingStep)
+                               │                                   │
+              ┌────────────────┼────────────────┐                  │
+              ▼                ▼                ▼                  ▼
+         HesapUzmani    KrediKartiUzmani   FinansalAnaliz   RequestPort (HITL Gate)
+              │                │                │                  │
+              └───────────────►├◄───────────────┘                  ▼
+                               ▼                            Charge() Servisi
+                         Banking.Mcp
+                      (IToolRegistry)
+                               │
+                               ▼
+                        Banking.Domain
 ```
 
-- **MCP** = ajanların *veriye/araçlara* eriştiği yol. Uzmanlar süreç-içi MCP server'a (`/mcp`) MCP **client** olarak bağlanır.
-- **A2A** = ajanların *başka ajanlara* eriştiği yol. Orkestratör uzmanlara A2A ile (`/a2a/hesap`, `/a2a/kart`) ulaşır.
-- **Hibrit topoloji**: hepsi tek ASP.NET sürecinde host edilir; protokoller gerçek HTTP üzerinden loopback'te konuşur.
+---
 
-## Proje yapısı
+## 2. Neden Dinamik Bir Yapı Kullanıldı?
+
+Proje geliştirilirken statik, katı ve hardcoded yapılar yerine **tam dinamik bir mimari** tercih edilmiştir. Bunun temel nedenleri şunlardır:
+
+1. **Dinamik Slot Filling & Workflow Adapte Olabilirliği:** 
+   Ödeme, havale veya kredi başvurusu gibi akışlarda her işlem türü farklı parametreler (`PaymentSlots`, `TransferSlots` vb.) gerektirir. Sınıflar hardcode yazılmak yerine **Reflection tabanlı `GenericSlotFillingStep<TSlots>`** olarak tasarlandı. Bu sayede sisteme yeni bir `record` eklendiğinde hiçbir akış kodunu değiştirmeden sistem dinamik olarak slot doldurabilir.
+2. **Dynamic Tool Registry & Auto-Discovery:** 
+   MCP araçlarının ve yetki alanlarının elle C# kodlarına gömülmesi yerine `IToolRegistry` ve `ToolGroupAttribute` mimarisi kuruldu. Assembly üzerindeki tüm araçlar uygulama başlarken otomatik taranır ve gruplanır.
+3. **Dinamik Context Enjeksiyonu (TopicContextProvider):** 
+   Sistem prompt'larının sabit metinler olması modelin odak kaybetmesine yol açar. `TopicContextProvider` sayesinde kullanıcının anlık sohbet konusuna göre sistem talimatları dinamik olarak üretilir ve modele aktarılır.
+4. **Runtime Fail-Fast Doğrulama:** 
+   MCP Sunucusunda tanımlı olan araçlar ile kod içerisindeki kayıtlar uygulama başlarken (`ValidateDiscoveredMcpTools`) karşılaştırılır. Uyuşmayan veya eksik bir araç varsa sistem runtime anında çökmeden startup'ta anında hata (`InvalidOperationException`) vererek güvenliği garanti eder.
+
+---
+
+## 3. Bu Sistem Mimarisinin Avantajları Nelerdir?
+
+* **%100 Determinizm ve Sıfır Hata (Orkestratör Bypass):** 
+  Müşteri borç ödeme akışındayken mesajlar LLM Orkestratör'e gönderilmez. `FlowRouter` sayesinde doğrudan MAF Workflow'a iletilir. Bu sayede LLM'in adımları atlaması, konudan sapması veya hatalı tutar çekmesi tamamen engellenir.
+* **Fintech Düzeyinde Güvenlik (6 Katmanlı Output Guard):** 
+  `ResponseSanitizer` sınıfı sayesinde model yanıt verseler dahi iç araç adları (`GetCreditCardStatement`), CoT düşünce adımları, XML prompt etiketleri, localhost URL'leri ve session token'ları kullanıcıya sızdırılamaz.
+* **Token ve Maliyet Tasarrufu (Tool Grouping):** 
+  Uzman ajanlara sadece yetkili oldukları araç grubu (`Account`, `Card`, `Analyze`) sunulur. Bir hesap uzmanının ekstre analiz aracını görmesi engellenerek hem token israfı önlenir hem de yanlış araç tetikleme ihtimali sıfırlanır.
+* **Human-in-the-Loop (HITL) Güvenliği:** 
+  Finansal etkisi olan işlemler asla LLM tarafından doğrudan çalıştırılmaz. MAF `RequestPort` onay kapısına bağlanarak kullanıcının ekrandan butonla açık onayı (`CONFIRM_PAYMENT`) alınır.
+* **Kolay Genişletilebilirlik:** 
+  Sisteme yeni bir bankacılık aracı, uzman ajan veya iş akışı eklemek yalnızca yeni bir sınıf ve `[ToolGroup]` etiketi eklemek kadar kolaydır.
+
+---
+
+## 4. Microsoft Agent Framework (MAF) Built-in Fonksiyon Entegrasyonu
+
+Sistem, Microsoft'un resmi AI ve Agent kütüphanelerinin **yerleşik (built-in) primitive ve API'ları** kullanılarak inşa edilmiştir:
+
+### 1. `Microsoft.Agents.AI` (Ajan ve Hafıza Yönetimi)
+- **`AIAgent` & `AgentSession`:** Uzman ajanlar (`HesapUzmani`, `KrediKartiUzmani`, `FinansalAnalizUzmani`) `IChatClient.AsAIAgent()` yerleşik metodu ile MAF ajanlarına dönüştürülür. Konuşma geçmişi ve durum MAF'ın kendi yerleşik `AgentSession` yapısı tarafından yönetilir.
+
+### 2. `Microsoft.Agents.AI.Workflows` (İş Akışları ve HITL Gates)
+- **`WorkflowBuilder` & `Workflow`:** İş akışları yerleşik `WorkflowBuilder` ile grafik düğümleri (nodes & edges) olarak inşa edilir.
+- **`Executor<TInput, TOutput>`:** Slot toplama adımları (`GenericSlotFillingStep<TSlots>`) MAF'ın yerleşik `Executor` sınıfından türetilmiştir.
+- **`RequestPort.Create<TInput, TOutput>()`:** Onay gerektiren durumlarda insan müdahalesi (HITL) için MAF'ın yerleşik `RequestPort` onay kapıları kullanılır.
+- **`IWorkflowContext`:** Adımlar arası durum aktarımı MAF'ın `QueueStateUpdateAsync` ve yerleşik context API'ları ile sağlanır.
+
+### 3. `Microsoft.Agents.AI.A2A` (Agent-to-Agent Protokolü)
+- Orkestratör ajanın uzman ajanlarla konuşması HTTP loopback üzerinde yerleşik A2A (JSON-RPC) protokolü ile gerçekleştirilir (`/a2a/hesap`, `/a2a/kart`).
+
+### 4. `Microsoft.Extensions.AI` (Abstrasksiyon ve MCP)
+- LLM model entegrasyonu `IChatClient`, `ChatMessage` ve `AITool` standart arabirimleriyle sağlanır.
+- MCP Server entegrasyonu `ModelContextProtocol.Server` paketi ve `[McpServerTool]`, `[McpServerToolType]` öznitelikleriyle yürütülür.
+
+---
+
+## 5. Proje Yapısı
 
 | Proje | Sorumluluk |
 |---|---|
-| `src/Banking.Domain` | Modeller + in-memory veri deposu + servisler (Hesap, Kart, Tahsilat) |
-| `src/Banking.Mcp` | Domain'i MCP araçlarına saran sınıflar (`[McpServerTool]`) |
-| `src/Banking.Agents` | Uzman ajanlar, MCP client, A2A orkestratör, AgentRuntime, tahsilat workflow'u |
-| `src/Banking.Host` | ASP.NET Core: API + MCP/A2A host + DI + basit web UI |
-| `tools/ApiDump` | (dev) Kurulu MAF/MCP/A2A assembly'lerinin API yüzeyini reflection ile döker |
-| `tools/WorkflowTest` | (dev) Tahsilat HITL onay gate'ini LLM olmadan deterministik test eder |
+| `src/Banking.Domain` | Modeller, in-memory banka veri deposu, hesap/kart/tahsilat servisleri ve vektör arama motorları (`SemanticFinancingSearcher`, `SemanticCampaignSearcher`). |
+| `src/Banking.Mcp` | MCP Server araçları (`AccountsTools`, `CardsTools`, `AnalyzeTools`) ve otomatik taranan `ToolRegistry` mimarisi. |
+| `src/Banking.Agents` | MAF Uzman Ajanları (`SpecialistAgents`), `AgentRuntime`, `AgentPrompts`, `TopicContextProvider`, `CollectionWorkflow` ve `TraceHub`. |
+| `src/Banking.Gateway` | REST API Gateway, `FlowRouter`, `GatewaySession` ve 6 katmanlı `ResponseSanitizer` (Output Guard). |
+| `src/Banking.Host` | ASP.NET Core Composition Root (`Program.cs`), MCP/A2A endpoint hostlama ve Markdown destekli Web UI. |
 
-## Gereksinimler
+---
 
-- .NET 9 SDK
-- Tool-calling destekli bir OpenAI modeli için **OpenAI API anahtarı** (`OPENAI_API_KEY`)
+## 6. Hızlı Başlangıç ve Çalıştırma
 
-## Çalıştırma
+### Gereksinimler
+- **.NET 9 SDK**
+- **OpenAI API Key** (`OPENAI_API_KEY`)
 
-API anahtarını ayarlamanın iki yolu var:
-
-**A) User Secrets (önerilen — anahtar repo dışında, kullanıcı profilinde saklanır):**
-```bash
-dotnet user-secrets set "Agents:ApiKey" "sk-..." --project src/Banking.Host
-dotnet run --project src/Banking.Host
-```
-
-**B) Ortam değişkeni:**
+### Çalıştırma
 ```powershell
-$env:OPENAI_API_KEY = "sk-..."        # PowerShell   (bash: export OPENAI_API_KEY="sk-...")
+# 1. API Anahtarını Tanımlayın (PowerShell)
+$env:OPENAI_API_KEY = "sk-..."
+
+# 2. Uygulamayı Başlatın
 dotnet run --project src/Banking.Host
 ```
 
-Sonra tarayıcıda **http://localhost:5080** adresini aç.
+Tarayıcıdan erişin: **`http://localhost:5080`**
 
-> Anahtar önceliği: `Agents:ApiKey` (User Secrets / appsettings) > `OPENAI_API_KEY`. Anahtarı değiştirmek için
-> aynı `user-secrets set` komutunu tekrar çalıştırman yeterli. Anahtarı `appsettings.json`'a yazma (paylaşılır/sızar).
+---
 
-Model `appsettings.json` → `Agents:Model` ile değiştirilebilir (varsayılan `gpt-4o-mini`).
-Dinleme adresi `Agents:SelfBaseUrl` (varsayılan `http://localhost:5080`); loopback MCP/A2A çağrıları bu adresi kullanır.
+## 7. Detaylı Mimari ve Tasarım Dokümanı
 
-## Endpoint'ler
-
-| Endpoint | İş |
-|---|---|
-| `GET /` | Basit chat UI |
-| `POST /api/chat` | `{ "message": "..." }` → orkestratör cevabı |
-| `POST /api/collect/start` | Tahsilat akışını başlatır |
-| `POST /api/collect/respond` | `{ "sessionId": "...", "answer": "..." }` → sıradaki soru / onay / makbuz |
-| `GET  /api/diag` | Wiring tanılaması (anahtarsız bile çalışır) |
-| `GET  /api/trace/stream` | Canlı katman izi (SSE) — UI'ın sağ paneli buna abone olur |
-| `/mcp` | MCP server (Streamable HTTP) |
-| `/a2a/hesap`, `/a2a/kart` | A2A (JSON-RPC) uzman endpoint'leri |
-
-### Canlı katman izi (sağ panel)
-
-UI iki panellidir: solda sohbet, sağda **canlı katman izi**. Her soruda çağrı zinciri gerçek zamanlı akar; her olay
-katmanına göre renklendirilir:
-
-```
-SYSTEM    Kullanıcı sorusu alındı → Orkestratör
-LLM       Orkestratör · model çağrısı
-A2A       Kart Uzmanı  → /a2a/kart
-LLM       Kart Uzmanı · model çağrısı
-MCP       list_cards  → CardService
-LLM       Kart Uzmanı · model çağrısı      (sentez)
-LLM       Orkestratör · model çağrısı      (final sentez)
-SYSTEM    Yanıt kullanıcıya hazır
-```
-
-İzleme, `IChatClient` (LLM çağrıları) ve `AIFunction` (A2A/MCP/Servis araçları) sarmalayıcılarıyla
-([Tracing/](src/Banking.Agents/Tracing/)) toplanır ve global `TraceHub` üzerinden SSE ile yayınlanır — A2A
-sınırının diğer tarafındaki uzman/MCP olayları da görünür.
-
-## İki akış
-
-**Q&A (orkestrasyon):** "Kredi kartı borcum ne kadar?"
-`/api/chat → Orkestratör → (A2A) KrediKartiUzmani → (MCP) get_card_debt → Domain → cevap`
-
-**Tahsilat (human-in-the-loop):** "Kart borcumu ödemek istiyorum" (UI'da 💳 düğmesi)
-`CollectionAgent eksik bilgileri sorar (hangi kart / tutar / kaynak hesap) → bilgiler tamamlanınca
-deterministik onay ekranı (MAF Workflow + RequestPort) → Onayla → Charge() → makbuz`.
-LLM **parayı çekmez**; tahsilat yalnızca onay sonrası deterministik düğümde yapılır.
-
-## Doğrulama durumu
-
-Anahtarsız (offline) doğrulananlar:
-
-- ✅ Solution temiz derlenir (.NET 9, 0 uyarı/0 hata).
-- ✅ Sunucu ayağa kalkar; `GET /api/diag` → `mcpToolCount: 7`, `specialistTransport: "A2A"`, `orchestratorReady: true`.
-- ✅ A2A endpoint'leri canlı (`GET /a2a/hesap` → 405; JSON-RPC POST → yapısal A2A yanıtı).
-- ✅ Tahsilat HITL onay gate'i (`tools/WorkflowTest`): ONAY → makbuz + bakiye düşer; RED → değişiklik yok.
-
-Gerçek `OPENAI_API_KEY` ile uçtan uca doğrulananlar (gpt-4o-mini):
-
-- ✅ **Q&A / kart:** "borçlarım ne kadar" → orkestratör →A2A→ kart uzmanı →MCP→ "Visa ****4521: ₺12.450, Mastercard ****8830: ₺8.900" (seed ile birebir).
-- ✅ **Q&A / hesap:** "bakiye + hareketler" → hesap uzmanı →MCP→ "₺48.750" + tüm hareketler (birebir doğru).
-- ✅ **Tahsilat (HITL):** ajan kart/tutar/hesap sorularını kendisi sordu → deterministik onay ekranı → **ONAY** → makbuz `RCPT-...-5000`, borç 8.900→3.900, bakiye 48.750→43.750; **RED** → "hiçbir tutar tahsil edilmedi", borç değişmedi.
-- ✅ **State tutarlılığı:** tahsilat sonrası Q&A güncellenmiş borcu/bakiyeyi okudu (ajanlar uydurmuyor, MCP araçlarını çağırıyor).
-
-### Dev araçlarını çalıştırma (opsiyonel)
-
-```bash
-dotnet run --project tools/WorkflowTest      # tahsilat HITL onay gate testi (anahtar gerekmez)
-dotnet run --project tools/ApiDump -- .       # MAF/MCP/A2A API yüzeyini maf_api.txt'e döker
-```
-
-## Notlar
-
-- Tek süreçte birden çok **adlı** MCP server desteklenmediğinden, tek MCP server tüm araçları sunar; uzmanlar
-  araçları **isimle filtreleyerek** alır (hesap araçları / kart araçları).
-- A2A endpoint'leri startup'ta map edilirken süreç-içi MCP'ye loopback yapamayacağından (sunucu henüz dinlemiyor),
-  uzmanlar `DeferredSpecialistAgent` ile **ilk çağrıda** (dinleme başladıktan sonra) tembel kurulur.
-- Demo "bugün" tarihi sabittir: 30.06.2026 (`BankClock.Today`). Tek demo müşterisi: `CUST-001`.
+Projenin tüm sınıf detayları, metot açıklamaları, kararları içeren eksiksiz Mermaid akış şeması ve uçtan uca senaryolar için [ANALIZ.md](ANALIZ.md) dokümanını inceleyebilirsiniz.

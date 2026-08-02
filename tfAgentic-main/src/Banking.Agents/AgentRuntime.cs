@@ -1,12 +1,16 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using A2A;
+using Banking.Agents.Collection;
 using Banking.Agents.Mcp;
+using Banking.Agents.Prompts;
 using Banking.Agents.Specialists;
 using Banking.Agents.Tracing;
 using Banking.Domain.MkCodes;
+using Banking.Mcp.Registry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OpenAI.Chat;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -15,7 +19,7 @@ using ChatRole = Microsoft.Extensions.AI.ChatRole;
 namespace Banking.Agents;
 
 /// <summary>Orkestratör yanıtı: metin + tahsilat akışının başlatılması gerekip gerekmediği + açılacak ekran mkCode (varsa).</summary>
-public sealed record OrchestratorReply(string Reply, bool StartCollection, string? OpenScreenMkCode);
+public record OrchestratorReply(string? Reply, string? TriggeredToolName, IDictionary<string, object?>? TriggeredToolArguments);
 
 /// <summary>
 /// Ajan grafiğini TEMBEL kurar. Uzmanlar süreç-içi MCP server'a (loopback) bağlanır; bu yüzden
@@ -25,44 +29,14 @@ public sealed record OrchestratorReply(string Reply, bool StartCollection, strin
 /// </summary>
 public sealed class AgentRuntime
 {
-    private const string OrchestratorInstructions =
-        """
-        <identity>
-        Sen bir Banka Asistanı Orkestratörüsün (Router). Temel görevin kullanıcının niyetini doğru analiz edip en uygun uzmana (Agent) veya araca (Tool) yönlendirmektir. ASLA KENDİ BAŞINA CEVAP UYDURMA, sadece araçları kullanarak yanıt üret.
-        </identity>
-
-        <routing_rules>
-        1. UZMANLARA DANIŞMA: 
-           - Hesap, bakiye, IBAN, hesap hareketi/işlem soruları için SADECE 'hesap_uzmanina_sor' aracını kullan.
-           - SADECE kredi kartı borcu, kullanılabilir limit, asgari ödeme ve son ödeme tarihi soruları için 'kart_uzmanina_sor' aracını kullan.
-           - Kredi kartı harcama analizi, ekstre özetleri, puan ve bonus kazançları, taksitli/peşin harcama oranları, en çok harcama yapılan mağazalar, kampanya/bonus önerileri ile FINANSMAN, KREDİ, BANA UYGUN FİNANSMANLAR veya BORÇ YAPILANDIRMA TAVSİYELERİ için SADECE 'analiz_uzmanina_sor' aracını kullan. (DİKKAT: Kullanıcı "Finansmanları göster", "Bana uygun krediler", "Kredi kartı harcamalarımı analiz et", "Ekstremi incele" gibi ifadeler kullandığında BU TALEBİ KESİNLİKLE 'analiz_uzmanina_sor' ARACINA YÖNLENDİR!).
-           - Eğer soru birden fazlasını kapsıyorsa sırayla ilgili araçları kullan.
-        
-        2. YENİ İŞ AKIŞI BAŞLATMA (TAHSİLAT):
-           - Kullanıcı yeni bir kredi kartı borcunu ÖDEMEK / kapatmak isterse (bu bir bilgi sorusu değil, EYLEM talebidir), 'tahsilat_akisini_baslat' aracını çağır.
-        
-        3. EKRAN YÖNLENDİRMESİ (NAVIGATION):
-           - SADECE KULLANICI AÇIKÇA BİR EKRANA GİTMEK/MENÜYÜ AÇMAK İSTERSE (örn: "Para transferi ekranını aç", "hesaplarım menüsüne git") ekran açma araçlarını kullan.
-           - Önce 'ekran_kodu_ara' aracıyla uygun mkCode'u bul, sonra SADECE bu kod ile 'ekran_ac' aracını çağır.
-           - DİKKAT: Kullanıcı bir bilgi istiyorsa (örn: "Kartlarımı göster", "Bakiyem ne kadar"), bu ekran açma talebi DEĞİLDİR! Uzmanlara sor.
-        </routing_rules>
-
-        <response_guidelines>
-        1. KESİNLİKLE MARKDOWN FORMATI: Tüm yanıtları kullanıcıya sunarken KESİNLİKLE Markdown formatında oluştur.
-        2. ALT ALTA VE DÜZENLİ LİSTELEME: Birden fazla bilgi, seçenek, hesap, kart, işlem veya adım sunarken bunları KESİNLİKLE Markdown liste formatında (`- ` veya `1. `) ALT ALTA ve okunabilir şekilde sırala. Kesinlikle tek satırda birleştirme veya yan yana yazma.
-        3. DİL VE ÜSLUP & HİÇBİR DURUM MESAJI / GİRİŞ CÜMLESİ YAZMA:
-           - ASLA "Bu soru X içeriyor", "Hesap uzmanına danışmam gerekiyor", "Bir dakika lütfen", "Öncelikle uzmana soruyorum", "Araç çağırıyorum" gibi HİÇBİR durum mesajı, yönlendirme açıklaması veya ön sunuş cümlesi YAZMA!
-           - ASLA yanıtın başında veya içinde 'UZMAN', 'ARAÇ', 'DANIŞMAM GEREKİYOR', 'BİR DAKİKA LÜTFEN' gibi ifadeler geçmemeli.
-           - Sadece ve doğrudan nihai sonucu/bilgiyi açık, kibar ve doğal bir Türkçe ile ilet.
-        </response_guidelines>
-        """;
-
     private readonly AgentOptions _options;
     private readonly ChatClient _chat;
     private readonly TraceHub _hub;
     private readonly ILogger<AgentRuntime> _logger;
     private readonly SemanticMkCodeSearcher _semanticMkCodeSearcher;
-    private readonly AnalyzeTools _analyzeTools;
+    private readonly IServiceProvider _serviceProvider;
+    private string? _currentSessionId;
+    private string? _currentMessage;
 
     private readonly DeferredSpecialistAgent _hesap;
     private readonly DeferredSpecialistAgent _kart;
@@ -72,13 +46,8 @@ public sealed class AgentRuntime
     private readonly SemaphoreSlim _orchLock = new(1, 1);
     private BankingMcpClient? _mcp;
     private AIAgent? _orchestrator;
+    private AgentSession? _session;
     private volatile bool _orchReady;
-
-    // Orkestratör 'tahsilat_akisini_baslat' aracını çağırınca bu istek için işaretlenir (AsyncLocal → istek-izole).
-    private static readonly AsyncLocal<StrongBox<bool>?> PaymentIntent = new();
-
-    // Orkestratör 'ekran_ac' aracını çağırınca açılacak mkCode'u tutar.
-    private static readonly AsyncLocal<StrongBox<string?>?> NavigationIntent = new();
 
     public int McpToolCount { get; private set; }
     public string SpecialistTransport { get; private set; } = "(kurulmadı)";
@@ -89,14 +58,15 @@ public sealed class AgentRuntime
         TraceHub hub,
         ILogger<AgentRuntime> logger,
         SemanticMkCodeSearcher semanticMkCodeSearcher,
-        AnalyzeTools analyzeTools)
+        AnalyzeTools analyzeTools,
+        IServiceProvider serviceProvider)
     {
         _options = options;
         _chat = chat;
         _hub = hub;
         _logger = logger;
         _semanticMkCodeSearcher = semanticMkCodeSearcher;
-        _analyzeTools = analyzeTools;
+        _serviceProvider = serviceProvider;
 
         _logger.LogInformation("AgentRuntime başlatıldı. Sağlayıcı: {Provider}, Model: {Model}.", _options.Provider, _options.Model);
 
@@ -151,7 +121,7 @@ public sealed class AgentRuntime
         if (name == "analiz")
         {
             _logger.LogInformation("FinansalAnalizUzmani kuruluyor (MCP araçları bağlandı).");
-            var tools = TraceMcpTools(mcp.ToolsFor(BankingMcpClient.AnalyzeToolNames), "AnalyzeService");
+            var tools = TraceMcpTools(mcp.ToolsForGroup(ToolGroup.Analyze), "AnalyzeService");
             return SpecialistAgents.BuildAnalyzeAgent(TracedClient("Finansal Analiz Uzmanı"), tools);
         }
 
@@ -161,10 +131,78 @@ public sealed class AgentRuntime
         return name == "hesap"
             ? SpecialistAgents.BuildHesapAgent(
                 TracedClient("Hesap Uzmanı"),
-                TraceMcpTools(mcp.ToolsFor(BankingMcpClient.AccountToolNames), "AccountService"))
+                TraceMcpTools(mcp.ToolsForGroup(ToolGroup.Account), "AccountService"))
             : SpecialistAgents.BuildKartAgent(
                 TracedClient("Kart Uzmanı"),
-                TraceMcpTools(mcp.ToolsFor(BankingMcpClient.CardToolNames), "CardService"));
+                TraceMcpTools(mcp.ToolsForGroup(ToolGroup.Card), "CardService"));
+    }
+
+    /// <summary>
+    /// Aktif olan herhangi bir TSlots Record nesnesine (PaymentSlots, TransferSlots vb.) göre
+    /// oturuma özel dinamik MAF workflow ajanını inşa eder.
+    /// </summary>
+    public async Task<AIAgent> GetWorkflowAgentAsync<TSlots>(
+        string sessionId,
+        Collection.WorkflowSessionStore sessionStore,
+        string instructions,
+        string agentName,
+        CancellationToken ct = default)
+        where TSlots : class
+    {
+        var mcp = await EnsureMcpAsync(ct);
+        var tools = new List<AITool>();
+        // TODO: Demo aşamasında tüm MCP araçları veriliyor. İleride Record şeması ile semantik matching yapılarak sadece ilgili gruplar yüklenecek.
+        tools.AddRange(TraceMcpTools(mcp.ToolsForGroup(ToolGroup.Card), "CardService"));
+        tools.AddRange(TraceMcpTools(mcp.ToolsForGroup(ToolGroup.Account), "AccountService"));
+        tools.AddRange(TraceMcpTools(mcp.ToolsForGroup(ToolGroup.Analyze), "AnalyzeService"));
+
+        var workflowName = typeof(TSlots).Name.ToLowerInvariant();
+        var updateSlotTool = AIFunctionFactory.Create(
+            (string key, object value) =>
+            {
+                sessionStore.UpdateSlot(sessionId, key, value);
+                _hub.Publish("WORKFLOW", $"StateBag Parametre Güncellendi → [{key} = {value}] (Session: '{sessionId}')");
+                return $"Slot '{key}' başarıyla güncellendi: '{value}'";
+            },
+            new AIFunctionFactoryOptions
+            {
+                Name = "update_slot",
+                Description = $"Aktif '{typeof(TSlots).Name}' iş akışı için kullanıcıdan alınan her bir tekil parametreyi (CardId, Amount, SourceAccountId) alındığı an StateBag'e kaydetmek için kullanılır. Örn: key='CardId', value='CARD-2002'."
+            });
+
+        var proposeTool = AIFunctionFactory.Create(
+            (string cardId, decimal amount, string sourceAccountId) =>
+            {
+                var slots = new Records.PaymentSlots(cardId, amount, sourceAccountId, Banking.Domain.BankClock.Today);
+                sessionStore.SaveSlots(sessionId, workflowName, slots);
+                _hub.Publish("WORKFLOW", $"Dinamik {typeof(TSlots).Name} StateBag Kaydedildi (Session: '{sessionId}')");
+                return "PROPOSAL_READY:" + System.Text.Json.JsonSerializer.Serialize(slots);
+            },
+            new AIFunctionFactoryOptions
+            {
+                Name = "propose_payment",
+                Description = $"Aktif '{typeof(TSlots).Name}' iş akışının tüm parametreleri netleştiğinde çağrılır."
+            });
+
+        var cancelTool = AIFunctionFactory.Create(
+            () => "CANCELLED",
+            new AIFunctionFactoryOptions
+            {
+                Name = "cancel_collection",
+                Description = $"Kullanıcı aktif '{typeof(TSlots).Name}' işleminden vazgeçtiğinde akışı sonlandırır."
+            });
+
+        tools.Add(new TracingAIFunction(updateSlotTool, _hub, "WORKFLOW", "update_slot", "StateBag Anlık Güncelleme"));
+        tools.Add(new TracingAIFunction(proposeTool, _hub, "WORKFLOW", "propose_payment", $"Aktif Workflow: {workflowName}"));
+        tools.Add(new TracingAIFunction(cancelTool, _hub, "WORKFLOW", "cancel_collection", "kullanıcı vazgeçti"));
+
+        var client = TracedClient(agentName);
+        return client.AsAIAgent(instructions: instructions, name: agentName, tools: tools);
+    }
+
+    public Task<AIAgent> GetCollectionAgentAsync(string sessionId, Collection.WorkflowSessionStore sessionStore, CancellationToken ct = default)
+    {
+        return GetWorkflowAgentAsync<Records.PaymentSlots>(sessionId, sessionStore, Prompts.AgentPrompts.CollectionInstructions, "TahsilatAsistani", ct);
     }
 
     /// <summary>OpenAI chat client'ını etiketli izleyici ile sarar (LLM çağrıları görünür olur).</summary>
@@ -234,20 +272,28 @@ public sealed class AgentRuntime
                 SpecialistTransport = "in-process";
             }
 
+            var registry = ToolRegistry.Instance;
+            var hesapDef = registry.Get("hesap_uzmanina_sor");
+            var kartDef = registry.Get("kart_uzmanina_sor");
+            var analizDef = registry.Get("analiz_uzmanina_sor");
+            var workflowDef = registry.Get("start_workflow");
+            var ekranAraDef = registry.Get("ekran_kodu_ara");
+            var ekranAcDef = registry.Get("ekran_ac");
+
             var hesapTool = hesapAgent.AsAIFunction(new AIFunctionFactoryOptions
             {
-                Name = "hesap_uzmanina_sor",
-                Description = "Hesap, bakiye, IBAN ve hesap hareketi sorularını hesap uzmanına yönlendirir."
+                Name = hesapDef.Name,
+                Description = hesapDef.Description
             });
             var kartTool = kartAgent.AsAIFunction(new AIFunctionFactoryOptions
             {
-                Name = "kart_uzmanina_sor",
-                Description = "Kredi kartı borcu, limit ve son ödeme tarihi sorularını kart uzmanına yönlendirir."
+                Name = kartDef.Name,
+                Description = kartDef.Description
             });
             var analizTool = analizAgent.AsAIFunction(new AIFunctionFactoryOptions
             {
-                Name = "analiz_uzmanina_sor",
-                Description = "Kredi kartı ekstre analizi, puan kazançları, taksit oranları ve kampanya/bonus tavsiyeleri sorularını analiz uzmanına yönlendirir."
+                Name = analizDef.Name,
+                Description = analizDef.Description
             });
 
             var tools = new List<AITool>
@@ -256,30 +302,47 @@ public sealed class AgentRuntime
                 new TracingAIFunction(kartTool, _hub, "A2A", "Kart Uzmanı", $"→ {_options.A2AUrl("kart")}"),
                 new TracingAIFunction(analizTool, _hub, "A2A", "Analiz Uzmanı", $"→ {_options.A2AUrl("analiz")}"),
                 new TracingAIFunction(
-                    AIFunctionFactory.Create(TahsilatAkisiniBaslat, name: "tahsilat_akisini_baslat"),
-                    _hub, "WORKFLOW", "Tahsilat akışı tetiklendi"),
+                    AIFunctionFactory.Create(StartWorkflowAsync, new AIFunctionFactoryOptions { Name = workflowDef.Name, Description = workflowDef.Description }),
+                    _hub, "WORKFLOW", "Jenerik iş akışı tetiklendi"),
                 new TracingAIFunction(
-                    AIFunctionFactory.Create(EkranKoduAra, name: "ekran_kodu_ara"),
+                    AIFunctionFactory.Create(EkranKoduAra, new AIFunctionFactoryOptions { Name = ekranAraDef.Name, Description = ekranAraDef.Description }),
                     _hub, "WORKFLOW", "Semantik Ekran Kodu Arama tetiklendi"),
                 new TracingAIFunction(
-                    AIFunctionFactory.Create(EkranAc, name: "ekran_ac"),
+                    AIFunctionFactory.Create(EkranAc, new AIFunctionFactoryOptions { Name = ekranAcDef.Name, Description = ekranAcDef.Description }),
                     _hub, "WORKFLOW", "Ekran yönlendirmesi tetiklendi"),
             };
 
             _orchestrator = TracedClient("Orkestratör")
-                .AsAIAgent(instructions: OrchestratorInstructions, name: "Orkestrator", tools: tools);
+                .AsAIAgent(new ChatClientAgentOptions
+                {
+                    ChatOptions = new() { Instructions = AgentPrompts.OrchestratorInstructions, Tools = tools },
+                    Name = "Orkestrator",
+                    AIContextProviders = [
+                        new Banking.Agents.ContextProviders.TopicContextProvider(_hub)
+                    ]
+                });
             _orchReady = true;
             _logger.LogInformation("Orkestratör hazır (uzman erişimi: {Transport}).", SpecialistTransport);
         }
         finally { _orchLock.Release(); }
     }
 
-    [Description("Kullanıcı bir kredi kartı borcunu ÖDEMEK veya kapatmak istediğinde çağrılır; resmî tahsilat (ödeme) akışını başlatır. Yalnızca ödeme NİYETİNDE çağır; borç/limit/tarih BİLGİSİ sorularında ASLA çağırma.")]
-    private string TahsilatAkisiniBaslat()
+    [Description("Kullanıcının niyetine uygun jenerik iş akışını (ör: 'card-payment') başlatır.")]
+    private async Task<string> StartWorkflowAsync(string workflowName)
     {
-        _logger.LogInformation("Tahsilat akışının başlatılması istendi.");
-        if (PaymentIntent.Value is { } box) box.Value = true;
-        return "Tahsilat akışı başlatılıyor.";
+        _logger.LogInformation("Jenerik iş akışının başlatılması istendi: {WorkflowName}", workflowName);
+        var sessionId = !string.IsNullOrWhiteSpace(_currentSessionId) ? _currentSessionId : $"gw-{Guid.NewGuid():N}"[..16];
+        var message = !string.IsNullOrWhiteSpace(_currentMessage) ? _currentMessage : "İş akışı başlatılıyor";
+
+        var store = _serviceProvider.GetService(typeof(CollectionSessionStore)) as CollectionSessionStore;
+        if (store is null)
+        {
+            return $"{workflowName} iş akışı başlatılamadı: Oturum deposu bulunamadı.";
+        }
+
+        var result = await store.StartAsync(sessionId, message);
+        _logger.LogInformation("Jenerik iş akışı başarıyla başlatıldı ve oturuma bağlandı: {WorkflowName} (SessionId: {SessionId})", workflowName, sessionId);
+        return result.Prompt ?? $"{workflowName} iş akışı başlatıldı.";
     }
 
     /// <summary>
@@ -313,7 +376,6 @@ public sealed class AgentRuntime
     private string EkranAc(string mkCode)
     {
         _logger.LogInformation("Ekran yönlendirmesi tetiklendi. Hedef ekran kodu: {MkCode}", mkCode);
-        if (NavigationIntent.Value is { } box) box.Value = mkCode;
         return $"{mkCode} ekranı açılıyor.";
     }
 
@@ -335,33 +397,40 @@ public sealed class AgentRuntime
     }
 
     /// <summary>Q&A: kullanıcı sorusunu orkestratöre iletir; yanıt metni + tahsilat akışı başlatılmalı mı bilgisi döner.</summary>
-    public async Task<OrchestratorReply> AskAsync(string message, IList<ChatMessage>? history = null, CancellationToken ct = default)
+    public async Task<OrchestratorReply> AskAsync(string message, string? sessionId = null, IList<ChatMessage>? history = null, CancellationToken ct = default)
     {
         await EnsureOrchestratorAsync(ct);
+
+        _currentSessionId = !string.IsNullOrWhiteSpace(sessionId) ? sessionId : $"gw-{Guid.NewGuid():N}"[..16];
+        _currentMessage = message;
 
         var messages = BuildNativeContext(message, history);
 
         _logger.LogInformation("Kullanıcı sorusu işleniyor.");
         _hub.Publish("SYSTEM", $"Kullanıcı sorusu alındı → '{message}'");
-        var intentBox = new StrongBox<bool>(false);
-        var navBox = new StrongBox<string?>(null);
 
-        PaymentIntent.Value = intentBox;
-        NavigationIntent.Value = navBox;
+        _session ??= await _orchestrator!.CreateSessionAsync(cancellationToken: ct);
 
-        try
+        var response = await _orchestrator!.RunAsync(messages, session: _session, cancellationToken: ct);
+        
+        _logger.LogInformation("Orkestratör yanıtı üretildi.");
+        _hub.Publish("SYSTEM", "Yanıt kullanıcıya hazır");
+
+        string? triggeredToolName = null;
+        IDictionary<string, object?>? triggeredToolArguments = null;
+
+        if (response.Messages != null)
         {
-            var response = await _orchestrator!.RunAsync(messages, cancellationToken: ct);
-            _logger.LogInformation("Orkestratör yanıtı üretildi.");
-            _hub.Publish("SYSTEM", "Yanıt kullanıcıya hazır");
+            var functionCalls = response.Messages.SelectMany(m => m.Contents.OfType<Microsoft.Extensions.AI.FunctionCallContent>()).ToList();
+            var lastCall = functionCalls.LastOrDefault();
+            if (lastCall != null)
+            {
+                triggeredToolName = lastCall.Name;
+                triggeredToolArguments = lastCall.Arguments;
+            }
+        }
 
-            return new OrchestratorReply(response.Text, intentBox.Value, navBox.Value);
-        }
-        finally
-        {
-            PaymentIntent.Value = null;
-            NavigationIntent.Value = null;
-        }
+        return new OrchestratorReply(response.Text, triggeredToolName, triggeredToolArguments);
     }
 
     /// <summary>Q&A (Streaming): kullanıcı sorusunu orkestratöre iletir ve token güncellemelerini akış olarak döner.</summary>
@@ -376,30 +445,17 @@ public sealed class AgentRuntime
 
         _logger.LogInformation("Canlı akış (streaming) yanıt üretimi başlatıldı.");
         _hub.Publish("SYSTEM", $"[STREAMING] Kullanıcı sorusu alındı → '{message}'");
-        var intentBox = new StrongBox<bool>(false);
-        var navBox = new StrongBox<string?>(null);
 
-        PaymentIntent.Value = intentBox;
-        NavigationIntent.Value = navBox;
-
-        try
+        var updates = _orchestrator!.RunStreamingAsync(messages, cancellationToken: ct);
+        await foreach (var update in updates.WithCancellation(ct))
         {
-            var updates = _orchestrator!.RunStreamingAsync(messages, cancellationToken: ct);
-            await foreach (var update in updates.WithCancellation(ct))
+            if (!string.IsNullOrEmpty(update.Text))
             {
-                if (!string.IsNullOrEmpty(update.Text))
-                {
-                    yield return update.Text;
-                }
+                yield return update.Text;
             }
-            _logger.LogInformation("Canlı akış (streaming) yanıt üretimi tamamlandı.");
-            _hub.Publish("SYSTEM", "[STREAMING] Yanıt akışı tamamlandı");
         }
-        finally
-        {
-            PaymentIntent.Value = null;
-            NavigationIntent.Value = null;
-        }
+        _logger.LogInformation("Canlı akış (streaming) yanıt üretimi tamamlandı.");
+        _hub.Publish("SYSTEM", "[STREAMING] Yanıt akışı tamamlandı");
     }
 
     public async Task<object> GetDiagnosticsAsync(CancellationToken ct = default)

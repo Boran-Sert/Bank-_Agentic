@@ -208,8 +208,8 @@ public sealed class AgentRuntime
     /// <summary>OpenAI chat client'ını etiketli izleyici ile sarar (LLM çağrıları görünür olur).</summary>
     private IChatClient TracedClient(string label)
     {
-        _logger.LogInformation("{Label} için izleme özellikli chat istemcisi oluşturuldu.", label);
-        return new TracingChatClient(_chat.AsIChatClient(), _hub, label);
+        _logger.LogInformation("{Label} için izleme özellikli chat istemcisi oluşturuldu (Temperature: {Temp}).", label, _options.Temperature);
+        return new TracingChatClient(_chat.AsIChatClient(), _hub, label, _options.Temperature);
     }
 
     /// <summary>MCP araçlarını izleyici ile sarar: çağrıldıklarında "MCP → tool → Service" olayı yayınlanır.</summary>

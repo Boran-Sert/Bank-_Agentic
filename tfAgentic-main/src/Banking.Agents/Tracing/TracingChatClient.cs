@@ -9,11 +9,14 @@ namespace Banking.Agents.Tracing;
 /// ve modelden dönen yanıt metnini (veya Araç Çağrısı kararlarını) merkezi TraceHub sistemine yayınlar.
 /// Etiket, hangi ajanın düşündüğünü gösterir (Orkestratör, Hesap Uzmanı, Finansal Analiz Uzmanı vb.).
 /// </summary>
-public sealed class TracingChatClient(IChatClient inner, TraceHub hub, string label) : DelegatingChatClient(inner)
+public sealed class TracingChatClient(IChatClient inner, TraceHub hub, string label, float temperature = 0.1f) : DelegatingChatClient(inner)
 {
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
+        options ??= new ChatOptions();
+        options.Temperature ??= temperature;
+
         var msgList = (messages ?? Enumerable.Empty<ChatMessage>()).ToList();
         var lastMsgSummary = GetMessageSummary(msgList.LastOrDefault());
         if (lastMsgSummary.Length > 300) lastMsgSummary = string.Concat(lastMsgSummary.AsSpan(0, 300), "... [Kesildi]");
@@ -33,6 +36,9 @@ public sealed class TracingChatClient(IChatClient inner, TraceHub hub, string la
     public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
+        options ??= new ChatOptions();
+        options.Temperature ??= temperature;
+
         var msgList = (messages ?? Enumerable.Empty<ChatMessage>()).ToList();
         var lastMsgSummary = GetMessageSummary(msgList.LastOrDefault());
         if (lastMsgSummary.Length > 300) lastMsgSummary = string.Concat(lastMsgSummary.AsSpan(0, 300), "... [Kesildi]");

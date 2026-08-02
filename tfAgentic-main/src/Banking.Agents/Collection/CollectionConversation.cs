@@ -114,7 +114,7 @@ public sealed class CollectionConversation
         }
 
         // 3. Konu Dışı Soru Algılama: Kullanıcı tahsilat dışı soru sorduysa (örn: "kampanyalar nelerdir?") Orkestratöre danış, StateBag'i koru!
-        if (agentText?.Contains("bilgi veremiyorum") == true || agentText?.Contains("yardımcı olamıyorum") == true)
+        if (agentText?.Contains("bilgi veremiyorum") == true || agentText?.Contains("yardımcı olamıyorum") == true || agentText?.Contains("bilgi veremem") == true)
         {
             _hub.Publish("SECURITY", "Output Guard: 1 iç bilgi sızıntısı veya konu dışı soru tespit edildi ve temizlendi");
             var fallback = await _runtime.AskAsync(userMessage);

@@ -14,6 +14,9 @@ public sealed class AgentOptions
     /// <summary>OpenAI model adı (tool-calling destekli olmalı).</summary>
     public string Model { get; set; } = "gpt-4o-mini";
 
+    /// <summary>LLM sıcaklık (temperature) parametresi. Deterministik yanıtlar için düşük (0.1) tutulur.</summary>
+    public float Temperature { get; set; } = 0.1f;
+
     /// <summary>OpenAI API anahtarı. Tipik olarak OPENAI_API_KEY ortam değişkeninden gelir.</summary>
     public string? ApiKey { get; set; }
 

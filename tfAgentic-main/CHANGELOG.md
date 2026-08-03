@@ -1,5 +1,37 @@
 # Mimari Değişiklik Günlüğü (Changelog)
 
+## Sürüm: [Clean-Code-Session-Constants-Refactor] - 2026-08-03
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+1. **Oturum İsimlendirmeleri ve Kafa Karışıklığı:** Eski yapıda `GatewaySession` ve `CollectionSessionId` isimlendirmeleri hem isim karmaşasına hem de genel kullanıcı chat oturumu ile workflow oturumunun karıştırılmasına yol açıyordu.
+2. **Magic String Kullanımı:** Kod genelinde hardcode dize sabitleri (`"question"`, `"confirmation"`, `"completed"`, `"GATEWAY"`, `"ekran_ac"` vb.) serpiştirilmiş durumdaydı ve takip edilebilir tip güvenli yapıda değildi.
+3. **Muğlak Metod İsimleri:** `ProcessAsync`, `RouteAsync`, `RespondAsync`, `AskAsync` gibi metod isimleri ne iş yaptığını veya hangi bileşenle konuştuğunu açıkça ifade etmiyordu.
+
+### Çözüm ve Yeni Mimari
+
+#### 1. Oturum Mimarisi İyileştirmeleri (`UserSession` & `WorkflowSessionId`)
+- `GatewaySession` ismi **`UserSession`** olarak güncellendi.
+- `AppState` içerisindeki `CollectionSessionId` alanı **`WorkflowSessionId`** adını aldı.
+- `CollectionSessionStore` sınıfı **`WorkflowConversationStore`** olarak yeniden adlandırıldı.
+
+#### 2. Merkezi Tip Güvenli Sabitler (`Banking.Domain.Constants`)
+- **`WorkflowStatuses`**: `Question`, `Confirmation`, `Completed`, `Cancelled`
+- **`WorkflowPhases`**: `Slot`, `Confirm`, `Done`, `Idle`, `SlotFilling`, `AwaitingApproval`, `Completed`, `Cancelled`
+- **`TraceCategories`**: `Gateway`, `FlowRouter`, `System`, `Workflow`, `Security`, `Service`
+- **`ToolNames`**: `StartWorkflow`, `OpenScreen`, `SearchScreenCode`, `AskAccountSpecialist`, `AskCardSpecialist`, `AskAnalyzeSpecialist`
+
+#### 3. Niyet Belirten (Self-Describing) Metod İsimleri (Clean Code)
+- `GatewayService.ProcessAsync` ➡️ `ProcessUserRequestAsync`
+- `GatewayService.MapCollectionResult` ➡️ `MapWorkflowResultToResponse`
+- `FlowRouter.RouteAsync` ➡️ `RouteUserRequestAsync`
+- `WorkflowConversationStore.HasActiveSession` ➡️ `HasActiveWorkflowSession`
+- `WorkflowConversationStore.StartAsync` ➡️ `StartWorkflowConversationAsync`
+- `WorkflowConversationStore.RespondAsync` ➡️ `ProcessWorkflowStepMessageAsync`
+- `CollectionConversation.RespondAsync` ➡️ `ProcessUserMessageAsync`
+- `AgentRuntime.AskAsync` ➡️ `AskOrchestratorAsync`
+
+---
+
 ## Sürüm: [Generic-StateBag-Refactor] - 2026-08-02
 
 ### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)

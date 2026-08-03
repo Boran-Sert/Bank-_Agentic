@@ -1,6 +1,48 @@
 # Mimari Değişiklik Günlüğü (Changelog)
 
-## Sürüm: [Dynamic-Workflow-Transfer-Refactor] - 2026-08-03
+## Sürüm: [Declarative-MAF-Agent-Studio-Refactor] - 2026-08-04
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+1. **Statik C# İş Akışı Bağımlılığı:** Yeni bir iş akışı veya ajan tanımlamak C# sınıfı yazmayı, derlemeyi ve servisi yeniden başlatmayı gerektiriyordu. Dinamik ve çalışma zamanında (runtime) tanımlanabilen deklaratif ajan yapısı bulunmuyordu.
+2. **Microsoft Agent Framework (MAF) Declarative Şema Desteği Eksikliği:** Resmi MAF standartlarında sunulan YAML/JSON deklaratif ajanı tanımlarının ayrıştırılıp sistemdeki RAG vektörel yönlendiricisine ve slot-filling motoruna entegre edilmesi gerekiyordu.
+3. **Sert Kodlanmış Dize ve Ajan İsimleri (Magic Strings):** Kod tabanında ajan isimleri (`"HesapUzmani"`, `"KrediKartiUzmani"`, `"FinansalAnalizUzmani"`) ve trace kategorileri (`"LLM"`, `"SECURITY"`, `"WORKFLOW"`) dağınık ve hardcoded string ifadeler halinde bulunuyordu.
+4. **Görsel Deklaratif Ajan Tasarım Arayüzü Eksikliği:** Kullanıcıların ve geliştiricilerin kod yazmadan UI üzerinden form doldurarak veya YAML düzenleyerek anında ajan oluşturabileceği bir stüdyo paneli eksikti.
+
+### Çözüm ve Yeni Mimari
+
+#### 1. Microsoft Agent Framework (MAF) Deklaratif Ajan Motoru (`DeclarativeWorkflowBuilder` & `DeclarativeActionExecutor`)
+- **`DeclarativeWorkflowBuilder`**: MAF resmi YAML ve JSON deklaratif şemalarını (`MicrosoftAgentDeclarativeDefinition`) çalışma zamanında ayrıştırarak dinamik sistem talimatları, parametre şemaları ve `update_slot`/`propose_*` kurallarını otomatik üreten builder yapısı kuruldu.
+- **`DeclarativeActionExecutor`**: Sıfır C# kodu gerektiren, deklaratif ajanların onay ve yürütme aşamalarını yöneten jenerik eylem yürütücüsü eklendi.
+
+#### 2. Çalışma Zamanı Dinamik Kayıt, Disk Kalıcılığı ve Anlık RAG Vektör İndeksleme
+- **`WorkflowRegistry.RegisterDeclarativeWorkflow`**: C# derlemesi olmadan dinamik ajanları belleğe kaydeder.
+- **Disk Kalıcılığı (`declarative-agents/`)**: Oluşturulan deklaratif ajanlar `declarative-agents/*.yaml` olarak diske kaydedilir ve uygulama açılışında otomatik yüklenir.
+- **`/api/workflows/register-declarative` Endpoint**: HTTP POST ile yeni YAML/JSON deklaratif ajan kaydı alır ve anında `SemanticWorkflowSearcher` (ONNX RAG) vektör indeksine ekler (Sıfır Cold Start).
+
+#### 3. Merkezi Ajan ve Trace Sabitleri Standartlaştırması (`AgentConstants` & `TraceCategories`)
+- **`Banking.Domain.Constants.AgentConstants`**: Uzman ajan isimleri (`SpecialistNames.Account`, `Card`, `Analyze`, `CustomerSupport`) ve araç grupları tek noktada toplandı.
+- **`TraceCategories`**: `Llm`, `Context`, `Mcp`, `A2a` kategorileri merkezi sabit olarak eklendi ve `TracingChatClient`, `ResponseSanitizer`, `WorkflowSessionStore` sınıflarındaki magic dize kullanımı temizlendi.
+- **`SpecialistAgents.cs` Temizliği**: Eski monolitik cephe sınıfı kaldırılarak modüler uzman sınıflarına geçiş tamamlandı.
+
+#### 4. UI Declarative Agent Studio & Canlı YAML Tasarım Paneli (`index.html`)
+- Görsel Form vs. YAML Stüdyo modu eklendi.
+- Parametre ekleme/silme, dinamik şema üretimi ve hazır şablonlar (`Kredi Kartı Limit Artırımı`, `Otomatik Ödeme Talimatı`, `Kayıp/Çalıntı Kart İptal`) entegre edildi.
+
+---
+
+### Dışa Kapalı (Internal) C# Değişiklikleri
+- **[Yeni Dosya]** `src/Banking.Agents/Workflows/DeclarativeWorkflowBuilder.cs`: MAF Declarative YAML/JSON ayrıştırıcısı ve jenerik executor.
+- **[Yeni Dosya]** `src/Banking.Domain/Constants/AgentConstants.cs`: Merkezi ajan ve araç grubu sabitleri.
+- **[Yeni Klasör & Dosyalar]** `src/Banking.Host/declarative-agents/`: Disk kalıcılığı için örnek deklaratif ajan şablonları (`card-payment.yaml`, `limit-artirim.yaml`).
+- **[Silindi]** `src/Banking.Agents/Specialists/SpecialistAgents.cs`: Eski monolitik uzman ajan cephe sınıfı.
+- **[Güncellendi]** `src/Banking.Agents/Workflows/WorkflowRegistry.cs`: Dinamik MAF deklaratif ajan kaydı ve DI bağımlılık enjeksiyonu.
+- **[Güncellendi]** `src/Banking.Host/Program.cs`: Diski tarama, kalıcı yükleme ve `/api/workflows/register-declarative` REST endpoint entegrasyonu.
+- **[Güncellendi]** `src/Banking.Domain/Workflows/SemanticWorkflowSearcher.cs`: Dinamik ekleme (`AddOrUpdate`) desteği.
+- **[Güncellendi]** `src/Banking.Agents/Workflows/WorkflowSessionStore.cs`: Dynamic `Dictionary<string, object?>` slot haritalama desteği.
+- **[Güncellendi]** `src/Banking.Host/wwwroot/index.html`: Visual Form & Live YAML sync destekli Declarative Agent Studio.
+
+---
+
 
 ### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
 1. **İş Akışlarının Sert Kodlanmış (Hardcoded) Yapısı:** Eski mimaride iş akışları (`Collection/`) altında sadece Kredi Kartı Ödemesi (`PaymentApprovalWorkflow`) gibi spesifik akışlara özel sert kodlanmış sınıflardan oluşuyordu. Sisteme Para Transferi (Havale/EFT) veya Kredi Başvurusu gibi yeni iş akışları eklemek esnek değildi.

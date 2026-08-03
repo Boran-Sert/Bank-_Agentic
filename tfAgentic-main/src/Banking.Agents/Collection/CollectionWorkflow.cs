@@ -97,7 +97,7 @@ public sealed class GenericSlotFillingStep<TSlots> : Executor<string, TSlots>
         // 3. Aktif TSlots nesnesinin TÜM alanları dolduysa (IsComplete == true), onay/eylem adımına geçer
         if (status.IsComplete && _sessionStore.GetOrCreate(_sessionId).PendingSlots is TSlots completedSlots) // Tüm slotlar doldu mu
         {
-            await context.QueueStateUpdateAsync("Slots", completedSlots, scopeName: "WorkflowSlots", ct); // Slot durumunu güncelleme
+            await context.QueueStateUpdateAsync("Slots", completedSlots, scopeName: WorkflowScopes.Slots, ct); // Slot durumunu güncelleme
             _hub.Publish("WORKFLOW", $"Workflow Adımı: '{typeof(TSlots).Name}' İçin Tüm Slotlar Dinamik Olarak Tamamlandı ({status.FilledSlots.Count} alan dolu).");
             return completedSlots;
         }

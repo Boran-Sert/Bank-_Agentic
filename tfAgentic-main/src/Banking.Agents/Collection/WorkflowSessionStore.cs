@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using Banking.Agents.Records;
 using Banking.Agents.Tracing;
+using Banking.Domain.Constants;
 using Microsoft.Extensions.Logging;
 
 namespace Banking.Agents.Collection;
@@ -17,7 +18,7 @@ public sealed class WorkflowSessionBag
 {
     public string SessionId { get; init; } = default!;
     public string? ActiveWorkflowName { get; set; }
-    public string Phase { get; set; } = "idle"; // idle | slot_filling | awaiting_approval | completed | cancelled
+    public string Phase { get; set; } = WorkflowPhases.Idle; // idle | slot_filling | awaiting_approval | completed | cancelled
 
     // Toplanan parametreler saklanır (Asla kaybolmaz)
     public ConcurrentDictionary<string, object?> SlotBag { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -153,9 +154,9 @@ public sealed class WorkflowSessionStore
         if (_sessions.TryGetValue(sessionId, out var bag))
         {
             _logger?.LogInformation("StateBag Tamamlandı & Temizlendi → SessionId: {SessionId}", sessionId);
-            _hub?.Publish("WORKFLOW", $"StateBag Tamamlandı & Temizlendi → SessionId: {sessionId}");
+            _hub?.Publish(TraceCategories.Workflow, $"StateBag Tamamlandı & Temizlendi → SessionId: {sessionId}");
             bag.ActiveWorkflowName = null;
-            bag.Phase = "completed";
+            bag.Phase = WorkflowPhases.Completed;
             bag.SlotBag.Clear();
             bag.PendingConfirmation = null;
             bag.PendingSlots = null;
@@ -167,9 +168,9 @@ public sealed class WorkflowSessionStore
         if (_sessions.TryGetValue(sessionId, out var bag))
         {
             _logger?.LogInformation("StateBag İptal Edildi & Temizlendi → SessionId: {SessionId}", sessionId);
-            _hub?.Publish("WORKFLOW", $"StateBag İptal Edildi & Temizlendi → SessionId: {sessionId}");
+            _hub?.Publish(TraceCategories.Workflow, $"StateBag İptal Edildi & Temizlendi → SessionId: {sessionId}");
             bag.ActiveWorkflowName = null;
-            bag.Phase = "cancelled";
+            bag.Phase = WorkflowPhases.Cancelled;
             bag.SlotBag.Clear();
             bag.PendingConfirmation = null;
             bag.PendingSlots = null;

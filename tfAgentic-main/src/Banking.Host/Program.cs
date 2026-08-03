@@ -58,7 +58,7 @@ builder.Services.AddSingleton<TraceHub>();
 builder.Services.AddSingleton(sp => ChatClientFactory.Create(sp.GetRequiredService<AgentOptions>()));
 builder.Services.AddSingleton<AnalyzeTools>();
 builder.Services.AddSingleton<AgentRuntime>();
-builder.Services.AddSingleton<CollectionSessionStore>();
+builder.Services.AddSingleton<WorkflowConversationStore>();
 
 // --- MW Gateway (Java MW ↔ .NET iletişimi) ---
 builder.Services.AddSingleton<FlowRouter>();
@@ -114,7 +114,7 @@ app.MapPost("/api/chat", async (ChatRequest req, GatewayService gw, Cancellation
     if (string.IsNullOrWhiteSpace(text))
         return Results.BadRequest(new { error = "message veya text boş olamaz" });
 
-    var response = await gw.ProcessAsync(new GatewayRequest { Text = text, SessionToken = req.SessionToken }, ct);
+    var response = await gw.ProcessUserRequestAsync(new GatewayRequest { Text = text, SessionToken = req.SessionToken }, ct);
     return Results.Ok(response);
 });
 
@@ -124,20 +124,20 @@ app.MapPost("/api/ai/chat", async (GatewayRequest req, GatewayService gw, Cancel
     if (string.IsNullOrWhiteSpace(req.Text))
         return Results.BadRequest(new { error = "text alanı boş olamaz." });
 
-    var response = await gw.ProcessAsync(req, ct);
+    var response = await gw.ProcessUserRequestAsync(req, ct);
     return Results.Ok(response);
 });
 
 // --- Tahsilat (human-in-the-loop) ---
 // İsteğe bağlı 'message': kullanıcının ilk ifadesi (ör. "4521 kartının borcunu öde") akışa bağlam olarak geçer.
-app.MapPost("/api/collect/start", async (CollectStartRequest? req, CollectionSessionStore store) =>
-    Results.Ok(await store.StartAsync(req?.Message)));
+app.MapPost("/api/collect/start", async (CollectStartRequest? req, WorkflowConversationStore store) =>
+    Results.Ok(await store.StartWorkflowConversationAsync(req?.Message)));
 
-app.MapPost("/api/collect/respond", async (CollectRespondRequest req, CollectionSessionStore store) =>
+app.MapPost("/api/collect/respond", async (CollectRespondRequest req, WorkflowConversationStore store) =>
 {
     if (string.IsNullOrWhiteSpace(req.SessionId))
         return Results.BadRequest(new { error = "sessionId boş olamaz" });
-    return Results.Ok(await store.RespondAsync(req.SessionId, req.Answer ?? string.Empty));
+    return Results.Ok(await store.ProcessWorkflowStepMessageAsync(req.SessionId, req.Answer ?? string.Empty));
 });
 
 // --- Tanılama: anahtarsız bile MCP/A2A/uzman wiring'ini doğrular ---

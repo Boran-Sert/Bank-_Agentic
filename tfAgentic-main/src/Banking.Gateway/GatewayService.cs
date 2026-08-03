@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Banking.Agents.Collection;
 using Banking.Agents.Tracing;
+using Banking.Domain.Constants;
 using Banking.Domain.MkCodes;
 using Banking.Gateway.Models;
 using Microsoft.Extensions.Logging;
@@ -23,7 +24,7 @@ public sealed class GatewayService
     private readonly ILogger<GatewayService> _logger;
     private readonly ResponseSanitizer _sanitizer;
 
-    private readonly ConcurrentDictionary<string, GatewaySession> _sessions = new();
+    private readonly ConcurrentDictionary<string, UserSession> _sessions = new();
 
     public GatewayService(
         FlowRouter router,
@@ -40,48 +41,48 @@ public sealed class GatewayService
     /// <summary>
     /// Kullanıcı isteğini karşılar, FlowRouter'a yönlendirir ve sonucu UI formatına dönüştürüp temizler.
     /// </summary>
-    public async Task<GatewayResponse> ProcessAsync(GatewayRequest request, CancellationToken ct = default)
+    public async Task<GatewayResponse> ProcessUserRequestAsync(GatewayRequest request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var sessionToken = NormalizeSessionToken(request.SessionToken); // Oturum ID doğrulama
-        var session = _sessions.GetOrAdd(sessionToken, _ => new GatewaySession()); // Oturum alma/oluşturma
+        var session = _sessions.GetOrAdd(sessionToken, _ => new UserSession()); // Oturum alma/oluşturma
         session.Touch(); // Son erişimi güncelleme
         session.ThemeValue = request.ThemeValue;
 
-        _hub.Publish("GATEWAY", "İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
+        _hub.Publish(TraceCategories.Gateway, "İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
         _logger.LogInformation("Gateway istek: session={SessionToken}, text={Text}", sessionToken, Truncate(request.Text, 100));
 
         try
         {
-            var result = await _router.RouteAsync(sessionToken, request.Text, session, ct); // Akış yönlendirme çağrısı
+            var result = await _router.RouteUserRequestAsync(sessionToken, request.Text, session, ct); // Akış yönlendirme çağrısı
 
             GatewayResponse rawResponse;
 
-            if (result.ExecutionType == "workflow_step" && result.WorkflowResult is not null)
+            if (result.ExecutionType == FlowExecutionType.WorkflowStep && result.WorkflowResult is not null)
             {
                 if (result.IsWorkflowFinished)
                 {
-                    ClearCollectionSession(session); // Workflow oturumunu sıfırlama
+                    ClearWorkflowSession(session); // Workflow oturumunu sıfırlama
                 }
 
-                rawResponse = MapCollectionResult(result.WorkflowResult, session); // Workflow yanıtı dönüştürme
+                rawResponse = MapWorkflowResultToResponse(result.WorkflowResult, session); // Workflow yanıtı dönüştürme
             }
             else if (result.OrchestratorReply is { } reply)
             {
-                string? openScreenMkCode = reply.TriggeredToolName == "ekran_ac" && reply.TriggeredToolArguments != null 
+                var openScreenMkCode = reply.TriggeredToolName == ToolNames.OpenScreen && reply.TriggeredToolArguments != null 
                     ? reply.TriggeredToolArguments.TryGetValue("mkCode", out var mkCode) ? mkCode?.ToString() : null 
                     : null;
 
                 if (!string.IsNullOrEmpty(openScreenMkCode))
                 {
-                    _hub.Publish("GATEWAY", $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({openScreenMkCode})");
+                    _hub.Publish(TraceCategories.Gateway, $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({openScreenMkCode})");
                     rawResponse = GatewayResponse.AsOpenScreen(openScreenMkCode); // Ekran yönlendirme yanıtı
                 }
                 else
                 {
                     rawResponse = GatewayResponse.AsText(reply.Reply ?? ""); // Metin yanıtı hazırlama
-                    _hub.Publish("GATEWAY", "Metin yanıtı hazır -> TEXT", rawResponse);
+                    _hub.Publish(TraceCategories.Gateway, "Metin yanıtı hazır -> TEXT", rawResponse);
                 }
             }
             else
@@ -99,45 +100,45 @@ public sealed class GatewayService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Gateway hatası: session={SessionToken}", sessionToken);
-            _hub.Publish("GATEWAY", $"HATA: {ex.Message}");
+            _hub.Publish(TraceCategories.Gateway, $"HATA: {ex.Message}");
             return SanitizeResponse(GatewayResponse.AsText("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.") with { SessionToken = sessionToken });
         }
     }
 
-    private GatewayResponse MapCollectionResult(
-        CollectStepResult result, GatewaySession session)
+    private GatewayResponse MapWorkflowResultToResponse(
+        CollectStepResult result, UserSession session)
     {
         switch (result.Status)
         {
-            case "question":
-                _hub.Publish("GATEWAY", "Slot-filling sorusu → TEXT");
+            case WorkflowStatuses.Question:
+                _hub.Publish(TraceCategories.Gateway, "Slot-filling sorusu → TEXT");
                 return GatewayResponse.AsText(result.Prompt!);
 
-            case "confirmation":
-                _hub.Publish("GATEWAY", "Onay ekranı hazır → CONFIRM_PAYMENT");
+            case WorkflowStatuses.Confirmation:
+                _hub.Publish(TraceCategories.Gateway, "Onay ekranı hazır → CONFIRM_PAYMENT");
                 return BuildConfirmationScreen(result.Confirmation!);
 
-            case "completed" when result.Receipt is not null:
-                _hub.Publish("GATEWAY", "Tahsilat tamamlandı → TEXT (makbuz)");
-                ClearCollectionSession(session);
+            case WorkflowStatuses.Completed when result.Receipt is not null:
+                _hub.Publish(TraceCategories.Gateway, "Tahsilat tamamlandı → TEXT (makbuz)");
+                ClearWorkflowSession(session);
                 return GatewayResponse.AsText($"Ödeme başarıyla tamamlandı.\nMakbuz No: {result.Receipt.ReceiptId}\nKalan Borç: {result.Receipt.RemainingDebt:N2} ₺");
 
-            case "cancelled":
-                _hub.Publish("GATEWAY", "Oturum iptal edildi → TEXT");
-                ClearCollectionSession(session);
+            case WorkflowStatuses.Cancelled:
+                _hub.Publish(TraceCategories.Gateway, "Oturum iptal edildi → TEXT");
+                ClearWorkflowSession(session);
                 return GatewayResponse.AsText(result.Prompt ?? "İşlem iptal edildi.");
 
             default:
-                _hub.Publish("GATEWAY", $"Beklenmeyen durum: {result.Status} → TEXT");
-                ClearCollectionSession(session);
+                _hub.Publish(TraceCategories.Gateway, $"Beklenmeyen durum: {result.Status} → TEXT");
+                ClearWorkflowSession(session);
                 return GatewayResponse.AsText(result.Prompt ?? "Bir hata oluştu. Lütfen tekrar deneyin.");
         }
     }
 
-    private GatewayResponse BuildConfirmationScreen(GenericConfirmationView confirmation)
+    private static GatewayResponse BuildConfirmationScreen(GenericConfirmationView confirmation)
     {
         var mkCodeDef = MkCodesRegistry.Get(confirmation.WorkflowName) ?? MkCodesRegistry.Get("CreditCardPayment");
-        string? mkCodeValue = mkCodeDef?.Value ?? confirmation.WorkflowName;
+        var mkCodeValue = mkCodeDef?.Value ?? confirmation.WorkflowName;
 
         return GatewayResponse.AsGenericConfirmation(
             mkCodeValue: mkCodeValue,
@@ -145,9 +146,9 @@ public sealed class GatewayService
         );
     }
 
-    private static void ClearCollectionSession(GatewaySession session)
+    private static void ClearWorkflowSession(UserSession session)
     {
-        session.State.CollectionSessionId = null;
+        session.State.WorkflowSessionId = null;
         session.ClearForNewFlow();
     }
 

@@ -3,12 +3,19 @@ using System.Threading.Tasks;
 using Banking.Agents;
 using Banking.Agents.Collection;
 using Banking.Agents.Tracing;
+using Banking.Domain.Constants;
 using Microsoft.Extensions.Logging;
 
 namespace Banking.Gateway;
 
+public enum FlowExecutionType
+{
+    WorkflowStep,
+    OrchestratorReply
+}
+
 public sealed record FlowExecutionResult(
-    string ExecutionType, // "workflow_step" | "orchestrator_reply"
+    FlowExecutionType ExecutionType,
     CollectStepResult? WorkflowResult = null,
     OrchestratorReply? OrchestratorReply = null,
     bool IsWorkflowFinished = false
@@ -22,55 +29,64 @@ public sealed record FlowExecutionResult(
 public sealed class FlowRouter
 {
     private readonly AgentRuntime _runtime;
-    private readonly CollectionSessionStore _collectionStore;
+    private readonly WorkflowConversationStore _workflowStore;
     private readonly TraceHub _hub;
     private readonly ILogger<FlowRouter> _logger;
 
+    /// <summary>
+    /// FlowRouter bağımlılıklarını başlatır.
+    /// </summary>
     public FlowRouter(
         AgentRuntime runtime,
-        CollectionSessionStore collectionStore,
+        WorkflowConversationStore workflowStore,
         TraceHub hub,
         ILogger<FlowRouter> logger)
     {
         _runtime = runtime;
-        _collectionStore = collectionStore;
+        _workflowStore = workflowStore;
         _hub = hub;
         _logger = logger;
     }
 
-    public async Task<FlowExecutionResult> RouteAsync(
+    /// <summary>
+    /// Kullanıcı isteğini aktif iş akışına veya LLM orkestratörüne yönlendirir.
+    /// </summary>
+    public async Task<FlowExecutionResult> RouteUserRequestAsync(
         string sessionToken,
         string text,
-        GatewaySession session,
+        UserSession session,
         CancellationToken ct = default)
     {
         // 1. AKTİF İŞ AKIŞI KONTROLÜ (Deterministik Routing)
-        if (_collectionStore.HasActiveSession(sessionToken)) // Aktif akış kontrolü
+        if (_workflowStore.HasActiveWorkflowSession(sessionToken)) // Aktif akış kontrolü
         {
-            _hub.Publish("FLOWROUTER", "Aktif iş akışı oturumu → mesaj doğrudan workflow ajanına yönlendiriliyor");
+            _hub.Publish(TraceCategories.FlowRouter, "Aktif iş akışı oturumu → mesaj doğrudan workflow ajanına yönlendiriliyor");
             _logger.LogInformation("Deterministic routing: session={SessionToken}", sessionToken);
 
-            var result = await _collectionStore.RespondAsync(sessionToken, text); // Workflow adımını çalıştırma
-            bool finished = result.Status is "completed" or "cancelled"; // Akış sonlanma kontrolü
+            var result = await _workflowStore.ProcessWorkflowStepMessageAsync(sessionToken, text); // Workflow adımını çalıştırma
+            bool finished = result.Status is WorkflowStatuses.Completed or WorkflowStatuses.Cancelled; // Akış sonlanma kontrolü
 
             if (finished)
             {
-                _hub.Publish("FLOWROUTER", $"İş akışı oturumu sonlandı (durum: {result.Status})");
+                _hub.Publish(TraceCategories.FlowRouter, $"İş akışı oturumu sonlandı (durum: {result.Status})");
             }
 
-            return new FlowExecutionResult("workflow_step", WorkflowResult: result, IsWorkflowFinished: finished); // Workflow sonucu dönme
+            return new FlowExecutionResult(FlowExecutionType.WorkflowStep, WorkflowResult: result, IsWorkflowFinished: finished); // Workflow sonucu dönme
         }
 
-        // 2. ORKESTRATÖR AKIŞI
-        var reply = await _runtime.AskAsync(text, sessionToken, ct: ct); // LLM Orkestratörü çalıştırma
+        // Orkestratöre sor
+        var reply = await _runtime.AskOrchestratorAsync(text, sessionToken, ct: ct);
 
-        // Eğer Orkestratör araç çalıştırarak iş akışını başlattıysa, oturum aktif hale gelmiştir.
-        if (_collectionStore.HasActiveSession(sessionToken)) // Yeni akış kontrolü
+        // Yeni akış başladı mı
+        if (_workflowStore.HasActiveWorkflowSession(sessionToken))
         {
-            session.State.CollectionSessionId = sessionToken; // Oturuma akış bağlama
-            _hub.Publish("FLOWROUTER", $"İş akışı başarıyla başlatıldı ve bağlandı: {sessionToken}");
+            // Oturuma akış bağla
+            session.State.WorkflowSessionId = sessionToken;
+            // Başlatma izi gönder
+            _hub.Publish(TraceCategories.FlowRouter, $"İş akışı başarıyla başlatıldı ve bağlandı: {sessionToken}");
         }
 
-        return new FlowExecutionResult("orchestrator_reply", OrchestratorReply: reply); // Orkestratör yanıtı dönme
+        // Orkestratör yanıtı dön
+        return new FlowExecutionResult(FlowExecutionType.OrchestratorReply, OrchestratorReply: reply);
     }
 }

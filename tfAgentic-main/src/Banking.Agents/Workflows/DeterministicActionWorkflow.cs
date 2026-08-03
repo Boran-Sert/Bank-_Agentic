@@ -68,7 +68,7 @@ internal sealed class GenericActionExecutorStep<TSlots, TConfirmation, TOutcome>
 
     public override async ValueTask<TOutcome> HandleAsync(bool approved, IWorkflowContext context, CancellationToken cancellationToken = default)
     {
-        var slots = await context.ReadStateAsync<TSlots>("Slots", scopeName: "WorkflowSlots", cancellationToken)
+        var slots = await context.ReadStateAsync<TSlots>("Slots", scopeName: WorkflowScopes.Slots, cancellationToken)
                     ?? _slots;
 
         _hub.Publish("WORKFLOW", $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");

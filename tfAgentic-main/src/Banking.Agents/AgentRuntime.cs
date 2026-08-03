@@ -58,7 +58,6 @@ public sealed class AgentRuntime
         TraceHub hub,
         ILogger<AgentRuntime> logger,
         SemanticMkCodeSearcher semanticMkCodeSearcher,
-        AnalyzeTools analyzeTools,
         IServiceProvider serviceProvider)
     {
         _options = options;
@@ -141,9 +140,9 @@ public sealed class AgentRuntime
     /// Aktif olan herhangi bir TSlots Record nesnesine (PaymentSlots, TransferSlots vb.) göre
     /// oturuma özel dinamik MAF workflow ajanını inşa eder.
     /// </summary>
-    public async Task<AIAgent> GetWorkflowAgentAsync<TSlots>(
+    private async Task<AIAgent> GetWorkflowAgentAsync<TSlots>(
         string sessionId,
-        Collection.WorkflowSessionStore sessionStore,
+        WorkflowSessionStore sessionStore,
         string instructions,
         string agentName,
         CancellationToken ct = default)
@@ -334,13 +333,13 @@ public sealed class AgentRuntime
         var sessionId = !string.IsNullOrWhiteSpace(_currentSessionId) ? _currentSessionId : $"gw-{Guid.NewGuid():N}"[..16];
         var message = !string.IsNullOrWhiteSpace(_currentMessage) ? _currentMessage : "İş akışı başlatılıyor";
 
-        var store = _serviceProvider.GetService(typeof(CollectionSessionStore)) as CollectionSessionStore;
+        var store = _serviceProvider.GetService(typeof(WorkflowConversationStore)) as WorkflowConversationStore;
         if (store is null)
         {
             return $"{workflowName} iş akışı başlatılamadı: Oturum deposu bulunamadı.";
         }
 
-        var result = await store.StartAsync(sessionId, message);
+        var result = await store.StartWorkflowConversationAsync(sessionId, message);
         _logger.LogInformation("Jenerik iş akışı başarıyla başlatıldı ve oturuma bağlandı: {WorkflowName} (SessionId: {SessionId})", workflowName, sessionId);
         return result.Prompt ?? $"{workflowName} iş akışı başlatıldı.";
     }
@@ -397,7 +396,7 @@ public sealed class AgentRuntime
     }
 
     /// <summary>Q&A: kullanıcı sorusunu orkestratöre iletir; yanıt metni + tahsilat akışı başlatılmalı mı bilgisi döner.</summary>
-    public async Task<OrchestratorReply> AskAsync(string message, string? sessionId = null, IList<ChatMessage>? history = null, CancellationToken ct = default)
+    public async Task<OrchestratorReply> AskOrchestratorAsync(string message, string? sessionId = null, IList<ChatMessage>? history = null, CancellationToken ct = default)
     {
         await EnsureOrchestratorAsync(ct); // Orkestratör hazırlığı
 

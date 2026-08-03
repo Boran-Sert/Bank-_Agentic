@@ -1,114 +1,90 @@
-
 using System.Collections.Concurrent;
 using Banking.Domain.Records;
 using Banking.Agents.Tracing;
 using Banking.Domain.Constants;
-using Banking.Domain.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
-using OpenAI.Chat;
 
 namespace Banking.Agents.Workflows;
 
 /// <summary>
-/// Dynamic Workflow Konuşmalarını ve Stateful Oturumları (MAF AgentSession + StateBag) yöneten mağaza.
-/// DI Constructor'ında asenkron bloklama yapılmaz; ajan tembel (lazy/async) olarak yüklenir.
+/// Dinamik iş akışı konuşmalarını ve oturum durumlarını (StateBag) yöneten mağaza.
 /// </summary>
 public sealed class WorkflowConversationStore
 {
-    private readonly AgentRuntime _runtime;
-    private readonly ConcurrentDictionary<string, AgentSession> _agentSessions = new();
-    private readonly ConcurrentDictionary<string, IWorkflowConversation> _conversations = new();
+    private readonly ConcurrentDictionary<string, IWorkflowConversation> _activeWorkflowConversations = new();
     private readonly WorkflowSessionStore _workflowSessionStore;
-
     private readonly WorkflowRegistry _workflowRegistry;
+    private readonly TraceHub _traceHub;
 
-    private readonly PaymentActionExecutor _executor;
-    private readonly TransferActionExecutor _transferExecutor;
-    private readonly TraceHub _hub;
-    private readonly SemaphoreSlim _lock = new(1, 1);
-
+    /// <summary>
+    /// WorkflowConversationStore bağımlılıklar ile başlatılır.
+    /// </summary>
     public WorkflowConversationStore(
-        AgentRuntime runtime,
-        TraceHub hub,
-        ICardService cards,
-        IAccountService accounts,
-        ICollectionService collections,
-        ITransferService transferService,
         WorkflowRegistry workflowRegistry,
-        ILoggerFactory? loggerFactory = null)
+        WorkflowSessionStore workflowSessionStore,
+        TraceHub traceHub)
     {
-        _runtime = runtime;
-        _hub = hub;
         _workflowRegistry = workflowRegistry;
-        _executor = new PaymentActionExecutor(collections, cards, accounts, hub);
-        _transferExecutor = new TransferActionExecutor(transferService, accounts, hub);
-        _workflowSessionStore = new WorkflowSessionStore(loggerFactory?.CreateLogger<WorkflowSessionStore>(), hub);
-
-        // Dinamik İş Akışı Kayıtları
-        _workflowRegistry.Register(
-            PaymentSlotKeys.WorkflowName,
-            sessionId => _runtime.GetCollectionAgentAsync(sessionId, _workflowSessionStore),
-            _executor,
-            _workflowSessionStore,
-            _hub,
-            _runtime);
-
-        _workflowRegistry.Register(
-            TransferSlotKeys.WorkflowName,
-            sessionId => _runtime.GetTransferAgentAsync(sessionId, _workflowSessionStore),
-            _transferExecutor,
-            _workflowSessionStore,
-            _hub,
-            _runtime);
+        _workflowSessionStore = workflowSessionStore;
+        _traceHub = traceHub;
     }
 
-    public bool HasActiveWorkflowSession(string sessionId) => _conversations.ContainsKey(sessionId);
+    /// <summary>
+    /// Belirtilen oturum kimliğine ait aktif bir iş akışı oturumu olup olmadığını sorgular.
+    /// </summary>
+    public bool HasActiveWorkflowSession(string sessionId) => _activeWorkflowConversations.ContainsKey(sessionId);
 
-    // --- OTURUM BAŞLAT (MAF AgentSession + StateBag Üretir) -----------
-    public async Task<CollectStepResult> StartWorkflowConversationAsync(string workflowName, string sessionId, string? initialMessage = null)
+    /// <summary>
+    /// Oturuma özel yeni bir dinamik iş akışı konuşması başlatır.
+    /// </summary>
+    public async Task<CollectStepResult> StartWorkflowConversationAsync(string workflowName, string sessionId, string? initialUserMessage = null)
     {
         if (string.IsNullOrWhiteSpace(workflowName))
         {
             workflowName = PaymentSlotKeys.WorkflowName;
         }
 
-        _hub.Publish(TraceCategories.System, $"İş akışı ({workflowName}) oturumu başlatıldı: {sessionId}");
+        _traceHub.Publish(TraceCategories.System, $"İş akışı ({workflowName}) oturumu başlatıldı: {sessionId}");
 
-        var agent = await _runtime.GetCollectionAgentAsync(sessionId, _workflowSessionStore);
-        var session = await agent.CreateSessionAsync();
-        _agentSessions[sessionId] = session;
-
-        var convo = await _workflowRegistry.CreateConversationAsync(workflowName, sessionId, session);
-        _conversations[sessionId] = convo;
-        return await convo.StartWorkflowAsync(initialMessage);
+        // Dinamik olarak konuşma ve agent oturumu oluşturuluyor
+        var conversation = await _workflowRegistry.CreateConversationAsync(workflowName, sessionId);
+        _activeWorkflowConversations[sessionId] = conversation;
+        return await conversation.StartWorkflowAsync(initialUserMessage);
     }
 
-    public Task<CollectStepResult> StartWorkflowConversationAsync(string workflowName, string? initialMessage)
+    /// <summary>
+    /// Rastgele oturum kimliği üreterek iş akışı konuşmasını başlatır.
+    /// </summary>
+    public Task<CollectStepResult> StartWorkflowConversationAsync(string workflowName, string? initialUserMessage)
     {
-        var sessionId = "cs-" + Guid.NewGuid().ToString("N")[..8];
-        return StartWorkflowConversationAsync(workflowName, sessionId, initialMessage);
+        var generatedSessionId = "cs-" + Guid.NewGuid().ToString("N")[..8];
+        return StartWorkflowConversationAsync(workflowName, generatedSessionId, initialUserMessage);
     }
 
-    public Task<CollectStepResult> StartWorkflowConversationAsync(string? initialMessage = null)
+    /// <summary>
+    /// Varsayılan kart tahsilat iş akışı konuşmasını başlatır.
+    /// </summary>
+    public Task<CollectStepResult> StartWorkflowConversationAsync(string? initialUserMessage = null)
     {
-        return StartWorkflowConversationAsync(PaymentSlotKeys.WorkflowName, initialMessage);
+        return StartWorkflowConversationAsync(PaymentSlotKeys.WorkflowName, initialUserMessage);
     }
 
-    // --- OTURUMA YANIT VER -----------
-    public async Task<CollectStepResult> ProcessWorkflowStepMessageAsync(string sessionId, string answer)
+    /// <summary>
+    /// Kullanıcı yanıtını aktif iş akışına ileterek bir sonraki adımı işler.
+    /// </summary>
+    public async Task<CollectStepResult> ProcessWorkflowStepMessageAsync(string sessionId, string userResponseMessage)
     {
-        if (!_conversations.TryGetValue(sessionId, out var convo))
+        if (!_activeWorkflowConversations.TryGetValue(sessionId, out var activeConversation))
             return new CollectStepResult(sessionId, WorkflowStatuses.Cancelled, Prompt: "Oturum bulunamadı veya süresi doldu. Lütfen işlemi yeniden başlatın.");
 
-        var result = await convo.ProcessUserMessageAsync(answer);
+        var stepResult = await activeConversation.ProcessUserMessageAsync(userResponseMessage);
 
-        if (result.Status is WorkflowStatuses.Completed or WorkflowStatuses.Cancelled)
+        if (stepResult.Status is WorkflowStatuses.Completed or WorkflowStatuses.Cancelled)
         {
-            _conversations.TryRemove(sessionId, out _);
-            _agentSessions.TryRemove(sessionId, out _);
+            _activeWorkflowConversations.TryRemove(sessionId, out _);
         }
 
-        return result;
+        return stepResult;
     }
 }

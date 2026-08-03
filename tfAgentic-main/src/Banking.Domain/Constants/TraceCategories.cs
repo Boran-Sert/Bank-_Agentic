@@ -11,4 +11,8 @@ public static class TraceCategories
     public const string Workflow = "WORKFLOW";
     public const string Security = "SECURITY";
     public const string Service = "SERVICE";
+    public const string Llm = "LLM";
+    public const string Context = "CONTEXT";
+    public const string Mcp = "MCP";
+    public const string A2a = "A2A";
 }

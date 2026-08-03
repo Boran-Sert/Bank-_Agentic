@@ -1,18 +1,31 @@
 using Banking.Agents.Tracing;
+using Banking.Domain.Constants;
 using Microsoft.Agents.AI.Workflows;
 
 namespace Banking.Agents.Workflows;
 
-// --- Deterministik Eylem Çalıştırıcı Arayüzü -----------
-public interface IDeterministicActionExecutor<in TSlots, TConfirmation, TOutcome>
+/// <summary>
+/// Workflow executor'larını DI ortamında tarayabilmek ve işaretlemek için kullanılan marker arayüzü.
+/// </summary>
+public interface IWorkflowExecutorMarker { }
+
+/// <summary>
+/// Deterministik iş akışı eylemlerini yürüten jenerik çalıştırıcı arayüzü.
+/// </summary>
+public interface IDeterministicActionExecutor<in TSlots, TConfirmation, TOutcome> : IWorkflowExecutorMarker
 {
     TConfirmation BuildConfirmationView(TSlots slots);
     ValueTask<TOutcome> ExecuteAsync(TSlots slots, bool approved, CancellationToken ct);
 }
 
-// --- Jenerik MAF Workflow Motoru (Opsiyonel Onay Ekranı Desteği) -----------
+/// <summary>
+/// MAF tabanlı deterministik iş akışı adımlarını oluşturan jenerik motor.
+/// </summary>
 public static class DeterministicActionWorkflow
 {
+    /// <summary>
+    /// Verilen TSlots ve ActionExecutor ile MAF Workflow nesnesini inşa eder.
+    /// </summary>
     public static Workflow Build<TSlots, TConfirmation, TOutcome>(
         string workflowName,
         TSlots slots,
@@ -25,17 +38,17 @@ public static class DeterministicActionWorkflow
         var executorStep = new GenericActionExecutorStep<TSlots, TConfirmation, TOutcome>(
             $"{workflowName}-executor", slots, actionExecutor, hub);
 
-        // ── SENARYO A: Onay Ekranı İstenmiyorsa (requiresApproval = false) ──
+        // Onay ekranı bypass seçeneği
         if (!requiresApproval)
         {
-            hub.Publish("WORKFLOW", $"{workflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
+            hub.Publish(TraceCategories.Workflow, $"{workflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
             return new WorkflowBuilder(executorStep)
                 .WithOutputFrom(executorStep)
                 .Build();
         }
 
-        // ── SENARYO B: Onay Ekranı İsteniyorsa (requiresApproval = true) ──
-        hub.Publish("WORKFLOW", $"{workflowName}: MAF RequestPort onay gate'i oluşturuldu");
+        // Onay ekranı entegrasyonu
+        hub.Publish(TraceCategories.Workflow, $"{workflowName}: MAF RequestPort onay gate'i oluşturuldu");
         var approvalPortId = $"{workflowName}-approval-port";
         var approvalPort = RequestPort.Create<TConfirmation, bool>(approvalPortId);
 
@@ -46,7 +59,9 @@ public static class DeterministicActionWorkflow
     }
 }
 
-// --- Jenerik Executor Adımı (Sıfır LLM) -----------
+/// <summary>
+/// LLM müdahalesi olmadan deterministik eylemi çalıştıran adımı temsil eder.
+/// </summary>
 internal sealed class GenericActionExecutorStep<TSlots, TConfirmation, TOutcome> : Executor<bool, TOutcome>
     where TConfirmation : class
     where TOutcome : class
@@ -71,7 +86,7 @@ internal sealed class GenericActionExecutorStep<TSlots, TConfirmation, TOutcome>
         var slots = await context.ReadStateAsync<TSlots>("Slots", scopeName: WorkflowScopes.Slots, cancellationToken)
                     ?? _slots;
 
-        _hub.Publish("WORKFLOW", $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");
+        _hub.Publish(TraceCategories.Workflow, $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");
         return await _actionExecutor.ExecuteAsync(slots, approved, cancellationToken);
     }
 }

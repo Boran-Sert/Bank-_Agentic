@@ -75,7 +75,7 @@ public sealed class FlowRouter
         }
 
         // Orkestratöre sor
-        var reply = await _runtime.AskOrchestratorAsync(text, sessionToken, ct: ct);
+        var reply = await _runtime.AskOrchestratorAsync(text, sessionToken, cancellationToken: ct);
 
         // Yeni akış başladı mı
         if (_workflowStore.HasActiveWorkflowSession(sessionToken))

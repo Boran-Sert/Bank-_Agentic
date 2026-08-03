@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Banking.Agents.Tracing;
+using Banking.Domain.Constants;
 using Banking.Mcp.Registry;
 using Microsoft.Extensions.Logging;
 
@@ -221,7 +222,7 @@ public sealed class ResponseSanitizer
                 "ResponseSanitizer: {Count} güvenlik ihlali tespit edildi ve temizlendi.",
                 totalViolations);
 
-            _hub.Publish("SECURITY",
+            _hub.Publish(TraceCategories.Security,
                 $"Output Guard: {totalViolations} iç bilgi sızıntısı tespit edildi ve temizlendi",
                 $"Orijinal uzunluk: {text.Length}, Temiz uzunluk: {sanitized.Length}");
         }
@@ -352,7 +353,7 @@ public sealed class ResponseSanitizer
             "SECURITY İHLAL [{Category}]: Kullanıcı yanıtında iç bilgi sızıntısı tespit edildi → \"{Snippet}\"",
             category, snippet);
 
-        _hub.Publish("SECURITY",
+        _hub.Publish(TraceCategories.Security,
             $"İç bilgi sızıntısı tespit edildi [{category}]",
             $"İçerik: \"{snippet}\"");
     }

@@ -3,6 +3,7 @@ using Banking.Domain.Records;
 using Banking.Agents.Tracing;
 using Banking.Domain.Models;
 using Banking.Domain.Services;
+using Banking.Domain.Constants;
 
 namespace Banking.Agents.Workflows;
 
@@ -51,13 +52,13 @@ public sealed class PaymentActionExecutor : IDeterministicActionExecutor<Payment
     {
         if (approved)
         {
-            _hub.Publish("WORKFLOW", "Onay alındı → CollectionService.Charge deterministik çağrılıyor");
+            _hub.Publish(TraceCategories.Workflow, "Onay alındı → CollectionService.Charge deterministik çağrılıyor");
             var receipt = _collections.Charge(slots.CardId, slots.Amount, slots.SourceAccountId, slots.Date);
-            _hub.Publish("SERVICE", "CollectionService.Charge", $"{slots.Amount:N0} ₺ tahsil edildi · kalan {receipt.RemainingDebt:N0} ₺");
+            _hub.Publish(TraceCategories.Service, "CollectionService.Charge", $"{slots.Amount:N0} ₺ tahsil edildi · kalan {receipt.RemainingDebt:N0} ₺");
             return ValueTask.FromResult(new PaymentOutcome(receipt, null));
         }
 
-        _hub.Publish("WORKFLOW", "Onay reddedildi → Hiçbir tutar tahsil edilmedi");
+        _hub.Publish(TraceCategories.Workflow, "Onay reddedildi → Hiçbir tutar tahsil edilmedi");
         return ValueTask.FromResult(new PaymentOutcome(null, new PaymentCancelled("Kullanıcı ödemeyi onaylamadı.")));
     }
 }

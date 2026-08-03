@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Extensions.AI;
+using Banking.Domain.Constants;
 
 namespace Banking.Agents.Tracing;
 
@@ -21,14 +22,14 @@ public sealed class TracingChatClient(IChatClient inner, TraceHub hub, string la
         var lastMsgSummary = GetMessageSummary(msgList.LastOrDefault());
         if (lastMsgSummary.Length > 300) lastMsgSummary = string.Concat(lastMsgSummary.AsSpan(0, 300), "... [Kesildi]");
 
-        hub.Publish("LLM", $"{label} -> Model Çağrısı Başlatıldı", $"Girdi: \"{lastMsgSummary}\"");
+        hub.Publish(TraceCategories.Llm, $"{label} -> Model Çağrısı Başlatıldı", $"Girdi: \"{lastMsgSummary}\"");
 
         var response = await base.GetResponseAsync(msgList, options, cancellationToken);
 
         var replySummary = GetResponseSummary(response);
         if (replySummary.Length > 500) replySummary = string.Concat(replySummary.AsSpan(0, 500), "... [Kesildi]");
 
-        hub.Publish("LLM", $"{label} -> Model Yanıtı Alındı", $"Çıktı: \"{replySummary}\"");
+        hub.Publish(TraceCategories.Llm, $"{label} -> Model Yanıtı Alındı", $"Çıktı: \"{replySummary}\"");
 
         return response;
     }
@@ -43,7 +44,7 @@ public sealed class TracingChatClient(IChatClient inner, TraceHub hub, string la
         var lastMsgSummary = GetMessageSummary(msgList.LastOrDefault());
         if (lastMsgSummary.Length > 300) lastMsgSummary = string.Concat(lastMsgSummary.AsSpan(0, 300), "... [Kesildi]");
 
-        hub.Publish("LLM", $"{label} -> Model Canlı Akış (Streaming) Başlatıldı", $"Girdi: \"{lastMsgSummary}\"");
+        hub.Publish(TraceCategories.Llm, $"{label} -> Model Canlı Akış (Streaming) Başlatıldı", $"Girdi: \"{lastMsgSummary}\"");
         return base.GetStreamingResponseAsync(msgList, options, cancellationToken);
     }
 

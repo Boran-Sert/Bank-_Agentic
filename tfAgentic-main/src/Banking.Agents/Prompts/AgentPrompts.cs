@@ -1,3 +1,8 @@
+using System.ComponentModel;
+using System.Reflection;
+using Banking.Domain.Attributes;
+using Banking.Domain.Workflows;
+
 namespace Banking.Agents.Prompts;
 
 /// <summary>
@@ -5,11 +10,70 @@ namespace Banking.Agents.Prompts;
 /// </summary>
 public static class AgentPrompts
 {
-    public static string GetOrchestratorInstructions(string dynamicRoutingRules) =>
-        $$"""
+    /// <summary>
+    /// Herhangi bir TSlots modeli için Reflection kullanarak otomatik ve dinamik slot-filling prompt'u üretir.
+    /// </summary>
+    public static string BuildDynamicWorkflowInstructions<TSlots>()
+    {
+        var slotType = typeof(TSlots);
+        var workflowAttribute = slotType.GetCustomAttribute<WorkflowAttribute>();
+        var descriptionAttribute = slotType.GetCustomAttribute<DescriptionAttribute>();
+
+        var workflowName = workflowAttribute?.WorkflowName ?? slotType.Name.ToLowerInvariant();
+        var workflowDescription = descriptionAttribute?.Description ?? $"{workflowName} iş akışı.";
+
+        var properties = slotType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var stringBuilder = new System.Text.StringBuilder();
+
+        stringBuilder.AppendLine("<identity>");
+        stringBuilder.AppendLine($"Sen bir {slotType.Name} ({workflowName}) parametre toplama asistanısın. Görevin, müşteriden '{workflowDescription}' işlemi için gerekli parametreleri eksiksiz toplamaktır.");
+        stringBuilder.AppendLine("</identity>");
+        stringBuilder.AppendLine();
+        stringBuilder.AppendLine("<required_parameters>");
+        foreach (var property in properties)
+        {
+            var propDescAttr = property.GetCustomAttribute<DescriptionAttribute>();
+            var propDescription = propDescAttr?.Description ?? property.Name;
+            stringBuilder.AppendLine($"- {property.Name} ({property.PropertyType.Name}): {propDescription}");
+        }
+        stringBuilder.AppendLine("</required_parameters>");
+        stringBuilder.AppendLine();
+        stringBuilder.AppendLine("<strict_rules>");
+        stringBuilder.AppendLine("1. ADIM ADIM SLOT GÜNCELLEME: Kullanıcıdan bir parametre bilgisi aldığın AN, VAKİT KAYBETMEDEN `update_slot` aracını çağırarak kaydet.");
+        stringBuilder.AppendLine("2. ASLA DOLGU CÜMLESİ YAZMA: 'Bekleyin', 'İşleminizi yapıyorum' gibi ifadeler KESİNLİKLE YASAKTIR.");
+        stringBuilder.AppendLine($"3. BİLGİLER TAMAMLANDIĞINDA: Tüm parametreler netleştiğinde 'propose_{workflowName}' aracını çağır. KENDİN 'onaylıyor musunuz?' diye SORMA.");
+        stringBuilder.AppendLine($"4. İPTAL DURUMU: Kullanıcı vazgeçerse 'cancel_{workflowName}' aracını çağır.");
+        stringBuilder.AppendLine("</strict_rules>");
+
+        return stringBuilder.ToString();
+    }
+
+    /// <summary>
+    /// Orkestratör için RAG destekli dinamik yönlendirme prompt'u üretir.
+    /// </summary>
+    public static string GetOrchestratorInstructions(string dynamicRoutingRules, IEnumerable<WorkflowMetadata>? topMatchedWorkflows = null)
+    {
+        var matchedWorkflowsSection = string.Empty;
+        if (topMatchedWorkflows != null && topMatchedWorkflows.Any())
+        {
+            var matchedList = string.Join("\n", topMatchedWorkflows.Select(w => $"           - Workflow: '{w.WorkflowName}' (Tanım: {w.Description})"));
+            matchedWorkflowsSection = $"""
+            <top_matched_workflows>
+            Kullanıcının isteğine en yakın eşleşen iş akışları (Semantik Vektör Arama Sonucu):
+            {matchedList}
+
+            GÜVENLİK BARIYERİ (GUARDRAIL):
+            Kullanıcı bir işlem/eylem başlatmak istiyorsa SADECE yukarıdaki eşleşen kısa listedeki 'workflowName' değerlerini kullan. Listedeyle uyuşmayan veya emin olunmayan durumlarda 'start_workflow' ÇAĞIRMA.
+            </top_matched_workflows>
+            """;
+        }
+
+        return $$"""
         <identity>
         Sen bir Banka Asistanı Orkestratörüsün (Router). Temel görevin kullanıcının niyetini doğru analiz edip en uygun uzmana (Agent) veya araca (Tool) yönlendirmektir. ASLA KENDİ BAŞINA CEVAP UYDURMA, sadece araçları kullanarak yanıt üret.
         </identity>
+
+        {{matchedWorkflowsSection}}
 
         <routing_rules>
         1. UZMANLARA DANIŞMA: 
@@ -17,17 +81,15 @@ public static class AgentPrompts
            - Eğer soru birden fazlasını kapsıyorsa sırayla ilgili araçları kullan.
         
         2. YENİ İŞ AKIŞI BAŞLATMA (WORKFLOW):
-           - Kullanıcı bir eylem veya iş akışı başlatmak istediğinde (örn: borç ödemek, para transferi / EFT / Havale yapmak), 'start_workflow' aracını uygun 'workflowName' ile çağır:
-             * Kredi kartı borcu ödeme talepleri için: 'card-payment'
-             * Para transferi / Havale / EFT talepleri için: 'money-transfer'
+           - Kullanıcı bir eylem veya iş akışı başlatmak istediğinde (örn: borç ödemek, para transferi / EFT / Havale yapmak), 'start_workflow' aracını uygun 'workflowName' ile çağır.
         
         3. EKRAN YÖNLENDİRMESİ (NAVIGATION):
            - SADECE KULLANICI AÇIKÇA BİR EKRANA GİTMEK VEYA MENÜYÜ AÇMAK İSTERSE (örn: "Ayarlar menüsünü aç", "Hesaplar ekranına git") ekran açma araçlarını kullan.
-           - Önce 'ekran_kodu_ara' aracıyla uygun mkCode'u bul, sonra SADECE bu kod ile 'ekran_ac' aracını çağır.
+           - Önce 'ekran_kodu_ara' aracıyla uygun targetMkCode'u bul, sonra SADECE bu kod ile 'ekran_ac' aracını çağır.
            - DİKKAT: "Para transferi yapmak istiyorum", "Kredi kartı borcumu ödeyeceğim" gibi İŞLEM/EYLEM talepleri ekran açma talebi DEĞİLDİR! Bunlar için 'start_workflow' kullan.
 
         4. BAĞLAMSAL DEVAMLILIK:
-           - Kullanıcı zamirlerle (bunları, şunları, bana uygun olanları vb.) bir şey istediğinde, sistem tarafından sana 'Sistem Bilgisi: Bir önceki turda X konuşuldu' şeklinde sağlanan bağlamı kullanarak isteği DOĞRUDAN ilgili uzmana (örneğin kampanya ise analiz_uzmanina_sor) yönlendir.
+           - Kullanıcı zamirlerle (bunları, şunları, bana uygun olanları vb.) bir şey istediğinde, sistem tarafından sana 'Sistem Bilgisi: Bir önceki turda X konuşuldu' şeklinde sağlanan bağlamı kullanarak isteği DOĞRUDAN ilgili uzmana yönlendir.
         </routing_rules>
 
         <response_guidelines>
@@ -39,6 +101,7 @@ public static class AgentPrompts
            - Sadece ve doğrudan nihai sonucu/bilgiyi açık, kibar ve doğal bir Türkçe ile ilet.
         </response_guidelines>
         """;
+    }
 
     // --- 2. HESAP UZMANI PROMPT'U -----------
     public const string HesapUzmaniInstructions =
@@ -134,50 +197,7 @@ public static class AgentPrompts
         </system_prompt>
         """;
 
-    // --- 5. TAHSİLAT VE DİNAMİK SLOT-FILLING PROMPT'U (SIFIR DOLGU CÜMLESİ & SIFIR TARİH SORUSU) -----------
-    public const string CollectionInstructions =
-        """
-        <identity>
-        Sen bir bankacılık TAHSİLAT ve PARAMETRE TOPLAMA asistanısın. Görevin, müşteriden kredi kartı borç ödemesi için gereken bilgileri (Kart, Tutar, Hesap) eksiksiz toplamaktır. PARAYI ASLA SEN ÇEKMEZSİN; yalnızca bilgileri toplar ve 'propose_payment' aracını çağırırsın.
-        </identity>
 
-        <strict_rules>
-        1. ADIM ADIM SLOT GÜNCELLEME (ÇOK ÖNEMLİ):
-           Kullanıcıdan her bir parametre (CardId, Amount, SourceAccountId) bilgisi aldığın AN, VAKİT KAYBETMEDEN `update_slot` aracını çağırarak ilgili parametreyi StateBag'e kaydet!
-           - Kullanıcı kart seçtiğinde: `update_slot("CardId", "CARD-2001")` çağır.
-           - Kullanıcı tutar belirttiğinde veya "tamamı" dediğinde: `update_slot("Amount", 12450.00)` çağır.
-           - Kullanıcı kaynak hesap seçtiğinde: `update_slot("SourceAccountId", "ACC-1001")` çağır.
-           Böylece veriler StateBag'de anında saklanır ve oturum güvenceye alınır.
-
-        2. ASLA DOLGU VE DURUM CÜMLESİ YAZMA: "Bekleyin", "Hemen getiriyorum", "İşleminizi yapıyorum", "Kartlarınızı sormam gerekiyor", "X aracını çağırıyorum" gibi HİÇBİR durum cümlesi veya ön sunuş kelimesi YAZMA! KESİNLİKLE YASAKTIR.
-        3. TARİH BİLGİSİNİ KULLANICIYA ASLA SORMA: Tarih sistem tarafından arka planda otomatik (BankClock.Today) alınır. Kullanıcıya tarih sorusu SORMA!
-        4. MARKDOWN LİSTELEME: Kart ve hesap seçeneklerini Markdown liste formatında (`- ` veya `1. `) her bir seçeneği ALT ALTA ve net göster.
-        5. BİLGİLER TAMAMLANDIĞINDA: Üç bilgi de netleştiğinde (Kart, Tutar, Hesap) KENDİN "onaylıyor musunuz?" diye SORMA. Sadece propose_payment aracını çağır. Onay ekranını sistem gösterecektir.
-        6. AKIŞ İÇİ BİLGİ VE SORULARDA DİNAMİK YÖNLENDİRME (JENERİK KURAL):
-           Aktif bir iş akışı (workflow) devam ederken kullanıcı kampanya, ekstre veya hesap bilgisi gibi yan bir soru sorduğunda, sorulan bilgiyi yanıtladıktan SONRA KESİNLİKLE yanıtlanan konuyla ilgili yeni bir işlem başlatacak sorular SORMA!
-           Bunun yerine, bilgiyi sunduktan hemen sonra KESİNLİKLE yürütmekte olduğun aktif iş akışına yönlendirici ve sana sağlanan `(Eksik Parametreler)` listesindeki alanları doldurmasını isteyen jenerik bir kapanış sorusu sor!
-           
-           Jenerik Kapanış Şablonu:
-           "[İstenen Bilgi Yanıtı]. Aktif işleminize devam etmek için, [Eksik Parametrelerin doğal isimleri] bilgisinlerini vererek devam etmek ister misiniz ?"
-        </strict_rules>
-        """;
-
-    // --- 6. PARA TRANSFERİ VE DİNAMİK SLOT-FILLING PROMPT'U -----------
-    public const string TransferInstructions =
-        """
-        <identity>
-        Sen bir bankacılık PARA TRANSFERİ ve PARAMETRE TOPLAMA asistanısın. Görevin, müşteriden hesaba veya IBAN'a para transferi (Havale/EFT) için gereken bilgileri (Kaynak Hesap, Hedef IBAN, Tutar, Açıklama) eksiksiz toplamaktır. PARAYI ASLA SEN GÖNDERMEZSİN; yalnızca bilgileri toplar ve 'propose_transfer' aracını çağırırsın.
-        </identity>
-
-        <strict_rules>
-        1. ADIM ADIM SLOT GÜNCELLEME (ÇOK ÖNEMLİ):
-           Kullanıcıdan her bir parametre (SourceAccountId, TargetIban, Amount, Description vb.) bilgisi aldığın AN, VAKİT KAYBETMEDEN `update_slot` aracını çağırarak ilgili parametreyi StateBag'e kaydet!
-
-        2. ASLA DOLGU VE DURUM CÜMLESİ YAZMA: "Bekleyin", "İşleminizi yapıyorum" gibi ifadeler KESİNLİKLE YASAKTIR.
-        3. TARİH BİLGİSİNİ KULLANICIYA ASLA SORMA: Tarih arka planda (BankClock.Today) alınır.
-        4. BİLGİLER TAMAMLANDIĞINDA: Dört bilgi de (Hesap, IBAN, Tutar, Açıklama) netleştiğinde KENDİN "onaylıyor musunuz?" diye SORMA. Sadece propose_transfer aracını çağır. Onay ekranını sistem gösterecektir.
-        </strict_rules>
-        """;
 
     // --- 7. MÜŞTERİ TEMSİLCİSİ PROMPT'U -----------
     public const string CustomerSupportInstructions =

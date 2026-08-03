@@ -1,6 +1,7 @@
 using Banking.Domain.Records;
 using Banking.Agents.Tracing;
 using Banking.Agents.Workflows;
+using Banking.Domain.Constants;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 
@@ -37,7 +38,7 @@ public static class CollectionWorkflow
         // ── SENARYO A: Onay İstenmiyorsa (requiresApproval = false) ──
         if (!requiresApproval) // Onay zorunluluğu kontrolü
         {
-            hub.Publish("WORKFLOW", $"{workflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
+            hub.Publish(TraceCategories.Workflow, $"{workflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
             return new WorkflowBuilder(slotStep) // Doğrudan workflow oluşturma
                 .AddEdge(slotStep, actionStep)
                 .WithOutputFrom(actionStep)
@@ -45,7 +46,7 @@ public static class CollectionWorkflow
         }
 
         // ── SENARYO B: Onay İsteniyorsa (requiresApproval = true - HITL Gate) ──
-        hub.Publish("WORKFLOW", $"{workflowName}: MAF RequestPort onay gate'i oluşturuldu");
+        hub.Publish(TraceCategories.Workflow, $"{workflowName}: MAF RequestPort onay gate'i oluşturuldu");
         var approvalPortId = $"{workflowName}-approval-port";
         var approvalPort = RequestPort.Create<TConfirmation, bool>(approvalPortId); // Onay gate portu
 
@@ -98,7 +99,7 @@ public sealed class GenericSlotFillingStep<TSlots> : Executor<string, TSlots>
         if (status.IsComplete && _sessionStore.GetOrCreate(_sessionId).PendingSlots is TSlots completedSlots) // Tüm slotlar doldu mu
         {
             await context.QueueStateUpdateAsync("Slots", completedSlots, scopeName: WorkflowScopes.Slots, ct); // Slot durumunu güncelleme
-            _hub.Publish("WORKFLOW", $"Workflow Adımı: '{typeof(TSlots).Name}' İçin Tüm Slotlar Dinamik Olarak Tamamlandı ({status.FilledSlots.Count} alan dolu).");
+            _hub.Publish(TraceCategories.Workflow, $"Workflow Adımı: '{typeof(TSlots).Name}' İçin Tüm Slotlar Dinamik Olarak Tamamlandı ({status.FilledSlots.Count} alan dolu).");
             return completedSlots;
         }
 
@@ -110,7 +111,7 @@ public sealed class GenericSlotFillingStep<TSlots> : Executor<string, TSlots>
             var slots = System.Text.Json.JsonSerializer.Deserialize<TSlots>(json)!; // Slotları JSON'dan alma
 
             _sessionStore.SaveSlots(_sessionId, typeof(TSlots).Name, slots); // Slotları kaydetme
-            _hub.Publish("WORKFLOW", $"Workflow Adımı: '{typeof(TSlots).Name}' JSON Teklifi Ayrıştırıldı ve Saklandı.");
+            _hub.Publish(TraceCategories.Workflow, $"Workflow Adımı: '{typeof(TSlots).Name}' JSON Teklifi Ayrıştırıldı ve Saklandı.");
             return slots;
         }
 

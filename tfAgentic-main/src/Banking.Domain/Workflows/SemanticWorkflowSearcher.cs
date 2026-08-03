@@ -30,22 +30,29 @@ public sealed class SemanticWorkflowSearcher
     /// </summary>
     public void Initialize(IEnumerable<WorkflowMetadata> discoveredWorkflows)
     {
-        if (_isInitialized) return;
-
-        var list = discoveredWorkflows.ToList();
-        _logger.LogInformation("[Semantik İndeksleme] Toplam {Count} adet workflow taranıyor...", list.Count);
-
-        foreach (var item in list)
+        foreach (var item in discoveredWorkflows)
         {
-            var textToEmbed = $"{item.WorkflowName}: {item.Description}";
-            var embedding = _embedder.Embed(textToEmbed);
+            AddOrUpdate(item);
+        }
+    }
+
+    /// <summary>
+    /// Yeni eklenen (örneğin çalışma zamanında kaydolmuş deklaratif YAML) workflow'u anında vektörize edip RAG RAM belleğine ekler.
+    /// </summary>
+    public void AddOrUpdate(WorkflowMetadata item)
+    {
+        var textToEmbed = $"{item.WorkflowName}: {item.Description}";
+        var embedding = _embedder.Embed(textToEmbed);
+        
+        lock (_cache)
+        {
+            _cache.RemoveAll(c => c.Metadata.WorkflowName.Equals(item.WorkflowName, StringComparison.OrdinalIgnoreCase));
             _cache.Add((embedding, item));
-            _logger.LogInformation("[İndekslendi] Akış: '{WorkflowName}' · Tanım: '{Description}' (Tip: {SlotType})", 
-                item.WorkflowName, item.Description, item.SlotType.Name);
         }
 
         _isInitialized = true;
-        _logger.LogInformation("SemanticWorkflowSearcher başarıyla başlatıldı. Toplam {Count} adet workflow vektörize edilip RAM'de indekslendi.", _cache.Count);
+        _logger.LogInformation("[RAG Vektör İndekslendi] Akış: '{WorkflowName}' · Tanım: '{Description}' (Toplam İndeks: {Count})", 
+            item.WorkflowName, item.Description, _cache.Count);
     }
 
     /// <summary>

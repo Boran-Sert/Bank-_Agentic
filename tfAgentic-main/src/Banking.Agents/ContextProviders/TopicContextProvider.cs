@@ -7,6 +7,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Banking.Agents.Tracing;
+using Banking.Domain.Constants;
 
 namespace Banking.Agents.ContextProviders;
 
@@ -43,7 +44,7 @@ public class TopicContextProvider : AIContextProvider
         }
 
         _logger?.LogInformation("TopicContextProvider: Injecting previous assistant response context into system prompt.");
-        _hub?.Publish("CONTEXT", $"[TopicContextProvider] Önceki tur bağlamı sisteme enjekte ediliyor ({state.LastAssistantResponse.Length} karakter)");
+        _hub?.Publish(TraceCategories.Context, $"[TopicContextProvider] Önceki tur bağlamı sisteme enjekte ediliyor ({state.LastAssistantResponse.Length} karakter)");
 
         var message = $"[Sistem Bilgisi: Bir önceki turda asistandan kullanıcıya şu yanıt verildi:\n\n{state.LastAssistantResponse}\n Buna göre yeni niyeti analiz et.]";
 
@@ -74,14 +75,14 @@ public class TopicContextProvider : AIContextProvider
                 state.LastAssistantResponse = null; // Bağlamı temizleme
                 _sessionState.SaveState(context.Session, state); // Durumu kaydetme
                 _logger?.LogInformation("TopicContextProvider: Action/Screen/Workflow completion response detected, cleared last assistant response.");
-                _hub?.Publish("CONTEXT", "[TopicContextProvider] Aksiyon/Ekran/Tamamlanma yanıtı → Bağlam temizlendi");
+                _hub?.Publish(TraceCategories.Context, "[TopicContextProvider] Aksiyon/Ekran/Tamamlanma yanıtı → Bağlam temizlendi");
                 return ValueTask.CompletedTask;
             }
 
             state.LastAssistantResponse = text; // Yanıtı bağlama kaydetme
             _sessionState.SaveState(context.Session, state); // Durumu kaydetme
             _logger?.LogInformation("TopicContextProvider: Saved last assistant response to session state.");
-            _hub?.Publish("CONTEXT", $"[TopicContextProvider] Asistan yanıtı bağlam olarak saklandı ({text.Length} karakter)");
+            _hub?.Publish(TraceCategories.Context, $"[TopicContextProvider] Asistan yanıtı bağlam olarak saklandı ({text.Length} karakter)");
         }
 
         return ValueTask.CompletedTask;

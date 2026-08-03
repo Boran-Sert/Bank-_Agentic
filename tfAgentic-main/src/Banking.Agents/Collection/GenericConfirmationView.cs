@@ -19,14 +19,29 @@ public sealed record GenericConfirmationView(
     {
         ArgumentNullException.ThrowIfNull(slots);
         var workflowName = typeof(TSlots).Name;
-        var properties = typeof(TSlots).GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        if (slots is System.Collections.IDictionary dictObj)
+        {
+            var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (System.Collections.DictionaryEntry entry in dictObj)
+            {
+                var k = entry.Key?.ToString();
+                if (!string.IsNullOrEmpty(k) && entry.Value is not null)
+                {
+                    dict[k] = entry.Value;
+                }
+            }
+            return new GenericConfirmationView(workflowName, dict);
+        }
+
+        var properties = typeof(TSlots).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.GetIndexParameters().Length == 0);
+        var resDict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var prop in properties)
         {
-            dict[prop.Name] = prop.GetValue(slots);
+            resDict[prop.Name] = prop.GetValue(slots);
         }
 
-        return new GenericConfirmationView(workflowName, dict);
+        return new GenericConfirmationView(workflowName, resDict);
     }
 }

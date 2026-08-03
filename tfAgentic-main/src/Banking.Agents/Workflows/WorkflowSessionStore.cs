@@ -55,7 +55,7 @@ public sealed class WorkflowSessionStore
         return _sessions.GetOrAdd(sessionId, id =>
         {
             _logger?.LogInformation("StateBag Oluşturuldu → SessionId: {SessionId}", id);
-            _hub?.Publish("WORKFLOW", $"StateBag Oluşturuldu → SessionId: {id}");
+            _hub?.Publish(TraceCategories.Workflow, $"StateBag Oluşturuldu → SessionId: {id}");
             return new WorkflowSessionBag { SessionId = id };
         });
     }
@@ -65,7 +65,7 @@ public sealed class WorkflowSessionStore
         var bag = GetOrCreate(sessionId);
         bag.SlotBag[key] = value;
         _logger?.LogInformation("StateBag Parametre Eklendi → [{Key} = {Value}] (Session: {SessionId})", key, value, sessionId);
-        _hub?.Publish("WORKFLOW", $"StateBag Parametre Eklendi → [{key} = {value}] (Session: {sessionId})");
+        _hub?.Publish(TraceCategories.Workflow, $"StateBag Parametre Eklendi → [{key} = {value}] (Session: {sessionId})");
     }
 
     // --- Jenerik SaveSlots: Reflection İle Saklar, ILogger ve TraceHub İle Loglar -----------
@@ -77,22 +77,40 @@ public sealed class WorkflowSessionStore
         bag.Phase = phase;
         bag.PendingSlots = slotsObj;
 
-        var properties = typeof(TSlots).GetProperties(BindingFlags.Public | BindingFlags.Instance);
         var addedItems = new List<string>();
 
-        foreach (var prop in properties)
+        if (slotsObj is System.Collections.IDictionary dict)
         {
-            var value = prop.GetValue(slotsObj);
-            if (value is not null)
+            foreach (System.Collections.DictionaryEntry entry in dict)
             {
-                bag.SlotBag[prop.Name] = value;
-                addedItems.Add($"{prop.Name}={value}");
+                var k = entry.Key?.ToString();
+                var v = entry.Value;
+                if (!string.IsNullOrEmpty(k) && v is not null)
+                {
+                    bag.SlotBag[k] = v;
+                    addedItems.Add($"{k}={v}");
+                }
+            }
+        }
+        else
+        {
+            var properties = typeof(TSlots).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.GetIndexParameters().Length == 0);
+
+            foreach (var prop in properties)
+            {
+                var value = prop.GetValue(slotsObj);
+                if (value is not null)
+                {
+                    bag.SlotBag[prop.Name] = value;
+                    addedItems.Add($"{prop.Name}={value}");
+                }
             }
         }
 
         var details = string.Join(", ", addedItems);
         _logger?.LogInformation("StateBag Kaydedildi → Workflow: '{WorkflowName}' (Phase: {Phase}) | Saklanan Değerler: [{Details}]", workflowName, phase, details);
-        _hub?.Publish("WORKFLOW", $"StateBag Kaydedildi → Workflow: '{workflowName}' (Phase: {phase}) | Saklanan Değerler: [{details}]");
+        _hub?.Publish(TraceCategories.Workflow, $"StateBag Kaydedildi → Workflow: '{workflowName}' (Phase: {phase}) | Saklanan Değerler: [{details}]");
     }
 
     // --- Jenerik SlotStatus: Dolu ve Eksik Parametreleri Tespit Eder ve Loglar -----------
@@ -107,26 +125,49 @@ public sealed class WorkflowSessionStore
             bag.SlotBag["Date"] = Banking.Domain.BankClock.Today;
         }
 
-        var properties = typeof(TSlots).GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        IEnumerable<string> propertyNames;
+
+        if (typeof(TSlots) == typeof(Dictionary<string, object?>) || typeof(System.Collections.IDictionary).IsAssignableFrom(typeof(TSlots)))
+        {
+            var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var k in bag.SlotBag.Keys) keys.Add(k);
+
+            if (bag.PendingSlots is System.Collections.IDictionary dict)
+            {
+                foreach (System.Collections.DictionaryEntry entry in dict)
+                {
+                    var k = entry.Key?.ToString();
+                    if (!string.IsNullOrEmpty(k)) keys.Add(k);
+                }
+            }
+
+            propertyNames = keys;
+        }
+        else
+        {
+            propertyNames = typeof(TSlots).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                .Where(p => p.GetIndexParameters().Length == 0)
+                .Select(p => p.Name);
+        }
 
         var filled = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         var missing = new List<string>();
 
-        foreach (var prop in properties)
+        foreach (var propName in propertyNames)
         {
-            if (bag.SlotBag.TryGetValue(prop.Name, out var val) && val is not null && !IsDefaultValue(val))
+            if (bag.SlotBag.TryGetValue(propName, out var val) && val is not null && !IsDefaultValue(val))
             {
-                filled[prop.Name] = val;
+                filled[propName] = val;
             }
             else
             {
-                missing.Add(prop.Name);
+                missing.Add(propName);
             }
         }
 
         var result = new SlotStatusResult(filled, missing, IsComplete: missing.Count == 0);
         _logger?.LogDebug("StateBag Durumu Sorgulandı → Dolu: {FilledCount}, Eksik: {MissingCount} | Tamamlandı: {IsComplete}", filled.Count, missing.Count, result.IsComplete);
-        _hub?.Publish("WORKFLOW", $"StateBag Durumu Sorgulandı → Dolu: {filled.Count}, Eksik: {missing.Count} | Tamamlandı: {result.IsComplete}");
+        _hub?.Publish(TraceCategories.Workflow, $"StateBag Durumu Sorgulandı → Dolu: {filled.Count}, Eksik: {missing.Count} | Tamamlandı: {result.IsComplete}");
         return result;
     }
 
@@ -183,6 +224,11 @@ public sealed class WorkflowSessionStore
     {
         var bag = GetOrCreate(sessionId);
 
+        if (typeof(TSlots) == typeof(Dictionary<string, object?>) || typeof(System.Collections.IDictionary).IsAssignableFrom(typeof(TSlots)))
+        {
+            return new Dictionary<string, object?>(bag.SlotBag, StringComparer.OrdinalIgnoreCase) as TSlots;
+        }
+
         // Tarih alanı varsa ve atanmadıysa varsayılan bugün ata
         if (!bag.SlotBag.ContainsKey("Date") && typeof(TSlots).GetProperty("Date") != null)
         {
@@ -217,7 +263,7 @@ public sealed class WorkflowSessionStore
                     else if (targetType == typeof(int) && rawVal is not int)
                         rawVal = Convert.ToInt32(rawVal);
                     else if (targetType == typeof(string) && rawVal is not string)
-                        rawVal = rawVal.ToString();
+                        rawVal = rawVal?.ToString();
                     else if (targetType == typeof(DateOnly) && rawVal is string dateStr)
                         rawVal = DateOnly.Parse(dateStr);
 

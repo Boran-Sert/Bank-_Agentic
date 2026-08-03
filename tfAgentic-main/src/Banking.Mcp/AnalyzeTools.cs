@@ -12,7 +12,7 @@ using Banking.Domain.Financing;
 using Banking.Domain.Data;
 using Banking.Mcp.Registry;
 
-namespace Banking.Agents.Specialists;
+namespace Banking.Mcp;
 
 /// <summary>
 /// Finansal Analiz Ajanı (AnalyzeAgent) tarafından çağrılacak olan analiz ve kampanya araçları sınıfı.

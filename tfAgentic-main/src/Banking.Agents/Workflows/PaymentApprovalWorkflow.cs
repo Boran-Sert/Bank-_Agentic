@@ -1,12 +1,10 @@
-using System.Collections.Generic;
-using System.ComponentModel;
-using Banking.Agents.Records;
+
+using Banking.Domain.Records;
 using Banking.Agents.Tracing;
-using Banking.Agents.Workflows;
 using Banking.Domain.Models;
 using Banking.Domain.Services;
 
-namespace Banking.Agents.Collection;
+namespace Banking.Agents.Workflows;
 
 // --- Onay Reddedildiğinde İptal Çıktısı -----------
 public sealed record PaymentCancelled(string Reason);

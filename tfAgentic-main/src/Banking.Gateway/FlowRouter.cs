@@ -1,7 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Banking.Agents;
-using Banking.Agents.Collection;
+using Banking.Agents.Workflows;
 using Banking.Agents.Tracing;
 using Banking.Domain.Constants;
 using Microsoft.Extensions.Logging;

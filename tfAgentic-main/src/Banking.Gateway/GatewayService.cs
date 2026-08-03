@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using Banking.Agents.Collection;
+using Banking.Agents.Workflows;
 using Banking.Agents.Tracing;
 using Banking.Domain.Constants;
 using Banking.Domain.MkCodes;

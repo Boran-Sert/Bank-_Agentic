@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 
-namespace Banking.Agents.Collection;
+namespace Banking.Agents.Workflows;
 
 /// <summary>
 /// StateBag'deki parametrelerden dinamik olarak türetilen jenerik onay ekranı görünümü.

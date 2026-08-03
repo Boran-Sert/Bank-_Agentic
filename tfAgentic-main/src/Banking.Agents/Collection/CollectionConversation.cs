@@ -1,16 +1,15 @@
-using Banking.Agents.Records;
+using Banking.Domain.Records;
 using Banking.Agents.Tracing;
 using Banking.Agents.Workflows;
 using Banking.Domain.Constants;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 
-namespace Banking.Agents.Collection;
+namespace Banking.Agents.Workflows;
 
-/// <summary>Tahsilat akışının her adımında UI'a dönen sonuç DTO'su.</summary>
 public sealed record CollectStepResult(
     string SessionId,
-    string Status,                       // question | confirmation | completed | cancelled
+    string Status,                       
     string? Prompt = null,
     GenericConfirmationView? Confirmation = null,
     ReceiptDto? Receipt = null);
@@ -18,17 +17,26 @@ public sealed record CollectStepResult(
 public sealed record ReceiptDto(string ReceiptId, decimal Amount, decimal RemainingDebt, string Date);
 
 /// <summary>
-/// Tek bir tahsilat oturumunu yürütür (Conversational Session Manager):
-///  - Ajan inşasını kendi yapmaz, constructor'dan hazır alır.
-///  - Sadece konuşma adımını ve MAF Workflow streaming yürütmesini yönetir.
-///  - Konu dışı sorularda (kampanya, bakiye vb.) StateBag'i koruyarak Orkestratöre danışır.
+/// WorkflowConversationStore içerisinde tüm jenerik türleri ortak bir koleksiyonda saklayabilmek için arayüz.
 /// </summary>
-public sealed class CollectionConversation
+public interface IWorkflowConversation
+{
+    Task<CollectStepResult> StartWorkflowAsync(string? initialMessage = null);
+    Task<CollectStepResult> ProcessUserMessageAsync(string answer);
+}
+
+/// <summary>
+/// Herhangi bir TSlots (PaymentSlots, TransferSlots vb.) record nesnesine dinamik adapte olan konuşma yöneticisi.
+/// </summary>
+public sealed class CollectionConversation<TSlots, TConfirmation, TOutcome> : IWorkflowConversation
+    where TSlots : class
+    where TConfirmation : class
+    where TOutcome : class
 {
     private readonly AIAgent _agent;
     private readonly AgentSession _session;
     private readonly WorkflowSessionStore _sessionStore;
-    private readonly PaymentActionExecutor _executor;
+    private readonly IDeterministicActionExecutor<TSlots, TConfirmation, TOutcome> _executor;
     private readonly TraceHub _hub;
     private readonly AgentRuntime _runtime;
 
@@ -36,7 +44,7 @@ public sealed class CollectionConversation
     private StreamingRun? _run;
     private IAsyncEnumerator<WorkflowEvent>? _events;
     private ExternalRequest? _pendingApproval;
-    private GenericConfirmationView? _confirmation;
+    private TConfirmation? _confirmation;
 
     public string SessionId { get; }
 
@@ -45,7 +53,7 @@ public sealed class CollectionConversation
         AIAgent agent,
         AgentSession session,
         WorkflowSessionStore sessionStore,
-        PaymentActionExecutor executor,
+        IDeterministicActionExecutor<TSlots, TConfirmation, TOutcome> executor,
         TraceHub hub,
         AgentRuntime runtime)
     {
@@ -60,87 +68,88 @@ public sealed class CollectionConversation
 
     public async Task<CollectStepResult> StartWorkflowAsync(string? initialMessage = null)
     {
-        var summary = _sessionStore.BuildSlotSummary<PaymentSlots>(SessionId); // Slot özetini alma
+        var summary = _sessionStore.BuildSlotSummary<TSlots>(SessionId); // Dinamik Jenerik Slot Özeti
         var kickoff = string.IsNullOrWhiteSpace(initialMessage)
-            ? $"Kredi kartı borcumu ödemek istiyorum. Lütfen gerekli bilgileri sırayla sor.\n\n({summary})"
+            ? $"İşlemi başlatmak istiyorum. Lütfen gerekli bilgileri sırayla sor.\n\n({summary})"
             : $"{initialMessage!.Trim()}\n\n({summary})\n\n(Eğer eksik bilgi yoksa propose_payment çağır; eksik varsa sırayla sor.)";
 
-        var response = await _agent.RunAsync(kickoff, _session); // Tahsilat ajanı çalıştırma
-        return await ProcessAgentOutputAsync(response.Text, kickoff); // Ajan çıktısını işleme
+        var response = await _agent.RunAsync(kickoff, _session);
+        return await ProcessAgentOutputAsync(response.Text, kickoff);
     }
 
     public async Task<CollectStepResult> ProcessUserMessageAsync(string answer)
     {
         if (_phase == WorkflowPhases.Confirm)
-            return await ProcessUserApprovalResponseAsync(answer); // Onay adımını işleme
+            return await ProcessUserApprovalResponseAsync(answer);
 
-        var summary = _sessionStore.BuildSlotSummary<PaymentSlots>(SessionId); // Slot özetini alma
+        var summary = _sessionStore.BuildSlotSummary<TSlots>(SessionId); // Dinamik Jenerik Slot Özeti
         var promptWithContext = $"{answer}\n\n({summary})";
 
-        var response = await _agent.RunAsync(promptWithContext, _session); // Tahsilat ajanı çalıştırma
-        return await ProcessAgentOutputAsync(response.Text, answer); // Ajan çıktısını işleme
+        var response = await _agent.RunAsync(promptWithContext, _session);
+        return await ProcessAgentOutputAsync(response.Text, answer);
     }
 
     private async Task<CollectStepResult> ProcessAgentOutputAsync(string? agentText, string userMessage)
     {
         // 1. İptal kontrolü
-        if (agentText?.Contains("CANCELLED") == true) // Kullanıcı iptali kontrolü
+        if (agentText?.Contains("CANCELLED") == true)
         {
             _phase = WorkflowPhases.Done;
-            _sessionStore.CancelSession(SessionId); // Oturumu iptal etme
-            _hub.Publish(TraceCategories.System, "Tahsilat oturumu iptal edildi → akıştan çıkıldı");
+            _sessionStore.CancelSession(SessionId);
+            _hub.Publish(TraceCategories.System, "Oturum iptal edildi → akıştan çıkıldı");
             return new CollectStepResult(SessionId, WorkflowStatuses.Cancelled, Prompt: "İşlem iptal edildi.");
         }
 
-        // 2. Dinamik StateBag Kontrolü (propose_payment veya araç çağrısı ile tüm slotlar doldu mu?)
-        var status = _sessionStore.GetSlotStatus<SlotStatusResult>(SessionId); // Slot durumunu alma
-        if (status.IsComplete && _sessionStore.GetOrCreate(SessionId).PendingSlots is PaymentSlots completedSlots) // Tüm slotlar doldu mu
+        // 2. Dinamik StateBag Kontrolü (TSlots ile tüm slotlar doldu mu?)
+        var status = _sessionStore.GetSlotStatus<TSlots>(SessionId);
+        if (status.IsComplete && _sessionStore.GetOrCreate(SessionId).PendingSlots is TSlots completedSlots)
         {
             _phase = WorkflowPhases.Confirm;
-            return await EnterConfirmationPhaseAsync(completedSlots); // Onay ekranına geçiş
+            return await EnterConfirmationPhaseAsync(completedSlots);
         }
 
-        // PROPOSAL_READY JSON'ı geldiyse parse et ve kaydet
+        // 3. PROPOSAL_READY JSON teklifi geldiyse parse et ve dinamik TSlots sakla
         if (agentText?.Contains("PROPOSAL_READY:") == true)
         {
             var jsonIndex = agentText.IndexOf("PROPOSAL_READY:", StringComparison.Ordinal) + "PROPOSAL_READY:".Length;
             var json = agentText[jsonIndex..].Trim();
-            var slots = System.Text.Json.JsonSerializer.Deserialize<PaymentSlots>(json); // Slotları JSON'dan alma
+            var slots = System.Text.Json.JsonSerializer.Deserialize<TSlots>(json);
             if (slots is not null)
             {
-                _sessionStore.SaveSlots(SessionId, PaymentSlotKeys.WorkflowName, slots); // Slotları kaydetme
+                _sessionStore.SaveSlots(SessionId, typeof(TSlots).Name, slots);
                 _phase = WorkflowPhases.Confirm;
-                return await EnterConfirmationPhaseAsync(slots); // Onay ekranına geçiş
+                return await EnterConfirmationPhaseAsync(slots);
             }
         }
 
-        // 3. Konu Dışı Soru Algılama: Kullanıcı tahsilat dışı soru sorduysa (örn: "kampanyalar nelerdir?") Orkestratöre danış, StateBag'i koru!
+        // 4. Konu Dışı Soru Algılama (Orchestrator Fallback)
         if (agentText?.Contains("bilgi veremiyorum") == true || agentText?.Contains("yardımcı olamıyorum") == true || agentText?.Contains("bilgi veremem") == true)
         {
             _hub.Publish(TraceCategories.Security, "Output Guard: 1 iç bilgi sızıntısı veya konu dışı soru tespit edildi ve temizlendi");
-            var fallback = await _runtime.AskOrchestratorAsync(userMessage); // Orkestratöre danışma (konu dışı)
-            return new CollectStepResult(SessionId, WorkflowStatuses.Question, Prompt: $"{fallback.Reply}\n\n---\n*İpucu: Kart ödeme işleminize kaldığınız yerden devam edebilirsiniz.*");
+            var fallback = await _runtime.AskOrchestratorAsync(userMessage);
+            return new CollectStepResult(SessionId, WorkflowStatuses.Question, Prompt: $"{fallback.Reply}\n\n---\n*İpucu: İşleminize kaldığınız yerden devam edebilirsiniz.*");
         }
 
         var prompt = string.IsNullOrWhiteSpace(agentText) ? "Devam etmek için lütfen bilgi verir misiniz?" : agentText!;
         return new CollectStepResult(SessionId, WorkflowStatuses.Question, Prompt: prompt);
     }
 
-    private async Task<CollectStepResult> EnterConfirmationPhaseAsync(PaymentSlots slots)
+    private async Task<CollectStepResult> EnterConfirmationPhaseAsync(TSlots slots)
     {
-        _confirmation = _executor.BuildConfirmationView(slots); // Onay ekranı oluşturma
-        _sessionStore.GetOrCreate(SessionId).PendingConfirmation = _confirmation;
+        _confirmation = _executor.BuildConfirmationView(slots);
+        _sessionStore.GetOrCreate(SessionId).PendingConfirmation = _confirmation as GenericConfirmationView;
         _hub.Publish(TraceCategories.Workflow, "Bilgiler tamamlandı → Jenerik MAF workflow başlatıldı");
 
-        var workflow = DeterministicActionWorkflow.Build( // Workflow inşa etme
-            workflowName: PaymentSlotKeys.WorkflowName,
+        // Custom Model: DeterministicActionWorkflow (MAF Runner)
+        var workflow = DeterministicActionWorkflow.Build(
+            workflowName: typeof(TSlots).Name,
             slots: slots,
             actionExecutor: _executor,
             hub: _hub,
             requiresApproval: true);
 
-        _run = await InProcessExecution.RunStreamingAsync(workflow, _confirmation); // Workflow akışını başlatma
-        _events = _run.WatchStreamAsync().GetAsyncEnumerator(); // Akış olaylarını dinleme
+        _run = await InProcessExecution.RunStreamingAsync(workflow, _confirmation);
+        _events = _run.WatchStreamAsync().GetAsyncEnumerator();
 
         while (await _events.MoveNextAsync())
         {
@@ -149,7 +158,7 @@ public sealed class CollectionConversation
                 _pendingApproval = req.Request;
                 _phase = WorkflowPhases.Confirm;
                 _hub.Publish(TraceCategories.Workflow, "Onay ekranı kullanıcıya gönderildi → onay bekleniyor (HITL)");
-                return new CollectStepResult(SessionId, WorkflowStatuses.Confirmation, Confirmation: _confirmation); // Onay ekranı sonucu
+                return new CollectStepResult(SessionId, WorkflowStatuses.Confirmation, Confirmation: _confirmation as GenericConfirmationView);
             }
         }
 
@@ -163,31 +172,34 @@ public sealed class CollectionConversation
         if (_run is null || _events is null || _pendingApproval is null)
             return new CollectStepResult(SessionId, WorkflowStatuses.Cancelled, Prompt: "Onay durumu bulunamadı.");
 
-        var approved = ParseApproval(answer); // Kullanıcı onayını çözümleme
-        await _run.SendResponseAsync(_pendingApproval.CreateResponse(approved)); // Yanıtı workflow'a iletme
+        var approved = ParseApproval(answer);
+        await _run.SendResponseAsync(_pendingApproval.CreateResponse(approved));
 
         while (await _events.MoveNextAsync())
         {
-            if (_events.Current is WorkflowOutputEvent output && output.Is<PaymentOutcome>())
+            if (_events.Current is WorkflowOutputEvent output && output.Is<TOutcome>())
             {
                 _phase = WorkflowPhases.Done;
-                var outcome = output.As<PaymentOutcome>();
-                if (outcome?.Receipt is { } r)
+                var outcome = output.As<TOutcome>();
+                
+                // Pattern Matching ile Outcome içindeki Receipt kontrolü
+                if (outcome is PaymentOutcome { Receipt: { } r })
                 {
-                    _sessionStore.CompleteSession(SessionId); // Oturumu tamamlama
-                    _hub.Publish(TraceCategories.System, "Tahsilat tamamlandı → oturum kapandı (makbuz üretildi)");
+                    _sessionStore.CompleteSession(SessionId);
+                    _hub.Publish(TraceCategories.System, "İşlem tamamlandı → oturum kapandı (makbuz üretildi)");
                     var dto = new ReceiptDto(r.ReceiptId, r.Amount, r.RemainingDebt, r.Date.ToString("dd.MM.yyyy"));
-                    return new CollectStepResult(SessionId, WorkflowStatuses.Completed, Receipt: dto); // Makbuzlu başarı yanıtı
+                    return new CollectStepResult(SessionId, WorkflowStatuses.Completed, Receipt: dto);
                 }
-                _sessionStore.CancelSession(SessionId); // Oturumu iptal etme
-                _hub.Publish(TraceCategories.System, "Tahsilat oturumu kapandı (onaylanmadı)");
-                return new CollectStepResult(SessionId, WorkflowStatuses.Cancelled, Prompt: "Ödeme iptal edildi. Hiçbir tutar tahsil edilmedi.");
+                
+                _sessionStore.CancelSession(SessionId);
+                _hub.Publish(TraceCategories.System, "Oturum kapandı (onaylanmadı veya makbuz alınamadı)");
+                return new CollectStepResult(SessionId, WorkflowStatuses.Cancelled, Prompt: approved ? "İşlem sonlandırıldı." : "İşlem iptal edildi. Hiçbir tutar tahsil edilmedi.");
             }
         }
 
         _phase = WorkflowPhases.Done;
         _sessionStore.CancelSession(SessionId);
-        return new CollectStepResult(SessionId, WorkflowStatuses.Cancelled, Prompt: approved ? "İşlem tamamlandı." : "Ödeme iptal edildi.");
+        return new CollectStepResult(SessionId, WorkflowStatuses.Cancelled, Prompt: approved ? "İşlem tamamlandı." : "İşlem iptal edildi.");
     }
 
     private static bool ParseApproval(string answer)

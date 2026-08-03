@@ -5,7 +5,7 @@ using Banking.Agents.Tracing;
 using Banking.Domain.Constants;
 using Microsoft.Extensions.Logging;
 
-namespace Banking.Agents.Collection;
+namespace Banking.Agents.Workflows;
 
 // --- Jenerik Slot Durumu Çıktısı -----------
 public sealed record SlotStatusResult(

@@ -1,10 +1,10 @@
-using Banking.Agents.Records;
+using Banking.Domain.Records;
 using Banking.Agents.Tracing;
 using Banking.Agents.Workflows;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 
-namespace Banking.Agents.Collection;
+namespace Banking.Agents.Workflows;
 
 /// <summary>
 /// Jenerik Dinamik MAF Workflow Boru Hattı:

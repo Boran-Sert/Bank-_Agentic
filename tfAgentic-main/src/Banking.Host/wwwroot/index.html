@@ -50,8 +50,9 @@
   .typing { align-self: flex-start; color: var(--muted); font-size: 13px; }
   .confirm-card { align-self: flex-start; background: var(--panel); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,.3); }
   .confirm-card h3 { margin: 0 0 12px; font-size: 14px; color: #93c5fd; letter-spacing: .5px; }
-  .confirm-card .row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; border-bottom: 1px dashed var(--panel2); }
-  .confirm-card .row span:first-child { color: var(--muted); }
+  .confirm-card .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; font-size: 13px; border-bottom: 1px dashed var(--panel2); }
+  .confirm-card .row span:first-child { color: var(--muted); white-space: nowrap; }
+  .confirm-card .row span:last-child { text-align: right; word-break: break-all; }
   .confirm-card .row.total span:last-child { font-weight: 700; color: #fde68a; }
   .confirm-card .actions { display: flex; gap: 10px; margin-top: 14px; }
   .confirm-card button { flex: 1; padding: 9px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
@@ -226,19 +227,59 @@ function handleCollect(r) {
 }
 
 function renderConfirm(r) {
-  const cardMasked = r.cardNumber || (r.confirmation ? r.confirmation.cardMasked : '****');
-  const rawAmount = r.amount || (r.confirmation ? r.confirmation.amount : 0);
-  const amountVal = parseFloat(rawAmount);
-  const accountMasked = r.accountNo || (r.confirmation ? r.confirmation.sourceAccountMasked : '****');
-  const dateStr = (r.confirmation ? r.confirmation.date : new Date().toLocaleDateString('tr-TR'));
+  const params = {};
+  if (r.confirmation) Object.assign(params, r.confirmation);
+  Object.keys(r).forEach(k => {
+    if (!['type', 'mkCodeValue', 'text', 'sessionToken', 'status', 'sessionId', 'prompt', 'receipt', 'confirmation'].includes(k)) {
+      params[k] = r[k];
+    }
+  });
 
   const card = document.createElement('div'); card.className = 'confirm-card';
+
+  let title = '🔐 İŞLEM ONAYI';
+  if (r.mkCodeValue === 'CreditCardPayment' || params.cardId || params.cardMasked) {
+    title = '🔐 ÖDEME ONAYI';
+  } else if (r.mkCodeValue === 'MoneyTransfer' || params.targetIban) {
+    title = '💸 TRANSFER ONAYI';
+  }
+
+  const keyLabels = {
+    cardId: 'Kart',
+    cardNumber: 'Kart',
+    cardMasked: 'Kart',
+    amount: 'Ödenecek Tutar',
+    sourceAccountId: 'Kaynak Hesap',
+    sourceAccountMasked: 'Kaynak Hesap',
+    targetIban: 'Hedef IBAN',
+    description: 'Açıklama',
+    date: 'Tarih'
+  };
+
+  let rowsHtml = '';
+  Object.keys(params).forEach(key => {
+    const val = params[key];
+    if (val === null || val === undefined || val === '') return;
+
+    const label = keyLabels[key] || (key.charAt(0).toUpperCase() + key.slice(1));
+    let displayVal = val;
+
+    if (key.toLowerCase().includes('amount') || (typeof val === 'number' && key !== 'overdueDays')) {
+      const num = parseFloat(val);
+      if (!isNaN(num)) displayVal = fmt(num);
+    }
+
+    const isTotalRow = key.toLowerCase().includes('amount');
+    rowsHtml += `
+      <div class="row ${isTotalRow ? 'total' : ''}">
+        <span>${label}</span>
+        <span>${displayVal}</span>
+      </div>`;
+  });
+
   card.innerHTML = `
-    <h3>🔐 ÖDEME ONAYI</h3>
-    <div class="row"><span>Kart</span><span>${cardMasked}</span></div>
-    <div class="row total"><span>Ödenecek tutar</span><span>${fmt(isNaN(amountVal) ? 0 : amountVal)}</span></div>
-    <div class="row"><span>Kaynak hesap</span><span>${accountMasked}</span></div>
-    <div class="row"><span>Tarih</span><span>${dateStr}</span></div>
+    <h3>${title}</h3>
+    ${rowsHtml}
     <div class="actions"><button class="btn-approve">✓ Onayla</button><button class="btn-cancel">✗ İptal</button></div>`;
   chat.appendChild(card); chat.scrollTop = chat.scrollHeight;
   const [approve, cancel] = card.querySelectorAll('button');
@@ -266,11 +307,12 @@ async function respondConfirm(card, answer) {
 
 function renderReceipt(rc) {
   const d = document.createElement('div'); d.className = 'receipt';
+  const remainingLabel = rc.receiptId && rc.receiptId.startsWith('TR-') ? 'Kalan bakiye' : 'Kalan borç';
   d.innerHTML = `
-    <h3>✅ Ödeme Başarılı</h3>
+    <h3>✅ İşlem Başarılı</h3>
     <div class="row"><span>Makbuz No</span><span>${rc.receiptId}</span></div>
-    <div class="row"><span>Ödenen</span><span>${fmt(rc.amount)}</span></div>
-    <div class="row"><span>Kalan borç</span><span>${fmt(rc.remainingDebt)}</span></div>
+    <div class="row"><span>Tutar</span><span>${fmt(rc.amount)}</span></div>
+    <div class="row"><span>${remainingLabel}</span><span>${fmt(rc.remainingDebt)}</span></div>
     <div class="row"><span>Tarih</span><span>${rc.date}</span></div>`;
   chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
 }

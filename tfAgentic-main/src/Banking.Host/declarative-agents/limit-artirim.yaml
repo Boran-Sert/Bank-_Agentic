@@ -1,0 +1,21 @@
+kind: Prompt
+name: limit-artirim
+displayName: Kredi Kartı Limit Artırım Akışı
+description: Kullanıcının kredi kartı limitini artırma taleplerini ve gerekli tutar bilgilerini toplar.
+instructions: |
+  Kullanıcıdan limit artırımı istediği kartı ve talep ettiği yeni limiti sırayla iste. Bilgiler tamamlandığında propose_limit_artirim çağır.
+model:
+  options:
+    temperature: 0.1
+inputSchema:
+  type: object
+  properties:
+    cardId:
+      type: string
+      description: Limit artırımı yapılacak kartın ID'si
+    requestedLimit:
+      type: number
+      description: Talep edilen yeni kart limiti
+  required:
+    - cardId
+    - requestedLimit

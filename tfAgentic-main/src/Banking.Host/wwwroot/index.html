@@ -3,251 +3,1255 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Banka Asistanı · MAF Agentic</title>
+<title>TKFB Agentic · Microsoft Agent Framework & Declarative Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
   :root {
-    --bg: #0f172a; --panel: #1e293b; --panel2: #334155;
-    --accent: #2563eb; --green: #16a34a; --red: #dc2626;
-    --text: #e2e8f0; --muted: #94a3b8; --bubble-user: #2563eb; --bubble-bot: #334155;
+    --bg-dark: #090d16;
+    --bg-panel: rgba(18, 26, 43, 0.75);
+    --bg-panel-solid: #121a2b;
+    --bg-input: #0c1220;
+    --border-color: rgba(255, 255, 255, 0.08);
+    --border-highlight: rgba(59, 130, 246, 0.4);
+    
+    --primary: #3b82f6;
+    --primary-glow: rgba(59, 130, 246, 0.35);
+    --accent-emerald: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-purple: #a855f7;
+    --accent-rose: #f43f5e;
+    --accent-cyan: #06b6d4;
+
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    --text-dim: #64748b;
+
+    /* Layer Colors */
     --l-llm: #a855f7;
     --l-a2a: #3b82f6;
     --l-mcp: #14b8a6;
-    --l-service: #22c55e;
+    --l-service: #10b981;
     --l-workflow: #f59e0b;
-    --l-system: #10b981;
-    --l-context: #64748b;
+    --l-system: #0ea5e9;
+    --l-context: #8b5cf6;
     --l-gateway: #ec4899;
     --l-flowrouter: #6366f1;
     --l-security: #ef4444;
   }
-  * { box-sizing: border-box; }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
   body {
-    margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-dark);
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%);
+    color: var(--text-main);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
+
+  /* Header */
   header {
-    padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--panel2);
-    display: flex; align-items: center; gap: 12px;
+    height: 60px;
+    padding: 0 24px;
+    background: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    z-index: 100;
   }
-  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
-  header .badge { font-size: 11px; color: var(--muted); background: var(--panel2); padding: 3px 8px; border-radius: 999px; }
-  header .spacer { flex: 1; }
 
-  #main { flex: 1; display: flex; min-height: 0; }
-  .chat-pane { flex: 1.2; display: flex; flex-direction: column; min-width: 0; border-right: 1px solid var(--panel2); }
-  .trace-pane { flex: 1; display: flex; flex-direction: column; min-width: 320px; background: #0b1120; }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
 
-  #chat { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 11px; }
-  .msg { max-width: 82%; padding: 10px 14px; border-radius: 14px; line-height: 1.45; white-space: pre-wrap; font-size: 14px; }
-  .msg p { margin: 0 0 8px 0; }
-  .msg p:last-child { margin-bottom: 0; }
-  .msg ul, .msg ol { margin: 0 0 8px 0; padding-left: 20px; }
-  .msg ul:last-child, .msg ol:last-child { margin-bottom: 0; }
-  .msg li { margin-bottom: 4px; }
-  .msg.user { align-self: flex-end; background: var(--bubble-user); color: white; border-bottom-right-radius: 4px; }
-  .msg.bot { align-self: flex-start; background: var(--bubble-bot); border-bottom-left-radius: 4px; }
-  .msg.sys { align-self: center; background: transparent; color: var(--muted); font-size: 12px; font-style: italic; }
-  .typing { align-self: flex-start; color: var(--muted); font-size: 13px; }
-  .confirm-card { align-self: flex-start; background: var(--panel); border: 1px solid var(--accent); border-radius: 14px; padding: 16px 18px; max-width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,.3); }
-  .confirm-card h3 { margin: 0 0 12px; font-size: 14px; color: #93c5fd; letter-spacing: .5px; }
-  .confirm-card .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; font-size: 13px; border-bottom: 1px dashed var(--panel2); }
-  .confirm-card .row span:first-child { color: var(--muted); white-space: nowrap; }
-  .confirm-card .row span:last-child { text-align: right; word-break: break-all; }
-  .confirm-card .row.total span:last-child { font-weight: 700; color: #fde68a; }
-  .confirm-card .actions { display: flex; gap: 10px; margin-top: 14px; }
-  .confirm-card button { flex: 1; padding: 9px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 13px; }
-  .btn-approve { background: var(--green); color: white; }
-  .btn-cancel { background: var(--red); color: white; }
-  .receipt { align-self: flex-start; background: #052e16; border: 1px solid var(--green); border-radius: 14px; padding: 14px 18px; max-width: 360px; }
-  .receipt h3 { margin: 0 0 8px; color: #86efac; font-size: 14px; }
-  .receipt .row { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
+  .brand-logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 18px;
+    box-shadow: 0 0 15px var(--primary-glow);
+  }
 
-  footer { padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--panel2); }
-  .mode-pill { font-size: 12px; color: #fbbf24; margin-bottom: 8px; display: none; }
-  .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-  .chip { font-size: 12px; padding: 6px 12px; border-radius: 999px; background: var(--panel2); color: var(--text); cursor: pointer; border: none; }
-  .chip:hover { background: var(--accent); }
-  .chip.collect { background: #7c2d12; }
-  .input-row { display: flex; gap: 10px; }
-  #input { flex: 1; padding: 11px 14px; border-radius: 10px; border: 1px solid var(--panel2); background: var(--bg); color: var(--text); font-size: 14px; }
-  #input:focus { outline: none; border-color: var(--accent); }
-  button.send { padding: 0 18px; border: none; border-radius: 10px; background: var(--accent); color: white; font-weight: 600; cursor: pointer; }
-  button.send:disabled { opacity: .5; cursor: not-allowed; }
+  .brand-title h1 {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    background: linear-gradient(to right, #ffffff, #94a3b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
 
-  /* Trace panel */
-  .trace-head { padding: 11px 16px; border-bottom: 1px solid var(--panel2); display: flex; align-items: center; gap: 8px; }
-  .trace-head h2 { font-size: 13px; margin: 0; font-weight: 600; color: #cbd5e1; }
-  .trace-head .dot { width: 8px; height: 8px; border-radius: 50%; background: #475569; }
-  .trace-head .dot.on { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
-  .trace-head .spacer { flex: 1; }
-  .trace-head button { font-size: 11px; padding: 4px 9px; border: 1px solid var(--panel2); background: transparent; color: var(--muted); border-radius: 6px; cursor: pointer; }
-  #trace { flex: 1; overflow-y: auto; padding: 10px 12px; font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; }
-  .trace-row { display: flex; align-items: baseline; gap: 8px; padding: 4px 6px; border-radius: 6px; }
-  .trace-row:hover { background: #111c33; }
-  .tlayer { flex: 0 0 90px; text-align: center; font-weight: 700; font-size: 10px; letter-spacing: .5px; padding: 3px 4px; border-radius: 5px; color: #ffffff; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
-  .l-LLM { background: #a855f7; color: #fff; }
-  .l-A2A { background: #3b82f6; color: #fff; }
-  .l-MCP { background: #14b8a6; color: #fff; }
-  .l-SERVICE { background: #22c55e; color: #fff; }
-  .l-WORKFLOW { background: #f59e0b; color: #fff; }
-  .l-SYSTEM { background: #10b981; color: #fff; }
-  .l-CONTEXT { background: #64748b; color: #fff; }
-  .l-GATEWAY { background: #ec4899; color: #fff; }
-  .l-FLOWROUTER { background: #6366f1; color: #fff; }
-  .l-SECURITY { background: #ef4444; color: #fff; }
-  .ttext { flex: 1; color: #e2e8f0; line-height: 1.4; }
-  .tdetail { color: var(--muted); }
-  .ttime { color: #475569; font-size: 10px; }
-  .trace-empty { color: var(--muted); font-style: italic; padding: 8px; }
+  .brand-title span {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: block;
+    font-weight: 400;
+  }
+
+  /* Navigation Tabs */
+  .nav-tabs {
+    display: flex;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 4px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    gap: 4px;
+  }
+
+  .tab-btn {
+    padding: 8px 16px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 7px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+  }
+
+  .tab-btn:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .tab-btn.active {
+    background: var(--primary);
+    color: #ffffff;
+    box-shadow: 0 2px 10px var(--primary-glow);
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .user-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: 99px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .user-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #3b82f6;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  /* Main Container */
+  #app-content {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .tab-content {
+    display: none;
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .tab-content.active {
+    display: flex;
+  }
+
+  /* TAB 1: Chat & TraceHub Split Layout */
+  .chat-pane {
+    flex: 1.25;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border-color);
+    background: var(--bg-panel);
+    backdrop-filter: blur(12px);
+  }
+
+  .trace-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #070b14;
+    min-width: 380px;
+  }
+
+  /* Chat Pane */
+  #chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .msg {
+    max-width: 80%;
+    padding: 12px 18px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg.user {
+    align-self: flex-end;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #ffffff;
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.25);
+  }
+
+  .msg.bot {
+    align-self: flex-start;
+    background: var(--bg-panel-solid);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    border-bottom-left-radius: 4px;
+  }
+
+  .msg.bot p { margin-bottom: 8px; }
+  .msg.bot p:last-child { margin-bottom: 0; }
+  .msg.bot ul, .msg.bot ol { padding-left: 20px; margin-bottom: 8px; }
+
+  .msg.sys {
+    align-self: center;
+    background: rgba(148, 163, 184, 0.08);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 99px;
+  }
+
+  .typing-indicator {
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 18px;
+    background: var(--bg-panel-solid);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    border-bottom-left-radius: 4px;
+  }
+
+  .dot-flashing {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--text-muted);
+    animation: dotPulse 1.4s infinite ease-in-out;
+  }
+
+  .dot-flashing:nth-child(2) { animation-delay: 0.2s; }
+  .dot-flashing:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes dotPulse {
+    0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1.2); }
+  }
+
+  /* HITL Confirmation Card */
+  .confirm-card {
+    align-self: flex-start;
+    width: 100%;
+    max-width: 420px;
+    background: rgba(18, 26, 43, 0.95);
+    border: 1px solid var(--border-highlight);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px var(--primary-glow);
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .confirm-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .confirm-header h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #93c5fd;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .confirm-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .confirm-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    padding: 6px 0;
+  }
+
+  .confirm-row .label { color: var(--text-muted); }
+  .confirm-row .value { font-weight: 500; color: var(--text-main); }
+  .confirm-row.total .value { font-size: 16px; font-weight: 700; color: #fde68a; }
+
+  .confirm-actions {
+    display: flex;
+    gap: 12px;
+  }
+
+  .btn-confirm {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+
+  .btn-approve {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+  }
+  .btn-approve:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); }
+
+  .btn-cancel {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+  }
+  .btn-cancel:hover { background: rgba(239, 68, 68, 0.25); }
+
+  /* Receipt Card */
+  .receipt-card {
+    align-self: flex-start;
+    width: 100%;
+    max-width: 400px;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.05));
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    border-radius: 18px;
+    padding: 20px;
+    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.15);
+  }
+
+  .receipt-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    color: #34d399;
+  }
+
+  .receipt-header h3 { font-size: 15px; font-weight: 600; }
+
+  /* Chat Footer Input Area */
+  .chat-footer {
+    padding: 18px 24px;
+    background: var(--bg-panel-solid);
+    border-top: 1px solid var(--border-color);
+  }
+
+  .chips-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .chip {
+    padding: 6px 14px;
+    border-radius: 99px;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chip:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+  }
+
+  .chip.highlight {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+  }
+
+  .input-box {
+    display: flex;
+    gap: 10px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 4px 6px 4px 14px;
+    transition: border-color 0.2s;
+  }
+
+  .input-box:focus-within {
+    border-color: var(--primary);
+    box-shadow: 0 0 12px var(--primary-glow);
+  }
+
+  .input-box input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--text-main);
+    font-size: 14px;
+    outline: none;
+  }
+
+  .btn-send {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+
+  .btn-send:hover { background: #2563eb; transform: scale(1.03); }
+  .btn-send:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  /* TraceHub Live Stream Pane */
+  .trace-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(15, 23, 42, 0.5);
+  }
+
+  .trace-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #64748b;
+  }
+
+  .status-dot.active {
+    background: var(--accent-emerald);
+    box-shadow: 0 0 10px var(--accent-emerald);
+  }
+
+  .trace-header h2 {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+  }
+
+  .trace-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-icon {
+    padding: 6px 10px;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-icon:hover { color: var(--text-main); background: rgba(51, 65, 85, 0.8); }
+
+  #trace-log {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .trace-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(18, 26, 43, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    transition: background 0.15s;
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  .trace-item:hover { background: rgba(30, 41, 59, 0.6); }
+
+  .layer-tag {
+    flex-shrink: 0;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #ffffff;
+    text-transform: uppercase;
+  }
+
+  .l-LLM { background: var(--l-llm); }
+  .l-A2A { background: var(--l-a2a); }
+  .l-MCP { background: var(--l-mcp); }
+  .l-SERVICE { background: var(--l-service); }
+  .l-WORKFLOW { background: var(--l-workflow); }
+  .l-SYSTEM { background: var(--l-system); }
+  .l-CONTEXT { background: var(--l-context); }
+  .l-GATEWAY { background: var(--l-gateway); }
+  .l-FLOWROUTER { background: var(--l-flowrouter); }
+  .l-SECURITY { background: var(--l-security); }
+
+  .trace-content {
+    flex: 1;
+    word-break: break-word;
+    line-height: 1.4;
+  }
+
+  .trace-text { color: var(--text-main); }
+  .trace-detail { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+  .trace-time { color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
+
+  /* TAB 2: Declarative Agent Studio */
+  .studio-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-dark);
+  }
+
+  .studio-sidebar {
+    width: 300px;
+    border-right: 1px solid var(--border-color);
+    background: var(--bg-panel-solid);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .studio-sidebar h2 {
+    font-size: 15px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--primary);
+  }
+
+  .template-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .template-card {
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: rgba(30, 41, 59, 0.5);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .template-card:hover {
+    border-color: var(--primary);
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  .template-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .template-card p { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+
+  .studio-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    gap: 16px;
+    overflow-y: auto;
+  }
+
+  .editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .mode-switcher {
+    display: flex;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 4px;
+  }
+
+  .mode-btn {
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+
+  .mode-btn.active {
+    background: var(--primary);
+    color: white;
+  }
+
+  .btn-primary {
+    padding: 8px 18px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: white;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 15px var(--primary-glow);
+    transition: all 0.2s;
+  }
+
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px var(--primary-glow); }
+
+  /* Visual Form Styles */
+  .visual-form-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    background: var(--bg-panel-solid);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 24px;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .form-group.full-width {
+    grid-column: span 2;
+  }
+
+  .form-group label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .form-group label span.hint {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+
+  .form-control {
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: var(--text-main);
+    font-size: 13px;
+    outline: none;
+    font-family: inherit;
+    transition: border-color 0.2s;
+  }
+
+  .form-control:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 10px var(--primary-glow);
+  }
+
+  select.form-control {
+    cursor: pointer;
+  }
+
+  textarea.form-control {
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  /* Slot / Parameter Builder Table */
+  .params-section {
+    border-top: 1px solid var(--border-color);
+    padding-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .params-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .params-header h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #93c5fd;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-add-param {
+    padding: 6px 12px;
+    border-radius: 8px;
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+  }
+
+  .btn-add-param:hover {
+    background: rgba(16, 185, 129, 0.25);
+  }
+
+  .param-row {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 2fr 80px 40px;
+    gap: 10px;
+    align-items: center;
+    background: rgba(15, 23, 42, 0.5);
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  .btn-del-param {
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .btn-del-param:hover { background: rgba(239, 68, 68, 0.3); }
+
+  .checkbox-group {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .checkbox-group input {
+    cursor: pointer;
+    accent-color: var(--primary);
+  }
+
+  .yaml-editor-pane {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    gap: 10px;
+  }
+
+  .yaml-editor-pane.active {
+    display: flex;
+  }
+
+  .yaml-editor {
+    flex: 1;
+    min-height: 420px;
+    background: #080d1a;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: #a5b4fc;
+    line-height: 1.6;
+    outline: none;
+    resize: none;
+  }
+
+  .status-toast {
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .status-toast.success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
+  .status-toast.error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; }
+
+  /* TAB 3: Diagnostics Page */
+  .diag-container {
+    width: 100%;
+    height: 100%;
+    padding: 30px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .diag-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .diag-card {
+    background: var(--bg-panel-solid);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 20px;
+  }
+
+  .diag-card h3 {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .diag-card .val {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary);
+  }
 </style>
 </head>
 <body>
+
+  <!-- Header -->
   <header>
-    <h1>🏦 Banka Asistanı</h1>
-    <span class="badge">Microsoft Agent Framework · MCP · A2A</span>
-    <div class="spacer"></div>
-    <span class="badge" id="customer">Yusuf Efe Mayda</span>
+    <div class="brand">
+      <div class="brand-logo"><i class="fa-solid fa-brain"></i></div>
+      <div class="brand-title">
+        <h1>TKFB Agentic Platform</h1>
+        <span>Microsoft Agent Framework · MCP · A2A Engine</span>
+      </div>
+    </div>
+
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('chat-tab', event)">
+        <i class="fa-solid fa-comments"></i> AI Asistan & Canlı İzleme
+      </button>
+      <button class="tab-btn" onclick="switchTab('studio-tab', event)">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> Deklaratif Agent Studio (Görsel Form)
+      </button>
+      <button class="tab-btn" onclick="switchTab('diag-tab', event); fetchDiag();">
+        <i class="fa-solid fa-chart-line"></i> Sistem Tanılama
+      </button>
+    </div>
+
+    <div class="header-actions">
+      <div class="user-badge">
+        <div class="user-avatar">YE</div>
+        <span>Yusuf Efe Mayda</span>
+      </div>
+    </div>
   </header>
 
-  <div id="main">
-    <!-- SOL: SOHBET -->
-    <div class="chat-pane">
-      <div id="chat">
-        <div class="msg bot">Merhaba 👋 Ben bankacılık asistanınızım. Hesaplarınız ve kredi kartlarınızla ilgili soru sorabilir, ya da kart borcu ödemesi başlatabilirsiniz. Sağ panelde her sorunun hangi katmanlardan (LLM · A2A · MCP · Servis · Workflow · FlowRouter · Security) geçtiğini canlı görebilirsiniz.</div>
+  <!-- Main Content -->
+  <div id="app-content">
+
+    <!-- TAB 1: Chat & TraceHub Split Layout -->
+    <div id="chat-tab" class="tab-content active">
+      <!-- Chat Left Pane -->
+      <div class="chat-pane">
+        <div id="chat-messages">
+          <div class="msg bot">
+            <p>Merhaba 👋 Ben <strong>TKFB Bankacılık Asistanınızım</strong>.</p>
+            <p>Kredi kartı borcu ödeme, transfer veya hesap sorgularınızı iletebilirsiniz. Sağ panelde <strong>TraceHub</strong> katman çağrılarını canlı izleyebilirsiniz.</p>
+          </div>
+        </div>
+
+        <div class="chat-footer">
+          <div class="chips-row">
+            <button class="chip" onclick="quick('Hesaplarımı ve bakiyelerimi listeler misin?')"><i class="fa-solid fa-wallet"></i> Hesaplarım</button>
+            <button class="chip" onclick="quick('Kredi kartı borçlarım ne kadar?')"><i class="fa-solid fa-credit-card"></i> Kart Borcum</button>
+            <button class="chip" onclick="quick('Kartımın kullanılabilir limiti nedir?')"><i class="fa-solid fa-gauge-high"></i> Limitim</button>
+            <button class="chip highlight" onclick="quick('Kart borcumu ödemek istiyorum')"><i class="fa-solid fa-money-bill-transfer"></i> 💳 Kart Borcu Öde</button>
+          </div>
+          <div class="input-box">
+            <input id="input-msg" placeholder="Bir bankacılık sorusu sorun veya işlem başlatın..." autocomplete="off" onkeydown="if(event.key==='Enter')sendMsg()" />
+            <button class="btn-send" id="btn-send" onclick="sendMsg()"><i class="fa-solid fa-paper-plane"></i></button>
+          </div>
+        </div>
       </div>
-      <footer>
-        <div class="mode-pill" id="modePill">🔴 Tahsilat akışı aktif — asistanın sorularını yanıtlayın.</div>
-        <div class="toolbar" id="toolbar">
-          <button class="chip" onclick="quick('Hesaplarımı ve bakiyelerimi listeler misin?')">Hesaplarım</button>
-          <button class="chip" onclick="quick('Kredi kartı borçlarım ne kadar?')">Kart borcum</button>
-          <button class="chip" onclick="quick('Kartımın kullanılabilir limiti nedir?')">Limitim</button>
-          <button class="chip collect" onclick="quick('Kart borcumu ödemek istiyorum')">💳 Kart borcu öde</button>
+
+      <!-- TraceHub Right Pane -->
+      <div class="trace-pane">
+        <div class="trace-header">
+          <div class="trace-title">
+            <div class="status-dot" id="status-dot"></div>
+            <h2>TraceHub Live Stream</h2>
+          </div>
+          <div class="trace-actions">
+            <button class="btn-icon" onclick="clearTrace()"><i class="fa-solid fa-trash-can"></i> Temizle</button>
+          </div>
         </div>
-        <div class="input-row">
-          <input id="input" placeholder="Bir şey sorun..." autocomplete="off" onkeydown="if(event.key==='Enter')send()" />
-          <button class="send" id="sendBtn" onclick="send()">Gönder</button>
-        </div>
-      </footer>
+        <div id="trace-log"></div>
+      </div>
     </div>
 
-    <!-- SAĞ: CANLI KATMAN İZİ -->
-    <div class="trace-pane">
-      <div class="trace-head">
-        <span class="dot" id="traceDot"></span>
-        <h2>🔎 Katman İzi (canlı)</h2>
-        <div class="spacer"></div>
-        <button onclick="clearTrace()">temizle</button>
+    <!-- TAB 2: Declarative Agent Studio (User-Friendly Visual Form + Live YAML) -->
+    <div id="studio-tab" class="tab-content">
+      <div class="studio-container">
+        <!-- Studio Sidebar Templates -->
+        <div class="studio-sidebar">
+          <h2><i class="fa-solid fa-layer-group"></i> Hazır Şablonlar</h2>
+          <div class="template-list">
+            <div class="template-card" onclick="loadTemplate('limit')">
+              <h4>💳 Limit Artırım Akışı</h4>
+              <p>Kredi kartı limit artırım taleplerini toplar ve onay sürecini başlatır.</p>
+            </div>
+            <div class="template-card" onclick="loadTemplate('otomatik')">
+              <h4>🔄 Otomatik Ödeme Talimatı</h4>
+              <p>Fatura ve kart ödemeleri için otomatik ödeme talimatı tanımlar.</p>
+            </div>
+            <div class="template-card" onclick="loadTemplate('kayip')">
+              <h4>🚨 Kayıp/Çalıntı Kart İptali</h4>
+              <p>Kayıp kart bildirimini alıp anında dondurma teklifi sunar.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Studio Main Form -->
+        <div class="studio-main">
+          <div class="editor-header">
+            <div class="mode-switcher">
+              <button class="mode-btn active" id="btn-mode-form" onclick="setStudioMode('form')">
+                <i class="fa-solid fa-list-check"></i> Kullanıcı Dostu Görsel Form
+              </button>
+              <button class="mode-btn" id="btn-mode-yaml" onclick="setStudioMode('yaml')">
+                <i class="fa-solid fa-code"></i> YAML Kod Önizleme
+              </button>
+            </div>
+
+            <div class="editor-actions">
+              <button class="btn-primary" onclick="registerDeclarative()"><i class="fa-solid fa-cloud-arrow-up"></i> Sisteme Kaydet & Indeksle (Zero Cold-Start)</button>
+            </div>
+          </div>
+
+          <!-- Mode 1: Visual Form Builder -->
+          <div id="pane-form" class="visual-form-container">
+            <div class="form-grid">
+              <div class="form-group">
+                <label><i class="fa-solid fa-cube"></i> Ajan / Akış Türü Seçimi</label>
+                <select id="form-kind" class="form-control" onchange="updateYamlFromForm()">
+                  <option value="Prompt">Prompt (İş Akışı / Dynamic Workflow)</option>
+                  <option value="Agent">Agent (Diyalog / Sohbet Ajanı)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label><i class="fa-solid fa-tag"></i> Sistem İsim Kodu <span class="hint">(Küçük harf, tireli: örn limit-artirim)</span></label>
+                <input id="form-name" class="form-control" placeholder="limit-artirim" oninput="updateYamlFromForm()" />
+              </div>
+
+              <div class="form-group">
+                <label><i class="fa-solid fa-heading"></i> Görünür Başlık (DisplayName)</label>
+                <input id="form-displayname" class="form-control" placeholder="Kredi Kartı Limit Artırım Akışı" oninput="updateYamlFromForm()" />
+              </div>
+
+              <div class="form-group">
+                <label><i class="fa-solid fa-sliders"></i> Model Sıcaklığı (Temperature)</label>
+                <select id="form-temp" class="form-control" onchange="updateYamlFromForm()">
+                  <option value="0.0">0.0 (Kesin / Deterministik)</option>
+                  <option value="0.1" selected>0.1 (Önerilen)</option>
+                  <option value="0.2">0.2 (Dengeli)</option>
+                  <option value="0.7">0.7 (Yaratıcı)</option>
+                </select>
+              </div>
+
+              <div class="form-group full-width">
+                <label><i class="fa-solid fa-align-left"></i> Akış Açıklaması (Description) <span class="hint">(RAG Vektör aramasında ne zaman tetikleneceğini belirler)</span></label>
+                <textarea id="form-desc" class="form-control" rows="2" placeholder="Kullanıcının kredi kartı limitini artırma taleplerini ve gerekli tutar bilgilerini toplar." oninput="updateYamlFromForm()"></textarea>
+              </div>
+
+              <div class="form-group full-width">
+                <label><i class="fa-solid fa-comment-dots"></i> Ajan Talimatları (Instructions) <span class="hint">(Yapay Zekanın kullanıcıdan hangi bilgileri sırayla isteyeceği)</span></label>
+                <textarea id="form-instructions" class="form-control" rows="3" placeholder="Kullanıcıdan limit artırımı istediği kartı ve talep ettiği yeni limiti sırayla iste. Bilgiler tamamlandığında propose_limit_artirim çağır." oninput="updateYamlFromForm()"></textarea>
+              </div>
+            </div>
+
+            <!-- Dynamic Parameter (Slot) Builder -->
+            <div class="params-section">
+              <div class="params-header">
+                <h4><i class="fa-solid fa-list-ol"></i> İş Akışı Parametreleri / Slotlar (inputSchema)</h4>
+                <button class="btn-add-param" onclick="addParamRow()"><i class="fa-solid fa-plus"></i> Yeni Parametre Ekle</button>
+              </div>
+
+              <div id="params-container" style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- Rows injected dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Mode 2: Raw YAML Code Editor -->
+          <div id="pane-yaml" class="yaml-editor-pane">
+            <textarea id="yaml-input" class="yaml-editor" spellcheck="false" oninput="updateFormFromYaml()"></textarea>
+          </div>
+
+          <div id="studio-status" class="status-toast"></div>
+        </div>
       </div>
-      <div id="trace"><div class="trace-empty" id="traceEmpty">Bir soru sorun; çağrı zinciri burada akacak…</div></div>
     </div>
+
+    <!-- TAB 3: Diagnostics Page -->
+    <div id="diag-tab" class="tab-content">
+      <div class="diag-container">
+        <h2 style="font-size: 20px; font-weight: 700;">Sistem Diagnostik & RAG Durumu</h2>
+        <div class="diag-grid">
+          <div class="diag-card">
+            <h3><i class="fa-solid fa-key"></i> LLM Bağlantı Durumu</h3>
+            <div class="val" id="diag-key" style="font-size: 18px; color: var(--accent-emerald);">Yükleniyor...</div>
+          </div>
+          <div class="diag-card">
+            <h3><i class="fa-solid fa-microchip"></i> Model</h3>
+            <div class="val" id="diag-model">...</div>
+          </div>
+          <div class="diag-card">
+            <h3><i class="fa-solid fa-screwdriver-wrench"></i> Aktif MCP Araç Sayısı</h3>
+            <div class="val" id="diag-mcp">0</div>
+          </div>
+          <div class="diag-card">
+            <h3><i class="fa-solid fa-network-wired"></i> Uzman Ajan Transport</h3>
+            <div class="val" id="diag-transport" style="font-size: 18px; color: var(--accent-cyan);">...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script>
-let collectSession = null;
 let sessionToken = sessionStorage.getItem('gw_session_token');
 if (!sessionToken) {
-  sessionToken = 'gw-' + Math.random().toString(36).substring(2, 11) + Math.random().toString(36).substring(2, 11);
+  sessionToken = 'gw-' + Math.random().toString(36).substring(2, 11);
   sessionStorage.setItem('gw_session_token', sessionToken);
 }
 
-const chat = document.getElementById('chat');
-const input = document.getElementById('input');
-const sendBtn = document.getElementById('sendBtn');
-const modePill = document.getElementById('modePill');
-const trace = document.getElementById('trace');
+const chatMsgs = document.getElementById('chat-messages');
+const inputMsg = document.getElementById('input-msg');
+const btnSend = document.getElementById('btn-send');
+const traceLog = document.getElementById('trace-log');
+const statusDot = document.getElementById('status-dot');
 
-function add(text, cls) {
-  const d = document.createElement('div'); d.className = 'msg ' + cls;
-  if (cls === 'bot') {
-    d.style.whiteSpace = 'normal';
+function switchTab(tabId, evt) {
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+  if (evt && evt.currentTarget) {
+    evt.currentTarget.classList.add('active');
+  }
+  document.getElementById(tabId).classList.add('active');
+}
+
+function addMsg(text, type) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + type;
+  if (type === 'bot') {
     d.innerHTML = marked.parse(text);
   } else {
     d.textContent = text;
   }
-  chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d;
+  chatMsgs.appendChild(d);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+  return d;
 }
-function typing() {
-  const d = document.createElement('div'); d.className = 'typing'; d.textContent = '⏳ asistan düşünüyor...';
-  chat.appendChild(d); chat.scrollTop = chat.scrollHeight; return d;
-}
-function fmt(n) { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n); }
-function setMode(collect) {
-  modePill.style.display = collect ? 'block' : 'none';
-  input.placeholder = collect ? 'Asistanın sorusunu yanıtlayın...' : 'Bir şey sorun...';
-}
-function quick(q) { input.value = q; send(); }
 
-async function send() {
-  const text = input.value.trim(); if (!text) return;
-  input.value = ''; add(text, 'user'); sendBtn.disabled = true;
-  const t = typing();
+function showTyping() {
+  const d = document.createElement('div');
+  d.className = 'typing-indicator';
+  d.innerHTML = '<div class="dot-flashing"></div><div class="dot-flashing"></div><div class="dot-flashing"></div>';
+  chatMsgs.appendChild(d);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+  return d;
+}
+
+function quick(q) {
+  inputMsg.value = q;
+  sendMsg();
+}
+
+function fmt(n) {
+  return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(n);
+}
+
+async function sendMsg() {
+  const text = inputMsg.value.trim();
+  if (!text) return;
+
+  inputMsg.value = '';
+  addMsg(text, 'user');
+  btnSend.disabled = true;
+  const loader = showTyping();
+
   try {
     const r = await postJson('/api/chat', { message: text, sessionToken: sessionToken });
     if (r.sessionToken) {
       sessionToken = r.sessionToken;
       sessionStorage.setItem('gw_session_token', sessionToken);
     }
-    t.remove();
-    const typeStr = String(r.type || '').toUpperCase();
-    if (typeStr === 'CONFIRM_PAYMENT') {
+    loader.remove();
+
+    if (r.type === 'CONFIRM_PAYMENT') {
       renderConfirm(r);
-    } else if (typeStr === 'OPEN_SCREEN') {
-      add(`📱 Ekran Yönlendirmesi: ${r.mkCodeValue} ekranı açılıyor...`, 'bot');
+    } else if (r.receipt) {
+      renderReceipt(r.receipt);
     } else {
       const botText = r.text || r.reply || r.message;
-      if (botText) {
-        add(botText, 'bot');
-      } else {
-        add('(boş yanıt)', 'bot');
-      }
+      if (botText) addMsg(botText, 'bot');
     }
-  } catch (e) { t.remove(); add('⚠️ Hata: ' + e.message, 'sys'); }
-  finally { sendBtn.disabled = false; input.focus(); }
-}
-
-async function startCollect(initialMessage) {
-  add('💳 Kart borcu ödeme akışı başlatılıyor...', 'sys');
-  sendBtn.disabled = true; const t = typing();
-  try {
-    const r = await postJson('/api/collect/start', initialMessage ? { message: initialMessage } : {});
-    t.remove(); handleCollect(r);
-  } catch (e) { t.remove(); add('⚠️ Hata: ' + e.message, 'sys'); }
-  finally { sendBtn.disabled = false; input.focus(); }
-}
-
-function handleCollect(r) {
-  collectSession = (r.status === 'completed' || r.status === 'cancelled') ? null : r.sessionId;
-  setMode(collectSession !== null);
-  if (r.status === 'question') add(r.prompt, 'bot');
-  else if (r.status === 'confirmation') renderConfirm(r);
-  else if (r.status === 'completed') { if (r.receipt) renderReceipt(r.receipt); else add(r.prompt ?? 'İşlem tamamlandı.', 'bot'); }
-  else if (r.status === 'cancelled') add(r.prompt ?? 'İşlem iptal edildi.', 'sys');
-  else add(r.prompt ?? JSON.stringify(r), 'bot');
+  } catch (e) {
+    loader.remove();
+    addMsg('⚠️ Hata: ' + e.message, 'sys');
+  } finally {
+    btnSend.disabled = false;
+    inputMsg.focus();
+  }
 }
 
 function renderConfirm(r) {
   const params = {};
   if (r.confirmation) Object.assign(params, r.confirmation);
   Object.keys(r).forEach(k => {
-    if (!['type', 'mkCodeValue', 'text', 'sessionToken', 'status', 'sessionId', 'prompt', 'receipt', 'confirmation'].includes(k)) {
+    if (!['type', 'text', 'sessionToken', 'status', 'sessionId', 'prompt', 'receipt', 'confirmation'].includes(k)) {
       params[k] = r[k];
     }
   });
 
-  const card = document.createElement('div'); card.className = 'confirm-card';
+  const card = document.createElement('div');
+  card.className = 'confirm-card';
 
   let title = '🔐 İŞLEM ONAYI';
-  if (r.mkCodeValue === 'CreditCardPayment' || params.cardId || params.cardMasked) {
-    title = '🔐 ÖDEME ONAYI';
-  } else if (r.mkCodeValue === 'MoneyTransfer' || params.targetIban) {
-    title = '💸 TRANSFER ONAYI';
-  }
+  if (params.cardId || params.cardMasked) title = '💳 ÖDEME ONAYI';
+  else if (params.targetIban) title = '💸 TRANSFER ONAYI';
 
   const keyLabels = {
-    cardId: 'Kart',
-    cardNumber: 'Kart',
-    cardMasked: 'Kart',
+    cardId: 'Kart ID',
+    cardMasked: 'Kredi Kartı',
     amount: 'Ödenecek Tutar',
     sourceAccountId: 'Kaynak Hesap',
     sourceAccountMasked: 'Kaynak Hesap',
@@ -256,65 +1260,71 @@ function renderConfirm(r) {
     date: 'Tarih'
   };
 
-  let rowsHtml = '';
-  Object.keys(params).forEach(key => {
-    const val = params[key];
+  let rows = '';
+  Object.keys(params).forEach(k => {
+    const val = params[k];
     if (val === null || val === undefined || val === '') return;
-
-    const label = keyLabels[key] || (key.charAt(0).toUpperCase() + key.slice(1));
+    const label = keyLabels[k] || k;
     let displayVal = val;
-
-    if (key.toLowerCase().includes('amount') || (typeof val === 'number' && key !== 'overdueDays')) {
-      const num = parseFloat(val);
-      if (!isNaN(num)) displayVal = fmt(num);
+    if (k.toLowerCase().includes('amount') || typeof val === 'number') {
+      displayVal = fmt(val);
     }
-
-    const isTotalRow = key.toLowerCase().includes('amount');
-    rowsHtml += `
-      <div class="row ${isTotalRow ? 'total' : ''}">
-        <span>${label}</span>
-        <span>${displayVal}</span>
+    const isTotal = k.toLowerCase().includes('amount');
+    rows += `
+      <div class="confirm-row ${isTotal ? 'total' : ''}">
+        <span class="label">${label}</span>
+        <span class="value">${displayVal}</span>
       </div>`;
   });
 
   card.innerHTML = `
-    <h3>${title}</h3>
-    ${rowsHtml}
-    <div class="actions"><button class="btn-approve">✓ Onayla</button><button class="btn-cancel">✗ İptal</button></div>`;
-  chat.appendChild(card); chat.scrollTop = chat.scrollHeight;
-  const [approve, cancel] = card.querySelectorAll('button');
-  approve.onclick = () => respondConfirm(card, 'onayla');
-  cancel.onclick = () => respondConfirm(card, 'iptal');
+    <div class="confirm-header">
+      <h3><i class="fa-solid fa-shield-halved"></i> ${title}</h3>
+    </div>
+    <div class="confirm-body">${rows}</div>
+    <div class="confirm-actions">
+      <button class="btn-confirm btn-approve"><i class="fa-solid fa-check"></i> Onayla</button>
+      <button class="btn-confirm btn-cancel"><i class="fa-solid fa-xmark"></i> İptal</button>
+    </div>`;
+
+  chatMsgs.appendChild(card);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
+
+  const [approveBtn, cancelBtn] = card.querySelectorAll('button');
+  approveBtn.onclick = () => respondConfirm(card, 'onayla');
+  cancelBtn.onclick = () => respondConfirm(card, 'iptal');
 }
 
 async function respondConfirm(card, answer) {
   card.querySelectorAll('button').forEach(b => b.disabled = true);
-  add(answer === 'onayla' ? '✓ Onaylıyorum' : '✗ İptal', 'user');
-  const t = typing();
+  addMsg(answer === 'onayla' ? '✓ Onaylıyorum' : '✗ İptal', 'user');
+  const loader = showTyping();
+
   try {
     const r = await postJson('/api/chat', { message: answer, sessionToken: sessionToken });
-    t.remove();
-    if (r.type === 'CONFIRM_PAYMENT') {
-      renderConfirm(r);
-    } else if (r.receipt) {
-      renderReceipt(r.receipt);
-    } else {
-      const botText = r.text || r.reply || r.message;
-      if (botText) add(botText, 'bot');
-    }
-  } catch (e) { t.remove(); add('⚠️ Hata: ' + e.message, 'sys'); }
+    loader.remove();
+    if (r.receipt) renderReceipt(r.receipt);
+    else if (r.text || r.reply) addMsg(r.text || r.reply, 'bot');
+  } catch (e) {
+    loader.remove();
+    addMsg('⚠️ Hata: ' + e.message, 'sys');
+  }
 }
 
 function renderReceipt(rc) {
-  const d = document.createElement('div'); d.className = 'receipt';
-  const remainingLabel = rc.receiptId && rc.receiptId.startsWith('TR-') ? 'Kalan bakiye' : 'Kalan borç';
-  d.innerHTML = `
-    <h3>✅ İşlem Başarılı</h3>
-    <div class="row"><span>Makbuz No</span><span>${rc.receiptId}</span></div>
-    <div class="row"><span>Tutar</span><span>${fmt(rc.amount)}</span></div>
-    <div class="row"><span>${remainingLabel}</span><span>${fmt(rc.remainingDebt)}</span></div>
-    <div class="row"><span>Tarih</span><span>${rc.date}</span></div>`;
-  chat.appendChild(d); chat.scrollTop = chat.scrollHeight;
+  const card = document.createElement('div');
+  card.className = 'receipt-card';
+  card.innerHTML = `
+    <div class="receipt-header">
+      <i class="fa-solid fa-circle-check" style="font-size: 20px;"></i>
+      <h3>İşlem Başarıyla Tamamlandı</h3>
+    </div>
+    <div class="confirm-row"><span class="label">Makbuz No</span><span class="value">${rc.receiptId}</span></div>
+    <div class="confirm-row"><span class="label">Tutar</span><span class="value">${fmt(rc.amount)}</span></div>
+    <div class="confirm-row"><span class="label">Kalan Borç/Bakiye</span><span class="value">${fmt(rc.remainingDebt)}</span></div>
+    <div class="confirm-row"><span class="label">Tarih</span><span class="value">${rc.date}</span></div>`;
+  chatMsgs.appendChild(card);
+  chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
 
 async function postJson(url, body) {
@@ -323,28 +1333,218 @@ async function postJson(url, body) {
   return res.json();
 }
 
-/* ---------- Canlı katman izi (SSE) ---------- */
+/* --- TraceHub SSE Connection --- */
 function escapeHtml(s) { return (s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
-let traceEmpty = document.getElementById('traceEmpty');
-function clearTrace() { trace.innerHTML = ''; traceEmpty = null; }
+function clearTrace() { traceLog.innerHTML = ''; }
+
 function addTrace(ev) {
-  if (traceEmpty) { traceEmpty.remove(); traceEmpty = null; }
   const layer = (ev.layer || 'SYSTEM').toUpperCase();
-  const row = document.createElement('div'); row.className = 'trace-row';
-  row.innerHTML =
-    `<span class="tlayer l-${layer}">${layer}</span>` +
-    `<span class="ttext">${escapeHtml(ev.text)}${ev.detail ? ' <span class="tdetail">'+escapeHtml(ev.detail)+'</span>' : ''}</span>` +
-    `<span class="ttime">${ev.t || ''}</span>`;
-  trace.appendChild(row); trace.scrollTop = trace.scrollHeight;
+  const item = document.createElement('div');
+  item.className = 'trace-item';
+  item.innerHTML = `
+    <span class="layer-tag l-${layer}">${layer}</span>
+    <div class="trace-content">
+      <div class="trace-text">${escapeHtml(ev.text)}</div>
+      ${ev.detail ? `<div class="trace-detail">${escapeHtml(ev.detail)}</div>` : ''}
+    </div>
+    <span class="trace-time">${ev.t || ''}</span>`;
+  traceLog.appendChild(item);
+  traceLog.scrollTop = traceLog.scrollHeight;
 }
+
 function connectTrace() {
-  const dot = document.getElementById('traceDot');
   const es = new EventSource('/api/trace/stream');
-  es.onopen = () => dot.classList.add('on');
-  es.onerror = () => dot.classList.remove('on');
+  es.onopen = () => statusDot.classList.add('active');
+  es.onerror = () => statusDot.classList.remove('active');
   es.onmessage = (e) => { try { addTrace(JSON.parse(e.data)); } catch {} };
 }
 connectTrace();
+
+/* --- STUDIO VISUAL FORM & LIVE YAML SYNC ENGINE --- */
+function setStudioMode(mode) {
+  document.getElementById('btn-mode-form').classList.toggle('active', mode === 'form');
+  document.getElementById('btn-mode-yaml').classList.toggle('active', mode === 'yaml');
+
+  const paneForm = document.getElementById('pane-form');
+  const paneYaml = document.getElementById('pane-yaml');
+
+  if (mode === 'form') {
+    paneForm.style.display = 'flex';
+    paneYaml.classList.remove('active');
+  } else {
+    paneForm.style.display = 'none';
+    paneYaml.classList.add('active');
+    updateYamlFromForm();
+  }
+}
+
+function addParamRow(key = '', type = 'string', desc = '', required = true) {
+  const container = document.getElementById('params-container');
+  const row = document.createElement('div');
+  row.className = 'param-row';
+  row.innerHTML = `
+    <input class="form-control p-key" placeholder="Parametre Adı (örn: cardId)" value="${escapeHtml(key)}" oninput="updateYamlFromForm()" />
+    <select class="form-control p-type" onchange="updateYamlFromForm()">
+      <option value="string" ${type==='string'?'selected':''}>string (Metin)</option>
+      <option value="number" ${type==='number'?'selected':''}>number (Sayı)</option>
+      <option value="boolean" ${type==='boolean'?'selected':''}>boolean (Evet/Hayır)</option>
+      <option value="date" ${type==='date'?'selected':''}>date (Tarih)</option>
+    </select>
+    <input class="form-control p-desc" placeholder="Açıklama (örn: Kart ID)" value="${escapeHtml(desc)}" oninput="updateYamlFromForm()" />
+    <div class="checkbox-group">
+      <input type="checkbox" class="p-req" ${required?'checked':''} onchange="updateYamlFromForm()" />
+      <label>Zorunlu</label>
+    </div>
+    <button class="btn-del-param" onclick="this.closest('.param-row').remove(); updateYamlFromForm();"><i class="fa-solid fa-trash"></i></button>`;
+  container.appendChild(row);
+  updateYamlFromForm();
+}
+
+function updateYamlFromForm() {
+  const kind = document.getElementById('form-kind').value || 'Prompt';
+  const name = document.getElementById('form-name').value.trim() || 'yeni-is-akisi';
+  const displayName = document.getElementById('form-displayname').value.trim() || 'Yeni İş Akışı';
+  const temp = document.getElementById('form-temp').value || '0.1';
+  const desc = document.getElementById('form-desc').value.trim() || 'İş akışı açıklaması';
+  const inst = document.getElementById('form-instructions').value.trim() || 'Gerekli bilgileri sırayla kullanıcıdan iste.';
+
+  const paramRows = document.querySelectorAll('.param-row');
+  let propsYaml = '';
+  let reqYaml = '';
+
+  paramRows.forEach(row => {
+    const pKey = row.querySelector('.p-key').value.trim();
+    const pType = row.querySelector('.p-type').value;
+    const pDesc = row.querySelector('.p-desc').value.trim();
+    const pReq = row.querySelector('.p-req').checked;
+
+    if (pKey) {
+      propsYaml += `    ${pKey}:\n      type: ${pType}\n      description: ${pDesc || pKey}\n`;
+      if (pReq) {
+        reqYaml += `    - ${pKey}\n`;
+      }
+    }
+  });
+
+  let yaml = `kind: ${kind}
+name: ${name}
+displayName: ${displayName}
+description: ${desc}
+instructions: |
+  ${inst.replace(/\n/g, '\n  ')}
+model:
+  options:
+    temperature: ${temp}
+`;
+
+  if (propsYaml) {
+    yaml += `inputSchema:
+  type: object
+  properties:
+${propsYaml}`;
+    if (reqYaml) {
+      yaml += `  required:
+${reqYaml}`;
+    }
+  }
+
+  document.getElementById('yaml-input').value = yaml;
+}
+
+const defaultTemplates = {
+  limit: {
+    kind: 'Prompt',
+    name: 'limit-artirim',
+    displayName: 'Kredi Kartı Limit Artırım Akışı',
+    temp: '0.1',
+    desc: 'Kullanıcının kredi kartı limitini artırma taleplerini ve gerekli tutar bilgilerini toplar.',
+    inst: 'Kullanıcıdan limit artırımı istediği kartı ve talep ettiği yeni limiti sırayla iste. Bilgiler tamamlandığında propose_limit_artirim çağır.',
+    params: [
+      { key: 'cardId', type: 'string', desc: 'Limit artırımı yapılacak kartın ID\'si', req: true },
+      { key: 'requestedLimit', type: 'number', desc: 'Talep edilen yeni kart limiti', req: true }
+    ]
+  },
+  otomatik: {
+    kind: 'Prompt',
+    name: 'otomatik-odeme-talimati',
+    displayName: 'Otomatik Ödeme Talimatı Akışı',
+    temp: '0.2',
+    desc: 'Fatura veya kredi kartı ödemeleri için otomatik ödeme talimatı oluşturur.',
+    inst: 'Kullanıcıdan otomatik ödemeye bağlanacak kart ve hesap bilgilerini topla.',
+    params: [
+      { key: 'cardId', type: 'string', desc: 'Otomatik ödemeye bağlanacak kart ID', req: true },
+      { key: 'sourceAccountId', type: 'string', desc: 'Ödemenin çekileceği hesap ID', req: true }
+    ]
+  },
+  kayip: {
+    kind: 'Prompt',
+    name: 'kayip-kart-bildirimi',
+    displayName: 'Kayıp / Çalıntı Kart İptal Akışı',
+    temp: '0.0',
+    desc: 'Müşterinin kaybolan kartını güvenlik kilidiyle dondurur.',
+    inst: 'Kullanıcıdan kaybolan kart numarasını veya kart seçimini alıp anında dondurma teklifi sun.',
+    params: [
+      { key: 'cardId', type: 'string', desc: 'İptal edilecek kartın ID bilgisi', req: true }
+    ]
+  }
+};
+
+function loadTemplate(key) {
+  const t = defaultTemplates[key];
+  if (!t) return;
+
+  document.getElementById('form-kind').value = t.kind;
+  document.getElementById('form-name').value = t.name;
+  document.getElementById('form-displayname').value = t.displayName;
+  document.getElementById('form-temp').value = t.temp;
+  document.getElementById('form-desc').value = t.desc;
+  document.getElementById('form-instructions').value = t.inst;
+
+  const container = document.getElementById('params-container');
+  container.innerHTML = '';
+  t.params.forEach(p => addParamRow(p.key, p.type, p.desc, p.req));
+
+  updateYamlFromForm();
+}
+
+// Initial Template Load
+loadTemplate('limit');
+
+async function registerDeclarative() {
+  const content = document.getElementById('yaml-input').value;
+  const toast = document.getElementById('studio-status');
+  toast.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/workflows/register-declarative', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: content
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Kayıt başarısız');
+
+    toast.className = 'status-toast success';
+    toast.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${data.message}`;
+    toast.style.display = 'flex';
+  } catch (err) {
+    toast.className = 'status-toast error';
+    toast.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${err.message}`;
+    toast.style.display = 'flex';
+  }
+}
+
+/* --- Diagnostics Fetcher --- */
+async function fetchDiag() {
+  try {
+    const res = await fetch('/api/diag');
+    const data = await res.json();
+    document.getElementById('diag-key').textContent = data.apiKey;
+    document.getElementById('diag-model').textContent = data.model;
+    document.getElementById('diag-mcp').textContent = data.mcpToolCount;
+    document.getElementById('diag-transport').textContent = data.specialistTransport;
+  } catch {}
+}
 </script>
 </body>
 </html>

@@ -1,0 +1,25 @@
+kind: Prompt
+name: card-payment
+displayName: Kredi Kartı Borcu ödeme
+description: Kullanıcının kredi kartı borcunu ödeme
+instructions: |
+  Kullanıcıdan kredi kartı borcu ödeme isteğini karşıla. Bilgiler tamamlandığında propose_limit_artirim çağır.
+model:
+  options:
+    temperature: 0.1
+inputSchema:
+  type: object
+  properties:
+    cardId:
+      type: string
+      description: Ödeme yapılacak kart
+    paymentAmount:
+      type: number
+      description: Ödenecek tutar
+    Account:
+      type: string
+      description: Hesap id
+  required:
+    - cardId
+    - paymentAmount
+    - Account

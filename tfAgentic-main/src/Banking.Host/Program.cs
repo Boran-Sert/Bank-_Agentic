@@ -1,3 +1,4 @@
+using System.Reflection;
 using Banking.Agents;
 using Banking.Agents.Workflows;
 using Banking.Agents.Specialists;
@@ -12,6 +13,7 @@ using Banking.Gateway;
 using Banking.Gateway.Models;
 using Banking.Domain.Financing;
 using Banking.Domain.Workflows;
+using Banking.Domain.Constants;
 using Banking.Domain.Records;
 using Microsoft.Agents.AI.Hosting;
 using SmartComponents.LocalEmbeddings;
@@ -63,6 +65,11 @@ builder.Services.AddSingleton(sp => ChatClientFactory.Create(sp.GetRequiredServi
 builder.Services.AddSingleton<AnalyzeTools>();
 builder.Services.AddSingleton<AgentRuntime>();
 builder.Services.AddSingleton<WorkflowRegistry>();
+builder.Services.AddSingleton<WorkflowSessionStore>(sp => new WorkflowSessionStore(sp.GetService<ILoggerFactory>()?.CreateLogger<WorkflowSessionStore>(), sp.GetRequiredService<TraceHub>()));
+builder.Services.AddSingleton<PaymentActionExecutor>();
+builder.Services.AddSingleton<TransferActionExecutor>();
+builder.Services.AddSingleton<IDeterministicActionExecutor<PaymentSlots, GenericConfirmationView, PaymentOutcome>>(sp => sp.GetRequiredService<PaymentActionExecutor>());
+builder.Services.AddSingleton<IDeterministicActionExecutor<TransferSlots, GenericConfirmationView, TransferOutcome>>(sp => sp.GetRequiredService<TransferActionExecutor>());
 builder.Services.AddSingleton<WorkflowConversationStore>();
 
 // --- MW Gateway (Java MW ↔ .NET iletişimi) ---
@@ -79,13 +86,12 @@ builder.Services.AddMcpServer()
     .WithTools<CardsTools>()
     .WithTools<AnalyzeTools>();
 
-// --- A2A host: uzman ajanları isimle kaydet (factory AgentRuntime'dan çözer) + A2A server kaydı ---
-// Kayıt adı, factory'nin döndürdüğü ajanın Name'i ile AYNI olmalı.
-builder.Services.AddAIAgent("HesapUzmani", (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist("hesap"))
+// --- A2A host: Uzman ajanları kaydet + A2A server kaydı ---
+builder.Services.AddAIAgent(AgentConstants.SpecialistNames.Account, (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist(AgentConstants.SpecialistNames.Account))
     .AddA2AServer();
-builder.Services.AddAIAgent("KrediKartiUzmani", (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist("kart"))
+builder.Services.AddAIAgent(AgentConstants.SpecialistNames.Card, (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist(AgentConstants.SpecialistNames.Card))
     .AddA2AServer();
-builder.Services.AddAIAgent("FinansalAnalizUzmani", (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist("analiz"))
+builder.Services.AddAIAgent(AgentConstants.SpecialistNames.Analyze, (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist(AgentConstants.SpecialistNames.Analyze))
     .AddA2AServer();
 
 var app = builder.Build();
@@ -103,7 +109,30 @@ using (var scope = app.Services.CreateScope())
     financingSearcher.Initialize();
 
     var registry = scope.ServiceProvider.GetRequiredService<WorkflowRegistry>();
-    registry.AutoDiscoverWorkflows(typeof(PaymentSlots).Assembly);
+    registry.AutoDiscoverWorkflows(typeof(PaymentSlots).Assembly, scope.ServiceProvider);
+
+    // Disk üzerindeki kayıtlı tüm MAF deklaratif YAML/JSON dosyalarını yükle (Kalıcılık - Disk Persistence)
+    var agentsDir = Path.Combine(app.Environment.ContentRootPath, "declarative-agents");
+    Directory.CreateDirectory(agentsDir);
+    foreach (var filePath in Directory.GetFiles(agentsDir, "*.*").Where(f => f.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
+    {
+        try
+        {
+            var yamlContent = File.ReadAllText(filePath);
+            var def = yamlContent.TrimStart().StartsWith("{")
+                ? DeclarativeWorkflowBuilder.ParseFromJson(yamlContent)
+                : DeclarativeWorkflowBuilder.ParseFromYaml(yamlContent);
+
+            if (!string.IsNullOrWhiteSpace(def.Name))
+            {
+                registry.RegisterDeclarativeWorkflow(def, scope.ServiceProvider);
+            }
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Disk üzerindeki deklaratif ajan yüklenemedi: {FilePath}", filePath);
+        }
+    }
 
     var workflowSearcher = scope.ServiceProvider.GetRequiredService<SemanticWorkflowSearcher>();
     workflowSearcher.Initialize(registry.DiscoveredWorkflows);
@@ -112,11 +141,11 @@ using (var scope = app.Services.CreateScope())
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// Protokol endpoint'leri
+// Protokol endpoint'leri (Eski temiz URL yapısı)
 app.MapMcp("/mcp");
-app.MapA2AJsonRpc("HesapUzmani", "/a2a/hesap");
-app.MapA2AJsonRpc("KrediKartiUzmani", "/a2a/kart");
-app.MapA2AJsonRpc("FinansalAnalizUzmani", "/a2a/analiz");
+app.MapA2AJsonRpc(AgentConstants.SpecialistNames.Account, "/a2a/hesap");
+app.MapA2AJsonRpc(AgentConstants.SpecialistNames.Card, "/a2a/kart");
+app.MapA2AJsonRpc(AgentConstants.SpecialistNames.Analyze, "/a2a/analiz");
 
 // --- Q&A: orkestratör (GatewayService üzerinden tekil oturum yönetimi) ---
 app.MapPost("/api/chat", async (ChatRequest req, GatewayService gw, CancellationToken ct) =>
@@ -149,6 +178,55 @@ app.MapPost("/api/collect/respond", async (CollectRespondRequest req, WorkflowCo
     if (string.IsNullOrWhiteSpace(req.SessionId))
         return Results.BadRequest(new { error = "sessionId boş olamaz" });
     return Results.Ok(await store.ProcessWorkflowStepMessageAsync(req.SessionId, req.Answer ?? string.Empty));
+});
+
+// --- Declarative Microsoft Agent Framework YAML/JSON İş Akışı Kaydı (C# Derlemesi Gerektirmez) ---
+app.MapPost("/api/workflows/register-declarative", async (HttpContext httpContext, WorkflowRegistry registry, IServiceProvider sp) =>
+{
+    using var reader = new StreamReader(httpContext.Request.Body);
+    var content = await reader.ReadToEndAsync();
+    
+    if (string.IsNullOrWhiteSpace(content))
+    {
+        return Results.BadRequest(new { error = "İçerik boş olamaz. Lütfen Microsoft Agent Framework Declarative YAML veya JSON metni gönderin." });
+    }
+
+    MicrosoftAgentDeclarativeDefinition definition;
+    try
+    {
+        definition = content.TrimStart().StartsWith("{")
+            ? DeclarativeWorkflowBuilder.ParseFromJson(content)
+            : DeclarativeWorkflowBuilder.ParseFromYaml(content);
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = $"Declarative YAML/JSON ayrıştırma hatası: {ex.Message}" });
+    }
+
+    if (string.IsNullOrWhiteSpace(definition.Name))
+    {
+        return Results.BadRequest(new { error = "Geçersiz MAF Declarative şeması. 'name' (veya 'Name') alanı zorunludur." });
+    }
+
+    registry.RegisterDeclarativeWorkflow(definition, sp);
+
+    // KALICILIK (Disk Persistence): YAML dosyasını declarative-agents/ dizinine kaydet
+    var env = sp.GetRequiredService<IHostEnvironment>();
+    var agentsFolder = Path.Combine(env.ContentRootPath, "declarative-agents");
+    Directory.CreateDirectory(agentsFolder);
+    var filePath = Path.Combine(agentsFolder, $"{definition.Name.ToLowerInvariant()}.yaml");
+    await File.WriteAllTextAsync(filePath, content);
+
+    // Yeni MAF deklaratif ajanı anında RAG semantik indeksine al (Sıfır Cold Start)
+    var searcher = sp.GetRequiredService<SemanticWorkflowSearcher>();
+    var newWorkflowMetadata = new WorkflowMetadata(definition.Name.ToLowerInvariant(), definition.Description, typeof(Dictionary<string, object?>));
+    searcher.AddOrUpdate(newWorkflowMetadata);
+
+    // TraceHub canlı akışına anında log yayınla
+    var hub = sp.GetRequiredService<TraceHub>();
+    hub.Publish(TraceCategories.Workflow, $"[WORKFLOW REGISTERED] '{definition.Name}' ajanı çalışma zamanında eklendi ve diske kaydedildi", $"Tanım: '{definition.Description}' · Dosya: declarative-agents/{definition.Name.ToLowerInvariant()}.yaml");
+
+    return Results.Ok(new { message = $"Microsoft Agent Framework Declarative Agent '{definition.Name}' başarıyla kaydoldu, diske kaydedildi ve RAG semantik indeksine eklendi.", agent = definition });
 });
 
 // --- Tanılama: anahtarsız bile MCP/A2A/uzman wiring'ini doğrular ---

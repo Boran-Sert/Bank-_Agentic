@@ -1,8 +1,9 @@
 using System.ComponentModel;
-
+using Banking.Domain.Attributes;
 namespace Banking.Domain.Records;
 
 // --- Kendini Dokümante Eden Para Transferi Slot Nesnesi (Self-Documenting Record) -----------
+[Workflow("money-transfer")]
 [Description("IBAN, Hesap No veya Kolay Adrese para transferi, EFT, Havale işlemleri.")]
 public sealed record TransferSlots(
     [property: Description("Paranın gönderileceği IBAN veya hesap kimliği (örn: TR9900010001)")]

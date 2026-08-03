@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using Banking.Domain.Attributes;
 
-namespace Banking.Agents.Records;
+namespace Banking.Domain.Records;
 
 // --- Kendini Dokümante Eden Ödeme Slot Nesnesi (Self-Documenting Record) -----------
+[Workflow("card-payment")]
 [Description("Kredi kartı borcu ödeme akışı için gereken parametre slot nesnesi.")]
 public sealed record PaymentSlots(
     [property: Description("Borcu ödenecek olan kredi kartı kimliği (örn: CARD-2002)")]

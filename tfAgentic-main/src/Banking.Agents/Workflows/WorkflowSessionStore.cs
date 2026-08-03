@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
-using Banking.Agents.Records;
+using Banking.Domain.Records;
 using Banking.Agents.Tracing;
 using Banking.Domain.Constants;
 using Microsoft.Extensions.Logging;
@@ -175,6 +175,66 @@ public sealed class WorkflowSessionStore
             bag.PendingConfirmation = null;
             bag.PendingSlots = null;
         }
+    }
+
+    // --- StateBag İçindeki Parametrelerden Dinamik Record Üretir -----------
+    public TSlots? ConstructSlotsFromBag<TSlots>(string sessionId)
+        where TSlots : class
+    {
+        var bag = GetOrCreate(sessionId);
+
+        // Tarih alanı varsa ve atanmadıysa varsayılan bugün ata
+        if (!bag.SlotBag.ContainsKey("Date") && typeof(TSlots).GetProperty("Date") != null)
+        {
+            bag.SlotBag["Date"] = Banking.Domain.BankClock.Today;
+        }
+
+        var constructors = typeof(TSlots).GetConstructors();
+        var primaryCtor = constructors.OrderByDescending(c => c.GetParameters().Length).FirstOrDefault();
+        if (primaryCtor == null) return null;
+
+        var ctorParams = primaryCtor.GetParameters();
+        var args = new object?[ctorParams.Length];
+
+        for (int i = 0; i < ctorParams.Length; i++)
+        {
+            var p = ctorParams[i];
+            if (bag.SlotBag.TryGetValue(p.Name!, out var rawVal) && rawVal != null)
+            {
+                try
+                {
+                    var targetType = Nullable.GetUnderlyingType(p.ParameterType) ?? p.ParameterType;
+                    if (rawVal is System.Text.Json.JsonElement element)
+                    {
+                        if (targetType == typeof(decimal)) rawVal = element.GetDecimal();
+                        else if (targetType == typeof(int)) rawVal = element.GetInt32();
+                        else if (targetType == typeof(string)) rawVal = element.GetString();
+                        else if (targetType == typeof(DateOnly) && element.TryGetDateTime(out var dt)) rawVal = DateOnly.FromDateTime(dt);
+                    }
+
+                    if (targetType == typeof(decimal) && rawVal is not decimal)
+                        rawVal = Convert.ToDecimal(rawVal);
+                    else if (targetType == typeof(int) && rawVal is not int)
+                        rawVal = Convert.ToInt32(rawVal);
+                    else if (targetType == typeof(string) && rawVal is not string)
+                        rawVal = rawVal.ToString();
+                    else if (targetType == typeof(DateOnly) && rawVal is string dateStr)
+                        rawVal = DateOnly.Parse(dateStr);
+
+                    args[i] = rawVal;
+                }
+                catch
+                {
+                    args[i] = p.HasDefaultValue ? p.DefaultValue : null;
+                }
+            }
+            else
+            {
+                args[i] = p.HasDefaultValue ? p.DefaultValue : null;
+            }
+        }
+
+        return primaryCtor.Invoke(args) as TSlots;
     }
 
     private static bool IsDefaultValue(object value)

@@ -1,5 +1,5 @@
 using Banking.Agents;
-using Banking.Agents.Collection;
+using Banking.Agents.Workflows;
 using Banking.Agents.Specialists;
 using Banking.Agents.Tracing;
 using Banking.Domain.Campaigns;
@@ -11,6 +11,8 @@ using Banking.Mcp.Registry;
 using Banking.Gateway;
 using Banking.Gateway.Models;
 using Banking.Domain.Financing;
+using Banking.Domain.Workflows;
+using Banking.Domain.Records;
 using Microsoft.Agents.AI.Hosting;
 using SmartComponents.LocalEmbeddings;
 
@@ -41,6 +43,7 @@ builder.Services.AddSingleton<CustomerContext>();
 builder.Services.AddSingleton<IAccountService, AccountService>();
 builder.Services.AddSingleton<ICardService, CardService>();
 builder.Services.AddSingleton<ICollectionService, CollectionService>();
+builder.Services.AddSingleton<ITransferService, TransferService>();
 builder.Services.AddSingleton<IAnalyzeService, AnalyzeService>();
 
 // --- Semantik Arama & Embedding ---
@@ -48,6 +51,7 @@ builder.Services.AddSingleton<LocalEmbedder>();
 builder.Services.AddSingleton<SemanticMkCodeSearcher>();
 builder.Services.AddSingleton<SemanticCampaignSearcher>();
 builder.Services.AddSingleton<SemanticFinancingSearcher>();
+builder.Services.AddSingleton<SemanticWorkflowSearcher>();
 
 
 // --- Tool Registry (Merkezi araç haritası & otomatik keşif) ---
@@ -58,6 +62,7 @@ builder.Services.AddSingleton<TraceHub>();
 builder.Services.AddSingleton(sp => ChatClientFactory.Create(sp.GetRequiredService<AgentOptions>()));
 builder.Services.AddSingleton<AnalyzeTools>();
 builder.Services.AddSingleton<AgentRuntime>();
+builder.Services.AddSingleton<WorkflowRegistry>();
 builder.Services.AddSingleton<WorkflowConversationStore>();
 
 // --- MW Gateway (Java MW ↔ .NET iletişimi) ---
@@ -96,6 +101,12 @@ using (var scope = app.Services.CreateScope())
 
     var financingSearcher = scope.ServiceProvider.GetRequiredService<Banking.Domain.Financing.SemanticFinancingSearcher>();
     financingSearcher.Initialize();
+
+    var registry = scope.ServiceProvider.GetRequiredService<WorkflowRegistry>();
+    registry.AutoDiscoverWorkflows(typeof(PaymentSlots).Assembly);
+
+    var workflowSearcher = scope.ServiceProvider.GetRequiredService<SemanticWorkflowSearcher>();
+    workflowSearcher.Initialize(registry.DiscoveredWorkflows);
 }
 
 app.UseDefaultFiles();

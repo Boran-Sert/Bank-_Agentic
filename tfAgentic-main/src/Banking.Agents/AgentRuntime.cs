@@ -1,11 +1,14 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using A2A;
-using Banking.Agents.Collection;
+using Banking.Agents.Workflows;
 using Banking.Agents.Mcp;
 using Banking.Agents.Prompts;
 using Banking.Agents.Specialists;
 using Banking.Agents.Tracing;
+using Banking.Domain.Records;
+using Banking.Domain.Constants;
+using Banking.Domain.Workflows;
 using Banking.Domain.MkCodes;
 using Banking.Mcp.Registry;
 using Microsoft.Agents.AI;
@@ -140,11 +143,14 @@ public sealed class AgentRuntime
     /// Aktif olan herhangi bir TSlots Record nesnesine (PaymentSlots, TransferSlots vb.) göre
     /// oturuma özel dinamik MAF workflow ajanını inşa eder.
     /// </summary>
-    private async Task<AIAgent> GetWorkflowAgentAsync<TSlots>(
+    public async Task<AIAgent> GetWorkflowAgentAsync<TSlots>(
         string sessionId,
         WorkflowSessionStore sessionStore,
         string instructions,
         string agentName,
+        string slotUpdateDescription,
+        string proposeToolName,
+        string cancelToolName,
         CancellationToken ct = default)
         where TSlots : class
     {
@@ -156,6 +162,7 @@ public sealed class AgentRuntime
         tools.AddRange(TraceMcpTools(mcp.ToolsForGroup(ToolGroup.Analyze), "AnalyzeService"));
 
         var workflowName = typeof(TSlots).Name.ToLowerInvariant();
+
         var updateSlotTool = AIFunctionFactory.Create(
             (string key, object value) =>
             {
@@ -166,42 +173,57 @@ public sealed class AgentRuntime
             new AIFunctionFactoryOptions
             {
                 Name = "update_slot",
-                Description = $"Aktif '{typeof(TSlots).Name}' iş akışı için kullanıcıdan alınan her bir tekil parametreyi (CardId, Amount, SourceAccountId) alındığı an StateBag'e kaydetmek için kullanılır. Örn: key='CardId', value='CARD-2002'."
+                Description = slotUpdateDescription
             });
 
         var proposeTool = AIFunctionFactory.Create(
-            (string cardId, decimal amount, string sourceAccountId) =>
+            () =>
             {
-                var slots = new Records.PaymentSlots(cardId, amount, sourceAccountId, Banking.Domain.BankClock.Today);
-                sessionStore.SaveSlots(sessionId, workflowName, slots);
-                _hub.Publish("WORKFLOW", $"Dinamik {typeof(TSlots).Name} StateBag Kaydedildi (Session: '{sessionId}')");
-                return "PROPOSAL_READY:" + System.Text.Json.JsonSerializer.Serialize(slots);
+                var slotsObj = sessionStore.ConstructSlotsFromBag<TSlots>(sessionId);
+                if (slotsObj != null)
+                {
+                    sessionStore.SaveSlots(sessionId, workflowName, slotsObj);
+                    _hub.Publish("WORKFLOW", $"Dinamik {typeof(TSlots).Name} StateBag Kaydedildi (Session: '{sessionId}')");
+                    return "PROPOSAL_READY:" + System.Text.Json.JsonSerializer.Serialize(slotsObj);
+                }
+                return "ERROR: Eksik veya hatalı parametreler.";
             },
             new AIFunctionFactoryOptions
             {
-                Name = "propose_payment",
-                Description = $"Aktif '{typeof(TSlots).Name}' iş akışının tüm parametreleri netleştiğinde çağrılır."
+                Name = proposeToolName,
+                Description = $"Aktif {typeof(TSlots).Name} iş akışının tüm parametreleri netleştiğinde çağrılır."
             });
 
         var cancelTool = AIFunctionFactory.Create(
             () => "CANCELLED",
             new AIFunctionFactoryOptions
             {
-                Name = "cancel_collection",
-                Description = $"Kullanıcı aktif '{typeof(TSlots).Name}' işleminden vazgeçtiğinde akışı sonlandırır."
+                Name = cancelToolName,
+                Description = $"Kullanıcı aktif işlemden vazgeçtiğinde akışı sonlandırır."
             });
 
         tools.Add(new TracingAIFunction(updateSlotTool, _hub, "WORKFLOW", "update_slot", "StateBag Anlık Güncelleme"));
-        tools.Add(new TracingAIFunction(proposeTool, _hub, "WORKFLOW", "propose_payment", $"Aktif Workflow: {workflowName}"));
-        tools.Add(new TracingAIFunction(cancelTool, _hub, "WORKFLOW", "cancel_collection", "kullanıcı vazgeçti"));
+        tools.Add(new TracingAIFunction(proposeTool, _hub, "WORKFLOW", proposeTool.Name, $"Aktif Workflow: {workflowName}"));
+        tools.Add(new TracingAIFunction(cancelTool, _hub, "WORKFLOW", cancelTool.Name, "kullanıcı vazgeçti"));
 
         var client = TracedClient(agentName);
         return client.AsAIAgent(instructions: instructions, name: agentName, tools: tools);
     }
 
-    public Task<AIAgent> GetCollectionAgentAsync(string sessionId, Collection.WorkflowSessionStore sessionStore, CancellationToken ct = default)
+    public Task<AIAgent> GetCollectionAgentAsync(string sessionId, Workflows.WorkflowSessionStore sessionStore, CancellationToken ct = default)
     {
-        return GetWorkflowAgentAsync<Records.PaymentSlots>(sessionId, sessionStore, Prompts.AgentPrompts.CollectionInstructions, "TahsilatAsistani", ct);
+        return GetWorkflowAgentAsync<PaymentSlots>(
+            sessionId, sessionStore, Prompts.AgentPrompts.CollectionInstructions, "TahsilatAsistani",
+            "Aktif 'PaymentSlots' iş akışı için kullanıcıdan alınan her bir tekil parametreyi (CardId, Amount, SourceAccountId) alındığı an StateBag'e kaydetmek için kullanılır. Örn: key='CardId', value='CARD-2002'.",
+            "propose_payment", "cancel_collection", ct);
+    }
+
+    public Task<AIAgent> GetTransferAgentAsync(string sessionId, Workflows.WorkflowSessionStore sessionStore, CancellationToken ct = default)
+    {
+        return GetWorkflowAgentAsync<Banking.Domain.Records.TransferSlots>(
+            sessionId, sessionStore, Prompts.AgentPrompts.TransferInstructions, "TransferAsistani",
+            "Aktif 'TransferSlots' iş akışı için kullanıcıdan alınan her bir tekil parametreyi (TargetIban, Amount, SourceAccountId, Description) alındığı an StateBag'e kaydetmek için kullanılır. Örn: key='TargetIban', value='TR123...'.",
+            "propose_transfer", "cancel_transfer", ct);
     }
 
     /// <summary>OpenAI chat client'ını etiketli izleyici ile sarar (LLM çağrıları görünür olur).</summary>
@@ -311,10 +333,14 @@ public sealed class AgentRuntime
                     _hub, "WORKFLOW", "Ekran yönlendirmesi tetiklendi"),
             };
 
+            var bridgeTools = registry.GetToolsByGroup(ToolGroup.Orchestrator)
+                .Where(t => t.Type == ToolType.OrchestratorBridge);
+            var dynamicRules = string.Join("\n", bridgeTools.Select(t => $"           - {t.Description} için SADECE '{t.Name}' aracını kullan."));
+
             _orchestrator = TracedClient("Orkestratör")
                 .AsAIAgent(new ChatClientAgentOptions
                 {
-                    ChatOptions = new() { Instructions = AgentPrompts.OrchestratorInstructions, Tools = tools },
+                    ChatOptions = new() { Instructions = AgentPrompts.GetOrchestratorInstructions(dynamicRules), Tools = tools },
                     Name = "Orkestrator",
                     AIContextProviders = [
                         new Banking.Agents.ContextProviders.TopicContextProvider(_hub)
@@ -339,7 +365,7 @@ public sealed class AgentRuntime
             return $"{workflowName} iş akışı başlatılamadı: Oturum deposu bulunamadı.";
         }
 
-        var result = await store.StartWorkflowConversationAsync(sessionId, message);
+        var result = await store.StartWorkflowConversationAsync(workflowName, sessionId, message);
         _logger.LogInformation("Jenerik iş akışı başarıyla başlatıldı ve oturuma bağlandı: {WorkflowName} (SessionId: {SessionId})", workflowName, sessionId);
         return result.Prompt ?? $"{workflowName} iş akışı başlatıldı.";
     }
@@ -398,18 +424,33 @@ public sealed class AgentRuntime
     /// <summary>Q&A: kullanıcı sorusunu orkestratöre iletir; yanıt metni + tahsilat akışı başlatılmalı mı bilgisi döner.</summary>
     public async Task<OrchestratorReply> AskOrchestratorAsync(string message, string? sessionId = null, IList<ChatMessage>? history = null, CancellationToken ct = default)
     {
-        await EnsureOrchestratorAsync(ct); // Orkestratör hazırlığı
-
         _currentSessionId = !string.IsNullOrWhiteSpace(sessionId) ? sessionId : $"gw-{Guid.NewGuid():N}"[..16];
         _currentMessage = message;
 
+        _logger.LogInformation("Kullanıcı sorusu işleniyor.");
+        _hub.Publish(TraceCategories.System, $"Kullanıcı sorusu alındı → '{message}'");
+
+        // --- HİBRİT SEMANTİK VEKTÖR YÖNLENDİRME (ONNX Local Embedder) ---
+        var searcher = _serviceProvider.GetService(typeof(SemanticWorkflowSearcher)) as SemanticWorkflowSearcher;
+        if (searcher != null)
+        {
+            var matches = searcher.Search(message, topK: 1);
+            var bestMatch = matches.FirstOrDefault();
+
+            if (bestMatch.Metadata != null && bestMatch.Score >= 0.80f)
+            {
+                _logger.LogInformation($"[Semantik Vektör Eşleşmesi] Skor: {bestMatch.Score:F3} ≥ 0.80 → Otomatik Workflow Başlatıldı: '{bestMatch.Metadata.WorkflowName}'");
+                _hub.Publish(TraceCategories.FlowRouter, $"{bestMatch.Metadata.WorkflowName} akışı başlatıldı.");
+
+                var promptResult = await StartWorkflowAsync(bestMatch.Metadata.WorkflowName);
+                return new OrchestratorReply(promptResult, "start_workflow", new Dictionary<string, object?> { ["workflowName"] = bestMatch.Metadata.WorkflowName });
+            }
+        }
+
+        await EnsureOrchestratorAsync(ct); // Orkestratör hazırlığı
         var messages = BuildNativeContext(message, history); // Bağlam biçimlendirme
 
-        _logger.LogInformation("Kullanıcı sorusu işleniyor.");
-        _hub.Publish("SYSTEM", $"Kullanıcı sorusu alındı → '{message}'");
-
         _session ??= await _orchestrator!.CreateSessionAsync(cancellationToken: ct); // LLM oturumu başlatma
-
         var response = await _orchestrator!.RunAsync(messages, session: _session, cancellationToken: ct); // LLM modelini çalıştırma
         
         _logger.LogInformation("Orkestratör yanıtı üretildi.");

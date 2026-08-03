@@ -95,3 +95,13 @@ public record FinancingOption(
     int MaxInstallments
     );
 
+/// <summary>Transfer işlemi sonucu üretilen makbuz.</summary>
+public record TransferReceipt(
+    string ReceiptId,
+    string SourceAccountId,
+    string TargetIban,
+    decimal Amount,
+    DateOnly Date,
+    decimal RemainingBalance,
+    string Status);
+

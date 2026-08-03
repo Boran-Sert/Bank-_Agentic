@@ -78,6 +78,39 @@ public sealed class InMemoryBankStore
         }
     }
 
+    /// <summary>Bir hesaptan başka bir hesaba (Havale) veya başka bankaya (EFT) para transferi yapar.</summary>
+    public Account ApplyTransfer(string sourceAccountId, string targetIban, decimal amount, string description)
+    {
+        lock (_gate)
+        {
+            var sourceAccount = GetAccount(sourceAccountId) ?? throw new InvalidOperationException($"Kaynak hesap bulunamadı: {sourceAccountId}");
+            
+            if (amount <= 0)
+                throw new InvalidOperationException("Transfer tutarı pozitif olmalıdır.");
+            
+            if (amount > sourceAccount.Balance)
+                throw new InvalidOperationException("Hesap bakiyesi yetersiz.");
+
+            // Kaynak hesaptan düş
+            var updatedSource = sourceAccount with { Balance = sourceAccount.Balance - amount };
+            _accounts[sourceAccountId] = updatedSource;
+            
+            // Giden işlem kaydı
+            _transactions.Add(new Transaction($"TXN-TR-OUT-{Guid.NewGuid():N}"[..16], sourceAccountId, BankClock.Today, description, -amount, "Giden"));
+
+            // Hedef IBAN bankamızda bir hesaba mı ait? (Havale senaryosu)
+            var targetAccount = _accounts.Values.FirstOrDefault(a => string.Equals(a.Iban.Replace(" ", ""), targetIban.Replace(" ", ""), StringComparison.OrdinalIgnoreCase));
+            if (targetAccount != null)
+            {
+                var updatedTarget = targetAccount with { Balance = targetAccount.Balance + amount };
+                _accounts[targetAccount.Id] = updatedTarget;
+                _transactions.Add(new Transaction($"TXN-TR-IN-{Guid.NewGuid():N}"[..16], targetAccount.Id, BankClock.Today, description, amount, "Gelen"));
+            }
+
+            return updatedSource;
+        }
+    }
+
     private void Seed()
     {
         var customer = new Customer(DemoCustomerId, "Yusuf Efe Mayda");

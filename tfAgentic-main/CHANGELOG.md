@@ -1,6 +1,52 @@
 # Mimari Değişiklik Günlüğü (Changelog)
 
-## Sürüm: [Clean-Code-Session-Constants-Refactor] - 2026-08-03
+## Sürüm: [Dynamic-Workflow-Transfer-Refactor] - 2026-08-03
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+1. **İş Akışlarının Sert Kodlanmış (Hardcoded) Yapısı:** Eski mimaride iş akışları (`Collection/`) altında sadece Kredi Kartı Ödemesi (`PaymentApprovalWorkflow`) gibi spesifik akışlara özel sert kodlanmış sınıflardan oluşuyordu. Sisteme Para Transferi (Havale/EFT) veya Kredi Başvurusu gibi yeni iş akışları eklemek esnek değildi.
+2. **Statik LLM Yönlendirme Gecikmesi:** Kullanıcının "1000 TL transfer et" veya "Kart borcumu öde" gibi açık eylem istekleri dahi her defasında LLM orkestratörüne gidiyor, bu durum yanıt süresini uzatıyor ve token maliyetini artırıyordu.
+3. **Monolitik Uzman Ajan Yapısı:** `SpecialistAgents.cs` dosyasında tüm uzman ajanlar (`HesapUzmani`, `KartUzmani`, `FinansalAnalizUzmani`) statik metotlar halinde tanımlanmıştı. Modülerlik ve genişletilebilirlik zayıftı.
+4. **Sabit UI Onay/Makbuz Ekranları:** Arayüz (`index.html`) yalnızca Kredi Kartı ödeme kartını gösterecek şekilde statik HTML şablonuna sahipti; Para Transferi gibi farklı parametrelere sahip akışlar gösterilemiyordu.
+
+### Çözüm ve Yeni Mimari
+
+#### 1. Otomatik Keşif ve Semantik Vektör Yönlendirme (`WorkflowRegistry` & `SemanticWorkflowSearcher`)
+- **`WorkflowAttribute`**: İş akışları öznitelikler (`[Workflow("money-transfer", "Hesaba veya IBAN'a para transferi...")]`) ile işaretlendi.
+- **`WorkflowRegistry`**: Assembly bazlı tarama yaparak sistemdeki tüm iş akışlarını otomatik keşfeden jenerik sicil yapısı kuruldu.
+- **`SemanticWorkflowSearcher`**: Keşfedilen iş akışları `SmartComponents.LocalEmbeddings` (ONNX) ile vektörel indekslendi. Kullanıcı isteği %80 üzeri semantik benzerlik sağladığında LLM'e sormadan doğrudan otomatik workflow başlatılması sağlandı.
+
+#### 2. Para Transferi İş Akışı Entegrasyonu (`TransferService` & `TransferActionExecutor`)
+- **`TransferSlots`**: Kaynak hesap, hedef IBAN, tutar, tarih ve açıklama alanlarını içeren yeni slot yapısı tanımlandı.
+- **`ITransferService` / `TransferService`**: Hesaptan IBAN'a para transferi işlemlerini (bakiye kontrolü, hesaptan düşme, transfer kaydı) yürüten domain servisi eklendi.
+- **`TransferActionExecutor`**: Transfer onaylandığında servisi çalıştıran ve makbuz üreten eylem yürütücüsü yazıldı.
+- **`WorkflowSessionStore.ConstructSlotsFromBag<TSlots>`**: `StateBag` içerisindeki ham parametrelerden Reflection ile dinamik olarak strongly-typed `Slots` record'u türetme yeteneği eklendi.
+
+#### 3. Uzman Ajanların ve İş Akışlarının Modülerleşmesi
+- `Banking.Agents/Collection/` dizini altındaki iş akışı deposu ve onay akışları jenerik hale getirilerek `Banking.Agents/Workflows/` klasörüne taşındı.
+- Uzman ajanlar (`HesapUzmaniAgent`, `KartUzmaniAgent`, `AnalizUzmaniAgent`, `CustomerSupportAgent`) kendi modüler sınıflarına ayrıştırıldı.
+- `ToolRegistry` içerisindeki köprü araçlarının (bridge tools) açıklamaları netleştirildi ve orkestratör talimatlarına dinamik kural enjeksiyonu sağlandı.
+
+#### 4. Frontend Dinamik Onay ve Makbuz Render Mimarisi (`index.html`)
+- `renderConfirm` ve `renderReceipt` fonksiyonları jenerik parametre haritalama (`keyLabels`) ile yeniden yazıldı.
+- İş akış türüne göre ("🔐 ÖDEME ONAYI", "💸 TRANSFER ONAYI") dinamik başlıklar, tutar biçimlendirmeleri ve bakiye/borç etiketleri dinamik olarak render ediliyor.
+
+---
+
+### Dışa Kapalı (Internal) C# Değişiklikleri
+- **[Yeni Dosya]** `src/Banking.Domain/Attributes/WorkflowAttribute.cs`: İş akışlarını niyet ve tanımları ile işaretleyen öznitelik.
+- **[Yeni Dosya]** `src/Banking.Domain/Workflows/WorkflowMetadata.cs`: İş akışı meta veri modeli.
+- **[Yeni Dosya]** `src/Banking.Domain/Workflows/SemanticWorkflowSearcher.cs`: ONNX tabanlı vektörel iş akışı arayıcısı.
+- **[Yeni Dosya]** `src/Banking.Domain/Services/TransferService.cs`: Para transferi domain servisi.
+- **[Yeni Dosya]** `src/Banking.Agents/Workflows/WorkflowRegistry.cs`: Otomatik iş akışı keşif sicili.
+- **[Yeni Dosya]** `src/Banking.Agents/Workflows/TransferActionExecutor.cs`: Para transferi onay eylem yürütücüsü.
+- **[Yeni Dosya]** `src/Banking.Agents/Specialists/AgentCard.cs`, `AnalizUzmaniAgent.cs`, `CustomerSupportAgent.cs`, `HesapUzmaniAgent.cs`, `KartUzmaniAgent.cs`: Modüler uzman ajan sınıfları.
+- **[Taşındı & Güncellendi]** `src/Banking.Agents/Workflows/WorkflowSessionStore.cs`: `ConstructSlotsFromBag<TSlots>` ile dinamik slot üretimi.
+- **[Güncellendi]** `src/Banking.Agents/AgentRuntime.cs`: Otomatik vektörel yönlendirme ve dinamik bridge tool kuralları.
+- **[Güncellendi]** `src/Banking.Host/Program.cs`: `WorkflowRegistry`, `TransferService` ve `SemanticWorkflowSearcher` DI entegrasyonu.
+- **[Güncellendi]** `src/Banking.Host/wwwroot/index.html`: Dinamik onay ve makbuz arayüzü.
+
+---
+
 
 ### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
 1. **Oturum İsimlendirmeleri ve Kafa Karışıklığı:** Eski yapıda `GatewaySession` ve `CollectionSessionId` isimlendirmeleri hem isim karmaşasına hem de genel kullanıcı chat oturumu ile workflow oturumunun karıştırılmasına yol açıyordu.

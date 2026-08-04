@@ -176,16 +176,6 @@ public sealed class ResponseSanitizer
     );
 
     /// <summary>
-    /// <see cref="ResponseSanitizer"/> örneği oluşturur.
-    /// </summary>
-    /// <param name="logger">Güvenlik uyarılarının yazılacağı yapılandırılmış logger.</param>
-    /// <param name="hub">Canlı izleme (SSE) kanalına güvenlik olaylarını yayınlayan merkezi TraceHub.</param>
-    public ResponseSanitizer(ILogger<ResponseSanitizer> logger, TraceHub hub)
-        : this(logger, hub, null)
-    {
-    }
-
-    /// <summary>
     /// Verilen yanıt metnini tüm güvenlik kategorilerinde tarar ve tespit edilen
     /// iç bilgi sızıntılarını temizler.
     /// <para>

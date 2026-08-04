@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
-namespace Banking.Agents;
+namespace Banking.Agents.Runtime;
 
 /// <summary>
 /// Startup'ta MCP'ye dokunmadan kurulabilen uzman ajan sarmalayıcısı. Gerçek uzman (MCP client + LLM ajanı)

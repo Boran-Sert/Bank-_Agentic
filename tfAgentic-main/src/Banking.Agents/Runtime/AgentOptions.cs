@@ -1,4 +1,4 @@
-namespace Banking.Agents;
+namespace Banking.Agents.Runtime;
 
 /// <summary>
 /// Ajan altyapısının yapılandırması. "Agents" config bölümünden bağlanır;

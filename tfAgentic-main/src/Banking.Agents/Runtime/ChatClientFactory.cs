@@ -2,7 +2,7 @@ using System.ClientModel;
 using OpenAI;
 using OpenAI.Chat;
 
-namespace Banking.Agents;
+namespace Banking.Agents.Runtime;
 
 /// <summary>OpenAI <see cref="ChatClient"/> örneğini yapılandırmadan üretir.</summary>
 public static class ChatClientFactory

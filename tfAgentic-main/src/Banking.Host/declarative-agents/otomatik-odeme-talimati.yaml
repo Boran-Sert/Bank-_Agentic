@@ -1,0 +1,21 @@
+kind: Prompt
+name: otomatik-odeme-talimati
+displayName: Otomatik Ödeme Talimatı Akışı
+description: Fatura veya kredi kartı ödemeleri için otomatik ödeme talimatı oluşturur.
+instructions: |
+  Kullanıcıdan otomatik ödemeye bağlanacak kart ve hesap bilgilerini topla.
+model:
+  options:
+    temperature: 0.1
+inputSchema:
+  type: object
+  properties:
+    cardId:
+      type: string
+      description: Otomatik ödemeye bağlanacak kart ID
+    sourceAccountId:
+      type: string
+      description: Ödemenin çekileceği hesap ID
+  required:
+    - cardId
+    - sourceAccountId

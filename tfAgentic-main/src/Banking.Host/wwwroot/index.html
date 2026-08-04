@@ -1139,6 +1139,17 @@
             <div class="val" id="diag-transport" style="font-size: 18px; color: var(--accent-cyan);">...</div>
           </div>
         </div>
+
+        <h2 style="font-size: 20px; font-weight: 700; margin-top: 24px;">Kampanya Senkronizasyonu</h2>
+        <div class="diag-card" style="max-width: 480px;">
+          <h3><i class="fa-solid fa-rotate"></i> Backend Kampanya Senkronizasyonu</h3>
+          <p style="font-size: 13px; opacity: 0.75; margin: 4px 0 12px;">
+            Backend'deki yeni/güncellenmiş kampanyaları çeker, kataloğa yazar ve arama kesintiye
+            uğramadan (zero-downtime) semantik indekse ekler.
+          </p>
+          <button class="btn-primary" onclick="syncCampaigns()"><i class="fa-solid fa-rotate"></i> Kampanyaları Senkronize Et</button>
+          <div class="val" id="campaign-sync-result" style="font-size: 14px; margin-top: 10px;"></div>
+        </div>
       </div>
     </div>
 
@@ -1544,6 +1555,20 @@ async function fetchDiag() {
     document.getElementById('diag-mcp').textContent = data.mcpToolCount;
     document.getElementById('diag-transport').textContent = data.specialistTransport;
   } catch {}
+}
+
+async function syncCampaigns() {
+  const resultEl = document.getElementById('campaign-sync-result');
+  resultEl.textContent = 'Senkronize ediliyor...';
+  try {
+    const res = await fetch('/api/campaigns/sync', { method: 'POST' });
+    const data = await res.json();
+    resultEl.textContent = data.syncedCount > 0
+      ? `${data.syncedCount} kampanya eklendi/güncellendi.`
+      : 'Senkronize edilecek yeni kampanya yok (backend bağlantısı henüz kurulmadı).';
+  } catch {
+    resultEl.textContent = 'Senkronizasyon başarısız oldu.';
+  }
 }
 </script>
 </body>

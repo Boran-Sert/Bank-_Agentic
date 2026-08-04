@@ -1,7 +1,12 @@
 using System.Reflection;
-using Banking.Agents;
-using Banking.Agents.Workflows;
+using Banking.Agents.Mcp;
+using Banking.Agents.Runtime;
 using Banking.Agents.Specialists;
+using Banking.Agents.Sessions;
+using Banking.Agents.Workflows;
+using Banking.Agents.Workflows.Actions;
+using Banking.Agents.Workflows.Declarative;
+using Banking.Agents.Workflows.Engine;
 using Banking.Agents.Tracing;
 using Banking.Domain.Campaigns;
 using Banking.Domain.Data;
@@ -16,6 +21,8 @@ using Banking.Domain.Workflows;
 using Banking.Domain.Constants;
 using Banking.Domain.Records;
 using Microsoft.Agents.AI.Hosting;
+using OpenAI.Chat;
+using Microsoft.Extensions.AI;
 using SmartComponents.LocalEmbeddings;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -47,6 +54,9 @@ builder.Services.AddSingleton<ICardService, CardService>();
 builder.Services.AddSingleton<ICollectionService, CollectionService>();
 builder.Services.AddSingleton<ITransferService, TransferService>();
 builder.Services.AddSingleton<IAnalyzeService, AnalyzeService>();
+builder.Services.AddSingleton<ICampaignCatalogService, CampaignCatalogService>();
+builder.Services.AddSingleton<ICampaignSyncService, CampaignSyncService>();
+builder.Services.AddSingleton<IFinancingCatalogService, FinancingCatalogService>();
 
 // --- Semantik Arama & Embedding ---
 builder.Services.AddSingleton<LocalEmbedder>();
@@ -63,17 +73,48 @@ builder.Services.AddSingleton<IToolRegistry>(ToolRegistry.Instance);
 builder.Services.AddSingleton<TraceHub>();
 builder.Services.AddSingleton(sp => ChatClientFactory.Create(sp.GetRequiredService<AgentOptions>()));
 builder.Services.AddSingleton<AnalyzeTools>();
+
+// İzleme katmanıyla sarmalanmış chat istemcisi üreteci; ajan kuran her bileşen bunu kullanır.
+builder.Services.AddSingleton<Func<string, IChatClient>>(sp =>
+{
+    var chatClient = sp.GetRequiredService<ChatClient>();
+    var traceHub = sp.GetRequiredService<TraceHub>();
+    var agentOptions = sp.GetRequiredService<AgentOptions>();
+    return label => new TracingChatClient(chatClient.AsIChatClient(), traceHub, label, agentOptions.Temperature);
+});
+
+builder.Services.AddSingleton<McpToolProvider>();
+builder.Services.AddSingleton<SpecialistCatalog>();
+builder.Services.AddSingleton<NavigationTools>();
 builder.Services.AddSingleton<AgentRuntime>();
+
+// --- Oturum yönetimi (tek alan) ---
+// Durum istek başına BİR kez okunur (scope açılışı) ve BİR kez yazılır (scope kapanışı);
+// aradaki katmanlar yalnızca SessionContext görür, depoya dokunmaz.
+// Redis'e geçiş: aşağıdaki ISessionStore satırını değiştirmek yeterli.
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<ISessionStore, InMemorySessionStore>();
+builder.Services.AddSingleton<ISessionAccessor, AmbientSessionAccessor>();
+
+// --- İş akışı motoru ---
+builder.Services.AddSingleton<WorkflowAgentFactory>();
 builder.Services.AddSingleton<WorkflowRegistry>();
-builder.Services.AddSingleton<WorkflowSessionStore>(sp => new WorkflowSessionStore(sp.GetService<ILoggerFactory>()?.CreateLogger<WorkflowSessionStore>(), sp.GetRequiredService<TraceHub>()));
-builder.Services.AddSingleton<PaymentActionExecutor>();
-builder.Services.AddSingleton<TransferActionExecutor>();
-builder.Services.AddSingleton<IDeterministicActionExecutor<PaymentSlots, GenericConfirmationView, PaymentOutcome>>(sp => sp.GetRequiredService<PaymentActionExecutor>());
-builder.Services.AddSingleton<IDeterministicActionExecutor<TransferSlots, GenericConfirmationView, TransferOutcome>>(sp => sp.GetRequiredService<TransferActionExecutor>());
-builder.Services.AddSingleton<WorkflowConversationStore>();
+builder.Services.AddSingleton<WorkflowDispatcher>();
+
+// Akış içinden cevaplanamayan sorular orkestratöre devredilir. Delegasyon olarak kaydedilir ki
+// motor orkestratörü tanımak zorunda kalmasın ve döngüsel bağımlılık oluşmasın.
+builder.Services.AddSingleton<OrchestratorFallback>(sp => async (userMessage, cancellationToken) =>
+    (await sp.GetRequiredService<AgentRuntime>().AskOrchestratorAsync(userMessage, cancellationToken)).Reply ?? string.Empty);
+
+// --- Akış eylemleri: yeni bir akış eklemek = bir eksekütör + bir kayıt satırı ---
+// Eksekütör hem onay ekranını hem eylemi hem de banka ön-doğrulamasını taşır;
+// update_slot her değeri oturuma yazmadan önce aynı eksekütörden geçirir.
+builder.Services.AddSingleton<IDeterministicActionExecutor<PaymentSlots>, PaymentActionExecutor>();
+builder.Services.AddSingleton<IDeterministicActionExecutor<TransferSlots>, TransferActionExecutor>();
 
 // --- MW Gateway (Java MW ↔ .NET iletişimi) ---
 builder.Services.AddSingleton<FlowRouter>();
+builder.Services.AddSingleton<GatewayResponseMapper>();
 builder.Services.AddSingleton<GatewayService>();
 
 // --- Güvenlik: Deterministik çıktı bariyeri (Output Guard — Defense-in-Depth Katman 3) ---
@@ -87,12 +128,13 @@ builder.Services.AddMcpServer()
     .WithTools<AnalyzeTools>();
 
 // --- A2A host: Uzman ajanları kaydet + A2A server kaydı ---
-builder.Services.AddAIAgent(AgentConstants.SpecialistNames.Account, (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist(AgentConstants.SpecialistNames.Account))
-    .AddA2AServer();
-builder.Services.AddAIAgent(AgentConstants.SpecialistNames.Card, (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist(AgentConstants.SpecialistNames.Card))
-    .AddA2AServer();
-builder.Services.AddAIAgent(AgentConstants.SpecialistNames.Analyze, (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist(AgentConstants.SpecialistNames.Analyze))
-    .AddA2AServer();
+// Uzman listesi burada TEKRARLANMAZ: AgentCard'lardan keşfedilir.
+foreach (var specialistCard in SpecialistCatalog.DiscoverCards())
+{
+    var specialistName = specialistCard.Name;
+    builder.Services.AddAIAgent(specialistName, (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist(specialistName))
+        .AddA2AServer();
+}
 
 var app = builder.Build();
 
@@ -109,7 +151,8 @@ using (var scope = app.Services.CreateScope())
     financingSearcher.Initialize();
 
     var registry = scope.ServiceProvider.GetRequiredService<WorkflowRegistry>();
-    registry.AutoDiscoverWorkflows(typeof(PaymentSlots).Assembly, scope.ServiceProvider);
+    // Slot record'ları Banking.Domain'de, eksekütörler Banking.Agents'ta — iki assembly de taranır.
+    registry.AutoDiscoverWorkflows(typeof(PaymentSlots).Assembly, typeof(PaymentActionExecutor).Assembly);
 
     // Disk üzerindeki kayıtlı tüm MAF deklaratif YAML/JSON dosyalarını yükle (Kalıcılık - Disk Persistence)
     var agentsDir = Path.Combine(app.Environment.ContentRootPath, "declarative-agents");
@@ -125,7 +168,7 @@ using (var scope = app.Services.CreateScope())
 
             if (!string.IsNullOrWhiteSpace(def.Name))
             {
-                registry.RegisterDeclarativeWorkflow(def, scope.ServiceProvider);
+                registry.RegisterDeclarativeWorkflow(def);
             }
         }
         catch (Exception ex)
@@ -141,11 +184,10 @@ using (var scope = app.Services.CreateScope())
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// Protokol endpoint'leri (Eski temiz URL yapısı)
+// Protokol endpoint'leri 
 app.MapMcp("/mcp");
-app.MapA2AJsonRpc(AgentConstants.SpecialistNames.Account, "/a2a/hesap");
-app.MapA2AJsonRpc(AgentConstants.SpecialistNames.Card, "/a2a/kart");
-app.MapA2AJsonRpc(AgentConstants.SpecialistNames.Analyze, "/a2a/analiz");
+foreach (var specialistCard in SpecialistCatalog.DiscoverCards())
+    app.MapA2AJsonRpc(specialistCard.Name, $"/a2a/{specialistCard.A2ARoute}");
 
 // --- Q&A: orkestratör (GatewayService üzerinden tekil oturum yönetimi) ---
 app.MapPost("/api/chat", async (ChatRequest req, GatewayService gw, CancellationToken ct) =>
@@ -166,18 +208,6 @@ app.MapPost("/api/ai/chat", async (GatewayRequest req, GatewayService gw, Cancel
 
     var response = await gw.ProcessUserRequestAsync(req, ct);
     return Results.Ok(response);
-});
-
-// --- Tahsilat (human-in-the-loop) ---
-// İsteğe bağlı 'message': kullanıcının ilk ifadesi (ör. "4521 kartının borcunu öde") akışa bağlam olarak geçer.
-app.MapPost("/api/collect/start", async (CollectStartRequest? req, WorkflowConversationStore store) =>
-    Results.Ok(await store.StartWorkflowConversationAsync(req?.Message)));
-
-app.MapPost("/api/collect/respond", async (CollectRespondRequest req, WorkflowConversationStore store) =>
-{
-    if (string.IsNullOrWhiteSpace(req.SessionId))
-        return Results.BadRequest(new { error = "sessionId boş olamaz" });
-    return Results.Ok(await store.ProcessWorkflowStepMessageAsync(req.SessionId, req.Answer ?? string.Empty));
 });
 
 // --- Declarative Microsoft Agent Framework YAML/JSON İş Akışı Kaydı (C# Derlemesi Gerektirmez) ---
@@ -208,23 +238,39 @@ app.MapPost("/api/workflows/register-declarative", async (HttpContext httpContex
         return Results.BadRequest(new { error = "Geçersiz MAF Declarative şeması. 'name' (veya 'Name') alanı zorunludur." });
     }
 
-    registry.RegisterDeclarativeWorkflow(definition, sp);
+    // 'name' doğrudan dosya yoluna giriyor: "../../appsettings" gibi bir değer dizin dışına
+    // yazabilirdi. Yalnızca harf, rakam, tire ve alt çizgiye izin verilir.
+    var workflowFileName = definition.Name.ToLowerInvariant();
+    if (!workflowFileName.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_'))
+    {
+        return Results.BadRequest(new { error = "'name' yalnızca harf, rakam, '-' ve '_' içerebilir." });
+    }
+
+    try
+    {
+        registry.RegisterDeclarativeWorkflow(definition);
+    }
+    catch (InvalidOperationException ex)
+    {
+        // Örn. derlenmiş bir akışın adını ezmeye çalışmak. Sunucu hatası değil, istek hatasıdır.
+        return Results.BadRequest(new { error = ex.Message });
+    }
 
     // KALICILIK (Disk Persistence): YAML dosyasını declarative-agents/ dizinine kaydet
     var env = sp.GetRequiredService<IHostEnvironment>();
     var agentsFolder = Path.Combine(env.ContentRootPath, "declarative-agents");
     Directory.CreateDirectory(agentsFolder);
-    var filePath = Path.Combine(agentsFolder, $"{definition.Name.ToLowerInvariant()}.yaml");
+    var filePath = Path.Combine(agentsFolder, $"{workflowFileName}.yaml");
     await File.WriteAllTextAsync(filePath, content);
 
     // Yeni MAF deklaratif ajanı anında RAG semantik indeksine al (Sıfır Cold Start)
     var searcher = sp.GetRequiredService<SemanticWorkflowSearcher>();
-    var newWorkflowMetadata = new WorkflowMetadata(definition.Name.ToLowerInvariant(), definition.Description, typeof(Dictionary<string, object?>));
+    var newWorkflowMetadata = new WorkflowMetadata(workflowFileName, definition.Description, typeof(Dictionary<string, object?>));
     searcher.AddOrUpdate(newWorkflowMetadata);
 
     // TraceHub canlı akışına anında log yayınla
     var hub = sp.GetRequiredService<TraceHub>();
-    hub.Publish(TraceCategories.Workflow, $"[WORKFLOW REGISTERED] '{definition.Name}' ajanı çalışma zamanında eklendi ve diske kaydedildi", $"Tanım: '{definition.Description}' · Dosya: declarative-agents/{definition.Name.ToLowerInvariant()}.yaml");
+    hub.Publish(TraceCategories.Workflow, $"[WORKFLOW REGISTERED] '{definition.Name}' ajanı çalışma zamanında eklendi ve diske kaydedildi", $"Tanım: '{definition.Description}' · Dosya: declarative-agents/{workflowFileName}.yaml");
 
     return Results.Ok(new { message = $"Microsoft Agent Framework Declarative Agent '{definition.Name}' başarıyla kaydoldu, diske kaydedildi ve RAG semantik indeksine eklendi.", agent = definition });
 });
@@ -232,6 +278,16 @@ app.MapPost("/api/workflows/register-declarative", async (HttpContext httpContex
 // --- Tanılama: anahtarsız bile MCP/A2A/uzman wiring'ini doğrular ---
 app.MapGet("/api/diag", async (AgentRuntime runtime, CancellationToken ct) =>
     Results.Ok(await runtime.GetDiagnosticsAsync(ct)));
+
+// --- Kampanya senkronizasyonu: backend'den yeni kampanyaları çekip zero-downtime indeksler ---
+// UI'daki tetikleyici (buton) bu uç noktayı çağırır; gerçek backend bağlantısı henüz kurulmadı,
+// bkz. CampaignSyncService.SyncFromBackendAsync içindeki TODO.
+app.MapPost("/api/campaigns/sync", async (ICampaignSyncService syncService, TraceHub hub, CancellationToken ct) =>
+{
+    var syncedCount = await syncService.SyncFromBackendAsync(ct);
+    hub.Publish(TraceCategories.Workflow, $"[CAMPAIGN SYNC] Backend senkronizasyonu tetiklendi → {syncedCount} kampanya eklendi/güncellendi");
+    return Results.Ok(new { syncedCount });
+});
 
 // --- Canlı katman izi (SSE): UI'ın sağ paneli buna abone olur ---
 app.MapGet("/api/trace/stream", async (HttpContext http, TraceHub hub, CancellationToken ct) =>
@@ -261,7 +317,7 @@ app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
     var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Warmup");
     try
     {
-        await app.Services.GetRequiredService<AgentRuntime>().EnsureOrchestratorAsync();
+        await app.Services.GetRequiredService<AgentRuntime>().WarmUpAsync();
         log.LogInformation("Ajan grafiği ön ısıtıldı.");
     }
     catch (Exception ex)
@@ -273,5 +329,3 @@ app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
 app.Run();
 
 internal sealed record ChatRequest(string? Message, string? Text, string? SessionToken);
-internal sealed record CollectStartRequest(string? Message);
-internal sealed record CollectRespondRequest(string SessionId, string Answer);

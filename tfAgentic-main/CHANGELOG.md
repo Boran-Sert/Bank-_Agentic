@@ -1,6 +1,68 @@
 # Mimari Değişiklik Günlüğü (Changelog)
 
-## Sürüm: [Declarative-MAF-Agent-Studio-Refactor] - 2026-08-04
+## Sürüm: [Modüler-Stateless-Fintech-Mimarisi-Refactor] - 2026-08-04
+
+> Kapsamlı kod incelemesi ve `REFACTOR-PLAN.md` planına dayanır; bkz. o belgedeki K/Y/O bulgu kodları.
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+1. **İki paralel motor ve yanlış sonuç raporlama:** `CollectionConversation` (elle yazılmış LLM döngüsü) ile ölü `CollectionWorkflow`/`GenericSlotFillingStep` aynı işi iddia ediyordu. Başarı kontrolü `PaymentOutcome`'a sabitlenmişti; başarılı bir para transferi bile kullanıcıya "işlem sonlandırıldı" diye raporlanıyor, banka tarafında fırlatılan exception'lar (yetersiz bakiye) yakalanmadan "işlem tamamlandı" mesajına dönüşüyordu.
+2. **Ajanlar stateless değildi:** `sessionId` tool closure'larına gömülüydü, orkestratör tüm kullanıcılar için tek bir `AgentSession` paylaşıyordu — çok kullanıcılı ortamda oturum/veri karışması ve sınırsız bellek büyümesi riski.
+3. **Onay metin eşleştirmesiyle yapılıyordu:** `"onaylamıyorum"` gibi ifadeler `Contains("onayl")` ile yanlışlıkla onay sayılabiliyordu; çift tıklamaya karşı eşzamanlılık koruması yoktu.
+4. **Doğrulama yanlış zamanda ve yanlış katmandaydı:** Bakiye/limit/IBAN kontrolleri yalnızca onay anında, veri katmanının (`InMemoryBankStore`) içinde yapılıyordu; kullanıcı hatayı ancak "Onayla"ya bastıktan sonra öğreniyordu. `AnalyzeTools` gibi MCP araçları servis katmanını atlayıp doğrudan store'a erişiyordu.
+5. **Sessiz bozulmalar:** Slot tip dönüşümü başarısız olduğunda sessizce `0`/`null`'a düşüyordu; deklaratif YAML akışları slotlara bakmadan sahte makbuz üretiyordu; ekran yönlendirme (`mkCode`/`targetMkCode` uyuşmazlığı) hiç çalışmıyordu.
+6. **Ölü kod ve tutarsız isimlendirme:** `CollectionWorkflow`, `CampaignsRegistry`/`CampaignsDefinition`, `ScreenCommand`, `CustomerSupportAgent`, kullanılmayan sabitler ve fazla constructor'lar; `tools/WorkflowTest` derlenmiyordu.
+
+### Çözüm ve Yeni Mimari
+
+#### 1. Tek İş Akışı Motoru (`Workflows/Engine`, `Workflows/Slots`, `Workflows/Approval`, `Workflows/Actions`, `Workflows/Contracts`, `Workflows/Declarative`)
+- `WorkflowEngine<TSlots>` tek jenerik motor olarak eklendi; `Phase`'e göre `StartAsync` → `CollectSlotsAsync` → `ApplyApprovalDecisionAsync` sıralamasıyla çalışıyor. Eski `Collection/` dizini (`CollectionConversation`, ölü `CollectionWorkflow`) ve dağınık `Workflows/*.cs` dosyaları (`WorkflowSessionStore`, `WorkflowConversationStore`, `WorkflowScopes`, `PaymentApprovalWorkflow`) tamamen kaldırıldı.
+- `WorkflowOutcome` jenerik sonuç modeli (`IsSuccess`, `FailureReason`, `ReceiptId`, `Details`) eklendi; `PaymentOutcome`/`TransferOutcome` özel durumları ortadan kalktı — başarılı transfer artık doğru raporlanıyor, başarısız işlemin gerçek sebebi kullanıcıya ulaşıyor.
+- `ApprovalIntentParser` ile açık olumsuzluk önceliğine dayalı onay çözümlemesi eklendi; belirsiz ifadelerde onay sayılmıyor.
+- `SlotBinder`/`SlotValueConverter` ile dictionary ↔ record dönüşümü ayrıştırıldı; başarısız tip dönüşümü artık sessizce null'a düşmüyor, slot "eksik" olarak işaretleniyor.
+- `DeclarativeActionExecutor` gerçek MCP aracını çağırıp doğru sonucu döndürecek, `PaymentActionExecutor`/`TransferActionExecutor` domain exception'larını yakalayıp `WorkflowOutcome.Failure` üretecek şekilde yeniden yazıldı.
+
+#### 2. Oturum İzolasyonu ve Stateless Ajanlar (`Sessions/`, `Runtime/`)
+- `SessionContext` tek kapı olarak eklendi; `ISessionStore`/`InMemorySessionStore` yalnızca `AmbientSessionAccessor` üzerinden çağrılıyor. `AsyncLocalWorkflowSessionAccessor`, `ISessionStateStore`, `IWorkflowSessionAccessor` gibi ara soyutlamalar kaldırılıp tek `ISessionAccessor` sözleşmesine indirgendi.
+- `AgentRuntime` (eski god class) `Runtime/` altında `AgentOptions`, `ChatClientFactory`, `DeferredSpecialistAgent`, `NavigationTools` olarak ayrıştırıldı; uzman keşfi `SpecialistCatalog`'a taşındı.
+- `sessionId` artık tool closure'larına gömülmek yerine ambient scope'tan okunuyor; ajan nesneleri singleton, kullanıcıya özel veri taşımıyor.
+
+#### 3. Erken Doğrulama ve Katman Disiplini (`Banking.Domain/Validation`, `Banking.Agents/Validation`)
+- `BankValidationResult` ve dry-run doğrulama akışı `CollectionService`/`TransferService` içine eklendi; bakiye/limit/tutar/IBAN kontrolleri artık slot doldukça `update_slot` anında çalışıyor, onay ekranına gelmeden önce kullanıcıya yansıyor.
+- `TurkishIbanValidator` ile IBAN format/checksum doğrulaması eklendi.
+- `BankValidatedSlotWriter` (choke point) ve `PartiallyFilledSlotReader` ("değer yok" ile "değer sıfır" ayrımını koruyan okuyucu) eklendi.
+- `ICampaignService`/`ICampaignCatalogService`/`IFinancingCatalogService`/`CampaignSyncService` eklenerek `AnalyzeTools`'un `InMemoryBankStore`'a doğrudan erişimi kesildi; MCP araçları artık yalnızca servis katmanı üzerinden gidiyor.
+
+#### 4. Gateway ve Yanıt Eşleme Düzeltmeleri
+- `GatewayResponseMapper` eklendi; protokol eşleme `GatewayService`'ten ayrıştırıldı. `UserSession.cs` kaldırıldı.
+- `ekran_ac`/`mkCode` parametre adı uyuşmazlığı giderildi (ekran yönlendirme artık çalışıyor); onay ekranı `mkCode` çözümü `[Workflow]` adı üzerinden yapılıyor, hardcoded `"CreditCardPayment"` fallback'i kaldırıldı.
+
+#### 5. Ölü Kod Temizliği ve Sabit Standardizasyonu
+- `CampaignsRegistry`/`CampaignsDefinition`, `ScreenCommand`, `CustomerSupportAgent`, kullanılmayan `IToolRegistry` alanları ve `ResponseSanitizer`'ın fazla constructor'ı silindi.
+- `WorkflowPhases`/`WorkflowStatuses`/`ToolNames`/`AgentConstants`/MCP araç sabitleri tekilleştirildi.
+- `tools/WorkflowTest` doğru namespace'lere (`Banking.Domain.Records`) uyarlanarak tekrar derlenir hale getirildi.
+
+#### 6. Deklaratif Ajan Şablonları
+- `declarative-agents/card-payment.yaml` kaldırıldı, yerine `otomatik-odeme-talimati.yaml` eklendi; UI'daki (`index.html`) canlı YAML/Form senkronizasyonu genişletildi.
+
+---
+
+### Dışa Kapalı (Internal) C# Değişiklikleri
+- **[Yeni Klasör]** `src/Banking.Agents/Workflows/{Engine,Slots,Approval,Actions,Contracts,Declarative}`: Tek jenerik iş akışı motoru ve destek sınıfları.
+- **[Yeni Klasör]** `src/Banking.Agents/Runtime/`: `AgentRuntime` parçalanmasından doğan `AgentOptions`, `ChatClientFactory`, `DeferredSpecialistAgent`, `NavigationTools`.
+- **[Yeni Dosya]** `src/Banking.Agents/Specialists/SpecialistCatalog.cs`, `src/Banking.Agents/Mcp/McpToolProvider.cs`.
+- **[Yeni Dosya]** `src/Banking.Agents/Sessions/{SessionContext,SessionState,ISessionAccessor,AmbientSessionAccessor,ISessionStore}.cs`.
+- **[Yeni Dosya]** `src/Banking.Agents/Validation/{BankValidatedSlotWriter,PartiallyFilledSlotReader}.cs`, `src/Banking.Domain/Validation/{BankValidationResult,TurkishIbanValidator}.cs`.
+- **[Yeni Dosya]** `src/Banking.Domain/Services/{CampaignCatalogService,FinancingCatalogService}.cs`, `src/Banking.Domain/Campaigns/CampaignSyncService.cs`.
+- **[Yeni Dosya]** `src/Banking.Gateway/GatewayResponseMapper.cs`.
+- **[Silindi]** `src/Banking.Agents/Collection/`, eski `src/Banking.Agents/Workflows/*.cs` (WorkflowSessionStore, WorkflowConversationStore, WorkflowScopes, PaymentApprovalWorkflow, DeclarativeWorkflowBuilder, DeterministicActionWorkflow, TransferActionExecutor), `src/Banking.Agents/AgentRuntime.cs`, `AgentOptions.cs`, `ChatClientFactory.cs`, `DeferredSpecialistAgent.cs`, `src/Banking.Agents/Sessions/{AsyncLocalWorkflowSessionAccessor,ISessionStateStore,IWorkflowSessionAccessor}.cs`, `src/Banking.Agents/Specialists/CustomerSupportAgent.cs`, `src/Banking.Domain/Campaigns/{CampaignsDefinition,CampaignsRegistry}.cs`, `src/Banking.Domain/MkCodes/ScreenCommand.cs`, `src/Banking.Gateway/UserSession.cs`.
+- **[Güncellendi]** `src/Banking.Host/Program.cs`: Yeni DI kayıtları (session/runtime/validation/workflow motoru), `WorkflowRegistry.AutoDiscoverWorkflows` iki assembly taraması.
+- **[Güncellendi]** `src/Banking.Domain/Services/{AccountService,CardService,CollectionService,TransferService}.cs`, `src/Banking.Domain/Data/InMemoryBankStore.cs`: Dry-run doğrulama ve kural taşıma.
+- **[Güncellendi]** `src/Banking.Mcp/{AccountsTools,AnalyzeTools,CardsTools}.cs`, `Registry/{IToolRegistry,ToolRegistry}.cs`: Katman disiplini ve sabit temizliği.
+- **[Güncellendi]** `src/Banking.Gateway/{FlowRouter,GatewayService,ResponseSanitizer}.cs`, `Models/{GatewayRequest,GatewayResponse,GatewayResponseType}.cs`.
+- **[Güncellendi]** `tools/WorkflowTest/Program.cs`, `src/Banking.Host/wwwroot/index.html`, `ANALIZ.md`.
+- **[Yeni Belge]** `CLAUDE.md` (proje rehberi), `REFACTOR-PLAN.md` (bu refactor'ın plan belgesi — bulgu kodları K1-K10, Y1-Y16, O1-O16).
+
+---
 
 ### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
 1. **Statik C# İş Akışı Bağımlılığı:** Yeni bir iş akışı veya ajan tanımlamak C# sınıfı yazmayı, derlemeyi ve servisi yeniden başlatmayı gerektiriyordu. Dinamik ve çalışma zamanında (runtime) tanımlanabilen deklaratif ajan yapısı bulunmuyordu.

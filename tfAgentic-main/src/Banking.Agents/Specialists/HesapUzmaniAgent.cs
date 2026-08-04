@@ -14,7 +14,9 @@ public static class HesapUzmaniAgent
         Description: "Hesap, bakiye, IBAN ve hesap hareketi sorularını yanıtlayan uzman.",
         Instructions: AgentPrompts.HesapUzmaniInstructions,
         ToolGroup: ToolGroup.Account,
-        Capabilities: new[] { "list_accounts", "get_account_balance", "get_transactions" }
+        BridgeToolName: ToolNames.AskAccountSpecialist,
+        A2ARoute: "hesap",
+        DisplayName: "Hesap Uzmanı"
     );
 
     /// <summary>

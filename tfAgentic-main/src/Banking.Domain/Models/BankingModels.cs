@@ -10,7 +10,11 @@ public record Account(
     string Iban,
     string Type,        // "Vadesiz" | "Vadeli"
     string Currency,    // "TRY"
-    decimal Balance);
+    decimal Balance)
+{
+    /// <summary>Onay ekranı ve makbuzlarda gösterilen maskelenmiş IBAN ("…3344").</summary>
+    public string MaskedIban => Iban.Length > 4 ? $"…{Iban[^4..]}" : Iban;
+}
 
 /// <summary>Kredi kartı.</summary>
 public record Card(
@@ -37,14 +41,6 @@ public record Transaction(
     decimal Amount,        // + gelen / - giden
     string Direction);     // "Gelen" | "Giden"
 
-/// <summary>Bir kart için tahsilat dosyası.</summary>
-public record CollectionCase(
-    string CardId,
-    decimal TotalDebt,
-    decimal MinimumPayment,
-    int OverdueDays,
-    string Status);        // "Güncel" | "Gecikmiş"
-
 /// <summary>Tahsilat sonucu üretilen makbuz.</summary>
 public record PaymentReceipt(
     string ReceiptId,
@@ -68,22 +64,6 @@ public record Campaign(
     DateOnly StartDate,
     DateOnly EndDate,
     bool IsActive = true);
-
-/// <summary>Vektörel semantik arama (RAG) için kampanya embedding modeli.</summary>
-public record CampaignVectorItem(
-    string CampaignId,
-    string CampaignTitle,
-    string ContentText,
-    string TargetMccGroup,
-    double SimilarityScore = 0.0);
-
-/// <summary>Kart ekstre analiz özeti.</summary>
-public record CardStatementSummary(
-    string CardNo,
-    decimal TotalDebt,
-    decimal TotalExpenseAmount,
-    int ExpenseCount,
-    decimal TotalEarnedPoints);
 
 /// <summary> Finansman Önerileri tanımı </summary>
 public record FinancingOption(

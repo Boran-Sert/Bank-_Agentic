@@ -10,7 +10,6 @@ public static class AnalyzeToolNames
     public const string AnalyzeTopMerchants = "AnalyzeTopMerchants";
     public const string CompareSpendingPeriods = "CompareSpendingPeriods";
     public const string KampanyaVektorelAra = "KampanyaVektorelAra";
-    public const string YeniKampanyaEkleVektorel = "YeniKampanyaEkleVektorel";
     public const string RecommendFinancing = "recommend_financing";
     public const string GetCampaings = "GetCampaings";
     public const string GetFinancingOptions = "GetFinancingOptions";

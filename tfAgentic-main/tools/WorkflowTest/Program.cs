@@ -1,11 +1,12 @@
 // MAF Workflow human-in-the-loop onay gate'inin LLM olmadan deterministik testi.
-// Akış: ConfirmationView -> RequestPort (insan onayı) -> bool -> PaymentActionExecutor -> makbuz.
-using Banking.Agents.Collection;
-using Banking.Agents.Records;
+// Akış: GenericConfirmationView -> RequestPort (insan onayı) -> bool -> PaymentActionExecutor -> WorkflowOutcome.
 using Banking.Agents.Tracing;
 using Banking.Agents.Workflows;
+using Banking.Agents.Workflows.Actions;
+using Banking.Agents.Workflows.Approval;
 using Banking.Domain;
 using Banking.Domain.Data;
+using Banking.Domain.Records;
 using Banking.Domain.Services;
 using Microsoft.Agents.AI.Workflows;
 
@@ -25,9 +26,9 @@ async Task RunScenarioAsync(bool approve)
 
     var executor = new PaymentActionExecutor(collections, cards, accounts, hub);
     var view = executor.BuildConfirmationView(slots);
-    
+
     var wf = DeterministicActionWorkflow.Build(
-        workflowName: "card-payment",
+        workflowName: PaymentSlotKeys.WorkflowName,
         slots: slots,
         actionExecutor: executor,
         hub: hub,
@@ -54,13 +55,12 @@ async Task RunScenarioAsync(bool approve)
     while (await events.MoveNextAsync())
     {
         Console.WriteLine($"  [event] {events.Current.GetType().Name}");
-        if (events.Current is WorkflowOutputEvent o && o.Is<PaymentOutcome>())
+        if (events.Current is WorkflowOutputEvent o && o.Is<WorkflowOutcome>())
         {
-            var outcome = o.As<PaymentOutcome>()!;
-            if (outcome.Receipt is { } r)
-                Console.WriteLine($"  >>> MAKBUZ: {r.ReceiptId} | ödenen {r.Amount:N2} ₺ | kalan borç {r.RemainingDebt:N2} ₺");
-            else if (outcome.Cancelled is { } x)
-                Console.WriteLine($"  >>> İPTAL: {x.Reason}");
+            var outcome = o.As<WorkflowOutcome>()!;
+            Console.WriteLine($"  >>> SONUÇ [{outcome.Status}] {outcome.UserMessage}");
+            if (outcome.ReceiptId is { } receiptId)
+                Console.WriteLine($"      Makbuz: {receiptId}");
             break;
         }
         if (events.Current is ExecutorFailedEvent ef)

@@ -13,7 +13,6 @@ public static class AgentConstants
         public const string Account = "HesapUzmani";
         public const string Card = "KrediKartiUzmani";
         public const string Analyze = "AnalizUzmani";
-        public const string CustomerSupport = "CustomerSupport";
     }
 
     /// <summary>

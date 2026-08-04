@@ -14,7 +14,9 @@ public static class AnalizUzmaniAgent
         Description: "Kredi kartı ekstrelerini analiz eden ve semantik vektörel kampanya tavsiyeleri sunan uzman.",
         Instructions: AgentPrompts.FinansalAnalizUzmaniInstructions,
         ToolGroup: ToolGroup.Analyze,
-        Capabilities: new[] { "analyze_statement", "kampanya_vektorel_ara", "financing_options" }
+        BridgeToolName: ToolNames.AskAnalyzeSpecialist,
+        A2ARoute: "analiz",
+        DisplayName: "Analiz Uzmanı"
     );
 
     /// <summary>

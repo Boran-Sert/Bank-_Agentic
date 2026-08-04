@@ -14,7 +14,9 @@ public static class KartUzmaniAgent
         Description: "Kredi kartı borcu, kullanılabilir limit ve son ödeme tarihi sorularını yanıtlayan uzman.",
         Instructions: AgentPrompts.KartUzmaniInstructions,
         ToolGroup: ToolGroup.Card,
-        Capabilities: new[] { "list_cards", "get_card_debt", "get_available_limit" }
+        BridgeToolName: ToolNames.AskCardSpecialist,
+        A2ARoute: "kart",
+        DisplayName: "Kart Uzmanı"
     );
 
     /// <summary>

@@ -26,7 +26,7 @@ public sealed class AccountsTools(IAccountService accounts, CustomerContext cont
     [McpServerTool(Name = AccountToolNames.GetAccountBalance)]
     [Description("Belirli bir banka hesabının güncel bakiyesini döner. Tetikleyici niyetler: 'Maaş hesabımda ne kadar param var?', 'Bakiyem kaç para?'. İstisna: Kredi kartı borcu veya limiti sorulduğunda bu araç uygun değildir.")]
     public object GetAccountBalance(
-        [Description("Hesap kimliği, örn. ACC-1001")] string accountId)
+        [Description("Hesabın dahili kimliği (list_accounts'tan elde edilir; kullanıcıya sorulmaz).")] string accountId)
     {
         var account = accounts.GetAccount(accountId);
         if (account is null || account.CustomerId != context.CurrentCustomerId)
@@ -37,7 +37,7 @@ public sealed class AccountsTools(IAccountService accounts, CustomerContext cont
     [McpServerTool(Name = AccountToolNames.GetTransactions)]
     [Description("Belirli bir banka hesabının hesap özetini ve son işlemlerini döner. Tetikleyici niyetler: 'Hesabımdan son çıkan paralar neler?', 'Son işlemlerimi listele'. İstisna: Kredi kartı ekstresi veya kredi kartı harcama analizi istendiğinde bu aracı kullanmayın.")]
     public object GetTransactions(
-        [Description("Hesap kimliği, örn. ACC-1001")] string accountId,
+        [Description("Hesabın dahili kimliği (list_accounts'tan elde edilir; kullanıcıya sorulmaz).")] string accountId,
         [Description("Başlangıç tarihi yyyy-MM-dd (opsiyonel)")] string? fromDate = null,
         [Description("Bitiş tarihi yyyy-MM-dd (opsiyonel)")] string? toDate = null)
     {

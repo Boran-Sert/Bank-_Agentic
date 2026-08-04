@@ -5,39 +5,46 @@ using System.Linq;
 using System.Text.Json;
 using Banking.Domain.Campaigns;
 using Banking.Domain.Services;
-using Microsoft.Extensions.AI;
 using ModelContextProtocol.Server;
 using Banking.Mcp.Constants;
 using Banking.Domain.Financing;
-using Banking.Domain.Data;
 using Banking.Mcp.Registry;
 
 namespace Banking.Mcp;
 
 /// <summary>
 /// Finansal Analiz Ajanı (AnalyzeAgent) tarafından çağrılacak olan analiz ve kampanya araçları sınıfı.
+/// <para>
+/// <b>Katman disiplini:</b> bu sınıf veri katmanına (<c>InMemoryBankStore</c>) dokunmaz;
+/// tüm veriye saf C# servisleri üzerinden erişir. Bağımlılıklar opsiyonel değildir —
+/// eksik bir bağımlılık sessiz "veritabanına ulaşılamıyor" mesajı yerine
+/// başlangıçta hata verir (sıfır hata toleransı).
+/// </para>
 /// </summary>
 [McpServerToolType]
 [ToolGroup(ToolGroup.Analyze)]
 public sealed class AnalyzeTools
 {
     private readonly IAnalyzeService _analyzeService;
-    private readonly SemanticCampaignSearcher? _campaignSearcher;
-    private readonly SemanticFinancingSearcher? _financingSearcher;
-    private readonly InMemoryBankStore? _bankStore;
+    private readonly SemanticCampaignSearcher _campaignSearcher;
+    private readonly SemanticFinancingSearcher _financingSearcher;
+    private readonly ICampaignCatalogService _campaignCatalog;
+    private readonly IFinancingCatalogService _financingCatalog;
     private readonly string _defaultStatementPath;
 
     public AnalyzeTools(
         IAnalyzeService analyzeService,
-        SemanticCampaignSearcher? campaignSearcher = null,
-        SemanticFinancingSearcher? financingSearcher = null,
-        InMemoryBankStore? bankStore = null,
+        SemanticCampaignSearcher campaignSearcher,
+        SemanticFinancingSearcher financingSearcher,
+        ICampaignCatalogService campaignCatalog,
+        IFinancingCatalogService financingCatalog,
         string defaultStatementPath = "Banka_ekstra.json")
     {
-        _analyzeService = analyzeService;
-        _campaignSearcher = campaignSearcher;
-        _financingSearcher = financingSearcher;
-        _bankStore = bankStore;
+        _analyzeService = analyzeService ?? throw new ArgumentNullException(nameof(analyzeService));
+        _campaignSearcher = campaignSearcher ?? throw new ArgumentNullException(nameof(campaignSearcher));
+        _financingSearcher = financingSearcher ?? throw new ArgumentNullException(nameof(financingSearcher));
+        _campaignCatalog = campaignCatalog ?? throw new ArgumentNullException(nameof(campaignCatalog));
+        _financingCatalog = financingCatalog ?? throw new ArgumentNullException(nameof(financingCatalog));
         _defaultStatementPath = defaultStatementPath;
     }
 
@@ -127,58 +134,24 @@ public sealed class AnalyzeTools
     [Description("Kullanıcının profiline uygun kampanyaları arar ve önerir. Tetikleyici niyetler: 'Bana uygun kampanya var mı?', 'Giyim kampanyalarını listele'. İstisna: Kullanıcı doğrudan finansman, limit artırımı veya borç yapılandırması talep ediyorsa bu aracı kullanmayın.")]
     public string KampanyaVektorelAra(string sorguVektoruMetni, string? mccKategorisi = null, int topK = 3)
     {
-        if (_campaignSearcher is not null)
-        {
-            var searchResults = _campaignSearcher.Search(sorguVektoruMetni, mccKategorisi, topK);
-            return JsonSerializer.Serialize(new
-            {
-                Query = sorguVektoruMetni,
-                CategoryFilter = mccKategorisi ?? "Tümü",
-                MatchedCount = searchResults.Count,
-                MatchedCampaigns = searchResults.Select(r => new
-                {
-                    r.Campaign.Id,
-                    r.Campaign.Title,
-                    r.Campaign.Description,
-                    TargetMcc = r.Campaign.TargetMccGroup,
-                    r.Campaign.Benefit,
-                    r.Campaign.BonusPoints,
-                    r.Campaign.MinimumSpendAmount,
-                    SimilarityScore = Math.Round(r.Score, 4)
-                })
-            }, JsonSerializerOptions);
-        }
-
-        // Fallback simülasyon
-        var sampleCampaigns = new[]
-        {
-            new { Id = "CAMP-101", Title = "Market Alışverişlerinize 250 TL Bonus", TargetMcc = "MarketAndShopping", Benefit = "250 TL Bonus", SimilarityScore = 0.94 },
-            new { Id = "CAMP-102", Title = "Giyim ve Tekstilde Peşin Fiyatına 6 Taksit", TargetMcc = "Clothing", Benefit = "6 Taksit İmkânı", SimilarityScore = 0.88 },
-            new { Id = "CAMP-103", Title = "Gıda ve Fırın Harcamalarında %10 Ekstra Puan", TargetMcc = "Food", Benefit = "%10 Ekstra Puan", SimilarityScore = 0.82 }
-        };
+        var searchResults = _campaignSearcher.Search(sorguVektoruMetni, mccKategorisi, topK);
 
         return JsonSerializer.Serialize(new
         {
             Query = sorguVektoruMetni,
             CategoryFilter = mccKategorisi ?? "Tümü",
-            MatchedCampaigns = sampleCampaigns
-        }, JsonSerializerOptions);
-    }
-
-    [McpServerTool(Name = AnalyzeToolNames.YeniKampanyaEkleVektorel)]
-    [Description("Sisteme yeni bir kampanya tanımlandığında, kampanyayı semantik arama veritabanına vektörel embedding olarak kaydeder.")]
-    public string YeniKampanyaEkleVektorel(
-        string kampanyaId,
-        string baslik,
-        string aciklama,
-        string kazancDetayi,
-        string? mccKategorisi = null)
-    {
-        return JsonSerializer.Serialize(new
-        {
-            Status = "Success",
-            Message = $"'{baslik}' (ID: {kampanyaId}) başlıklı kampanya vektörel veritabanına başarıyla eklendi.",
-            VectorId = $"VEC-{kampanyaId}"
+            MatchedCount = searchResults.Count,
+            MatchedCampaigns = searchResults.Select(r => new
+            {
+                r.Campaign.Id,
+                r.Campaign.Title,
+                r.Campaign.Description,
+                TargetMcc = r.Campaign.TargetMccGroup,
+                r.Campaign.Benefit,
+                r.Campaign.BonusPoints,
+                r.Campaign.MinimumSpendAmount,
+                SimilarityScore = Math.Round(r.Score, 4)
+            })
         }, JsonSerializerOptions);
     }
 
@@ -187,20 +160,18 @@ public sealed class AnalyzeTools
     public object GetCampaings(
         [Description("Opsiyonel: Detayını görmek istediğiniz kampanyanın kimliği (örn: CAMP-101). Tüm kampanyaları listelemek için boş bırakın.")] string? campaignId = null)
     {
-        if (_bankStore is null) return new { Message = "Kampanya veritabanına ulaşılamıyor." };
-
         if (!string.IsNullOrWhiteSpace(campaignId))
         {
-            var camp = _bankStore.GetCampaign(campaignId);
-            if (camp is null) return new { Message = $"'{campaignId}' kodlu kampanya bulunamadı." };
-            return camp;
+            return _campaignCatalog.FindCampaignById(campaignId) is { } campaign
+                ? campaign
+                : new { Message = $"'{campaignId}' kodlu kampanya bulunamadı." };
         }
 
-        var list = _bankStore.Campaigns.ToList();
+        var activeCampaigns = _campaignCatalog.GetActiveCampaigns();
         return new
         {
-            Count = list.Count,
-            Campaigns = list.Select(c => new { c.Id, c.Title, c.TargetMccGroup, c.Benefit })
+            Count = activeCampaigns.Count,
+            Campaigns = activeCampaigns.Select(c => new { c.Id, c.Title, c.TargetMccGroup, c.Benefit })
         };
     }
 
@@ -222,28 +193,25 @@ public sealed class AnalyzeTools
         string topCategories = string.Join(", ", categorySummary.Take(2).Select(x => x.Category));
         string enrichedQuery = $"{query}. Kullanıcının toplam borcu: {totalDebt} TL. En çok harcama yaptığı sektörler: {topCategories}.";
 
-        if (_financingSearcher is not null)
+        var results = _financingSearcher.Search(enrichedQuery, topK);
+        if (results.Count == 0)
+            return new { Message = "Uygun finansman önerisi bulunamadı." };
+
+        return new
         {
-            var results = _financingSearcher.Search(enrichedQuery, topK);
-            if (results.Any())
+            UserSpendingAnalysis = new { TotalDebt = totalDebt, TopCategories = topCategories },
+            Count = results.Count,
+            Options = results.Select(r => new
             {
-                return new
-                {
-                    UserSpendingAnalysis = new { TotalDebt = totalDebt, TopCategories = topCategories },
-                    Count = results.Count,
-                    Options = results.Select(r => new {
-                        r.Option.Id,
-                        r.Option.Title,
-                        r.Option.Description,
-                        r.Option.Type,
-                        r.Option.InterestRate,
-                        r.Option.MaxInstallments,
-                        SemanticScore = r.Score
-                    })
-                };
-            }
-        }
-        return new { Message = "Uygun finansman önerisi bulunamadı." };
+                r.Option.Id,
+                r.Option.Title,
+                r.Option.Description,
+                r.Option.Type,
+                r.Option.InterestRate,
+                r.Option.MaxInstallments,
+                SemanticScore = r.Score
+            })
+        };
     }
 
     [McpServerTool(Name = AnalyzeToolNames.GetFinancingOptions)]
@@ -251,39 +219,14 @@ public sealed class AnalyzeTools
     public object GetFinancingOptions(
         [Description("Opsiyonel: Filtrelenecek finansman türü (örn: ConsumerLoan, DebtRestructuring). Belirtilmezse tümü getirilir.")] string? type = null)
     {
-        if (_bankStore is null) return new { Message = "Banka veritabanına ulaşılamıyor." };
+        var financingOptions = string.IsNullOrWhiteSpace(type)
+            ? _financingCatalog.GetAllFinancingOptions()
+            : _financingCatalog.FindFinancingOptionsByType(type);
 
-        var listQuery = _bankStore.FinancingOptions.AsEnumerable();
-        
-        if (!string.IsNullOrWhiteSpace(type))
-        {
-            listQuery = listQuery.Where(f => string.Equals(f.Type, type, StringComparison.OrdinalIgnoreCase));
-        }
-
-        var list = listQuery.ToList();
         return new
         {
-            Count = list.Count,
-            FinancingOptions = list.Select(f => new { f.Id, f.Title, f.Description, f.Type, f.InterestRate, f.MaxInstallments })
-        };
-    }
-
-    public IList<AITool> AsTools()
-    {
-        return new List<AITool>
-        {
-            AIFunctionFactory.Create(GetCreditCardStatement),
-            AIFunctionFactory.Create(AnalyzeStatementSummary),
-            AIFunctionFactory.Create(AnalyzeCategoryBreakdown),
-            AIFunctionFactory.Create(AnalyzePaymentTypeRatio),
-            AIFunctionFactory.Create(AnalyzeBonusAndPoints),
-            AIFunctionFactory.Create(AnalyzeTopMerchants),
-            AIFunctionFactory.Create(CompareSpendingPeriods),
-            AIFunctionFactory.Create(KampanyaVektorelAra),
-            AIFunctionFactory.Create(YeniKampanyaEkleVektorel),
-            AIFunctionFactory.Create(RecommendFinancing),
-            AIFunctionFactory.Create(GetCampaings),
-            AIFunctionFactory.Create(GetFinancingOptions)
+            Count = financingOptions.Count,
+            FinancingOptions = financingOptions.Select(f => new { f.Id, f.Title, f.Description, f.Type, f.InterestRate, f.MaxInstallments })
         };
     }
 

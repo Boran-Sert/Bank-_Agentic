@@ -7,8 +7,6 @@ public interface ICardService
 {
     IReadOnlyList<Card> GetCards(string customerId);
     Card? GetCard(string cardId);
-    decimal? GetCardDebt(string cardId);
-    decimal? GetAvailableLimit(string cardId);
 }
 
 public sealed class CardService(InMemoryBankStore store) : ICardService
@@ -17,8 +15,4 @@ public sealed class CardService(InMemoryBankStore store) : ICardService
         store.CardsOf(customerId).ToList();
 
     public Card? GetCard(string cardId) => store.GetCard(cardId);
-
-    public decimal? GetCardDebt(string cardId) => store.GetCard(cardId)?.CurrentDebt;
-
-    public decimal? GetAvailableLimit(string cardId) => store.GetCard(cardId)?.AvailableLimit;
 }

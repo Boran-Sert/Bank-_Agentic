@@ -42,14 +42,14 @@ public sealed class InMemoryBankStore
     public Campaign? GetCampaign(string id) =>
         _campaigns.TryGetValue(id, out var c) ? c : null;
 
+    /// <summary>Kampanyayı ekler; aynı Id zaten varsa üzerine yazar (backend senkronizasyonu için).</summary>
+    public void UpsertCampaign(Campaign campaign) => _campaigns[campaign.Id] = campaign;
+
     public IEnumerable<Account> AccountsOf(string customerId) =>
         _accounts.Values.Where(a => a.CustomerId == customerId);
 
     public IEnumerable<Card> CardsOf(string customerId) =>
         _cards.Values.Where(c => c.CustomerId == customerId);
-
-    public IEnumerable<Campaign> CampaignsByMcc(string mccGroup) =>
-        _campaigns.Values.Where(c => c.IsActive && (string.Equals(c.TargetMccGroup, mccGroup, StringComparison.OrdinalIgnoreCase) || c.TargetMccGroup == "All"));
 
     public IEnumerable<Transaction> TransactionsOf(string accountId) =>
         _transactions.Where(t => t.AccountId == accountId).OrderByDescending(t => t.Date);
@@ -116,8 +116,10 @@ public sealed class InMemoryBankStore
         var customer = new Customer(DemoCustomerId, "Yusuf Efe Mayda");
         _customers[customer.Id] = customer;
 
-        var acc1 = new Account("ACC-1001", customer.Id, "TR12 0001 0000 0000 0012 3344", "Vadesiz", "TRY", 48_750.00m);
-        var acc2 = new Account("ACC-1002", customer.Id, "TR98 0001 0000 0000 0099 8877", "Vadeli", "TRY", 125_000.00m);
+        // IBAN'lar ISO 13616 mod-97 kontrol basamağı geçerli olacak şekilde üretilmiştir;
+        // aksi hâlde bankanın kendi ön-doğrulaması demo hesaplarını reddederdi.
+        var acc1 = new Account("ACC-1001", customer.Id, "TR82 0001 0000 0000 0000 1233 44", "Vadesiz", "TRY", 48_750.00m);
+        var acc2 = new Account("ACC-1002", customer.Id, "TR76 0001 0000 0000 0000 9988 77", "Vadeli", "TRY", 125_000.00m);
         _accounts[acc1.Id] = acc1;
         _accounts[acc2.Id] = acc2;
 

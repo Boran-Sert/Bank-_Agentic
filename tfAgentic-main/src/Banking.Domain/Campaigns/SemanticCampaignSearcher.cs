@@ -19,6 +19,7 @@ public class SemanticCampaignSearcher
     private readonly InMemoryBankStore _bankStore;
     private readonly ILogger<SemanticCampaignSearcher> _logger;
     private readonly List<(EmbeddingF32 Vector, Campaign Campaign)> _cache = new();
+    private readonly object _cacheLock = new();
     private bool _isInitialized = false;
 
     public SemanticCampaignSearcher(LocalEmbedder embedder, InMemoryBankStore bankStore, ILogger<SemanticCampaignSearcher> logger)
@@ -37,19 +38,43 @@ public class SemanticCampaignSearcher
         if (_isInitialized) return;
 
         var campaigns = _bankStore.Campaigns.Where(c => c.IsActive).ToList();
-        _cache.Clear();
 
-        foreach (var campaign in campaigns)
+        lock (_cacheLock)
         {
-            // Kampanyadaki tüm metinsel alanlar (şartlar dahil) birleştirilerek tam içeriğe semantik embedding oluşturulur
-            string fullContentText = $"Kampanya: {campaign.Title}. Açıklama: {campaign.Description}. Sektör Kategori: {campaign.TargetMccGroup}. Koşullar: {campaign.TermsOfUse}. Kazanım Fayda: {campaign.Benefit}.";
-
-            var embedding = _embedder.Embed(fullContentText);
-            _cache.Add((embedding, campaign));
+            _cache.Clear();
+            foreach (var campaign in campaigns)
+                _cache.Add((Embed(campaign), campaign));
         }
 
         _isInitialized = true;
-        _logger.LogInformation("SemanticCampaignSearcher başlatıldı. Toplam {Count} adet kampanya vektörize edilerek belleğe alındı.", _cache.Count);
+        _logger.LogInformation("SemanticCampaignSearcher başlatıldı. Toplam {Count} adet kampanya vektörize edilerek belleğe alındı.", campaigns.Count);
+    }
+
+    /// <summary>
+    /// Tek bir kampanyayı anında vektörize edip indekse ekler/günceller. <see cref="Initialize"/>'ın
+    /// aksine tüm önbelleği yeniden kurmaz — arama (<see cref="Search"/>) sırasında hiçbir kesinti
+    /// olmadan (zero-downtime) yeni kampanya eklenebilir. Backend senkronizasyonunun kullanacağı yol budur.
+    /// </summary>
+    public void IndexCampaign(Campaign campaign)
+    {
+        if (!_isInitialized) Initialize();
+
+        var embedding = Embed(campaign);
+
+        lock (_cacheLock)
+        {
+            _cache.RemoveAll(entry => entry.Campaign.Id == campaign.Id);
+            _cache.Add((embedding, campaign));
+        }
+
+        _logger.LogInformation("SemanticCampaignSearcher: '{Id}' kampanyası indekse eklendi/güncellendi.", campaign.Id);
+    }
+
+    /// <summary>Kampanyadaki tüm metinsel alanları (şartlar dahil) birleştirip semantik embedding üretir.</summary>
+    private EmbeddingF32 Embed(Campaign campaign)
+    {
+        string fullContentText = $"Kampanya: {campaign.Title}. Açıklama: {campaign.Description}. Sektör Kategori: {campaign.TargetMccGroup}. Koşullar: {campaign.TermsOfUse}. Kazanım Fayda: {campaign.Benefit}.";
+        return _embedder.Embed(fullContentText);
     }
 
     /// <summary>
@@ -71,7 +96,10 @@ public class SemanticCampaignSearcher
 
         var intentEmbedding = _embedder.Embed(intent);
 
-        var query = _cache.AsEnumerable();
+        List<(EmbeddingF32 Vector, Campaign Campaign)> snapshot;
+        lock (_cacheLock) snapshot = _cache.ToList();
+
+        var query = snapshot.AsEnumerable();
 
         if (!string.IsNullOrWhiteSpace(mccCategoryFilter))
         {

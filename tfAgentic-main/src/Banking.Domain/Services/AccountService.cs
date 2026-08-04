@@ -7,7 +7,6 @@ public interface IAccountService
 {
     IReadOnlyList<Account> GetAccounts(string customerId);
     Account? GetAccount(string accountId);
-    decimal? GetBalance(string accountId);
     IReadOnlyList<Transaction> GetTransactions(string accountId, DateOnly? from = null, DateOnly? to = null);
 }
 
@@ -17,8 +16,6 @@ public sealed class AccountService(InMemoryBankStore store) : IAccountService
         store.AccountsOf(customerId).ToList();
 
     public Account? GetAccount(string accountId) => store.GetAccount(accountId);
-
-    public decimal? GetBalance(string accountId) => store.GetAccount(accountId)?.Balance;
 
     public IReadOnlyList<Transaction> GetTransactions(string accountId, DateOnly? from = null, DateOnly? to = null)
     {

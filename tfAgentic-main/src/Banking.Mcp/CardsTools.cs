@@ -36,7 +36,7 @@ public sealed class CardsTools(ICardService cards, CustomerContext context)
     [McpServerTool(Name = CardToolNames.GetCardDebt)]
     [Description("Belirli bir kredi kartının sadece güncel borç ve asgari ödeme bilgilerini döner. Tetikleyici niyetler: 'Kart borcum ne kadar?', 'Asgari ne kadar ödemeliyim?'. İstisna: Vadesiz hesap bakiyesi veya finansman yapılandırması istendiğinde bu araç kullanılmamalıdır.")]
     public object GetCardDebt(
-        [Description("Kart kimliği, örn. CARD-2001")] string cardId)
+        [Description("Kartın dahili kimliği (list_cards'tan elde edilir; kullanıcıya sorulmaz).")] string cardId)
     {
         var card = cards.GetCard(cardId);
         if (card is null || card.CustomerId != context.CurrentCustomerId)
@@ -54,7 +54,7 @@ public sealed class CardsTools(ICardService cards, CustomerContext context)
     [McpServerTool(Name = CardToolNames.GetAvailableLimit)]
     [Description("Kredi kartının kullanılabilir limit bilgisini döner. Tetikleyici niyetler: 'Kartımda ne kadar limitim kaldı?', 'Limitim yeterli mi?'. İstisna: Borç yapılandırma gibi konularda diğer araçlara yönelin.")]
     public object GetAvailableLimit(
-        [Description("Kart kimliği, örn. CARD-2001")] string cardId)
+        [Description("Kartın dahili kimliği (list_cards'tan elde edilir; kullanıcıya sorulmaz).")] string cardId)
     {
         var card = cards.GetCard(cardId);
         if (card is null || card.CustomerId != context.CurrentCustomerId)
@@ -65,7 +65,7 @@ public sealed class CardsTools(ICardService cards, CustomerContext context)
     [McpServerTool(Name = CardToolNames.GetCardDetails)]
     [Description("Kredi kartının limit, borç ve tarih bilgilerini topluca döner. Kullanıcının kartıyla ilgili genel ve detaylı bir durum özeti istediği senaryolarda kullanılır.")]
     public object GetCardDetails(
-        [Description("Kart kimliği, örn. CARD-2001")] string cardId)
+        [Description("Kartın dahili kimliği (list_cards'tan elde edilir; kullanıcıya sorulmaz).")] string cardId)
     {
         var card = cards.GetCard(cardId);
         if (card is null || card.CustomerId != context.CurrentCustomerId)

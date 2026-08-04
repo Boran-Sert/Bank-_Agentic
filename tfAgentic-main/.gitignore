@@ -43,3 +43,6 @@ appsettings.*.Local.json
 .env
 *.env
 secrets.json
+.claude
+CLAUDE.md
+REFACTOR-PLAN.md

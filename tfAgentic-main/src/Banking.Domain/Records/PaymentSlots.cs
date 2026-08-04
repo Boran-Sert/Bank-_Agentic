@@ -4,16 +4,16 @@ using Banking.Domain.Attributes;
 namespace Banking.Domain.Records;
 
 // --- Kendini Dokümante Eden Ödeme Slot Nesnesi (Self-Documenting Record) -----------
-[Workflow("card-payment")]
+[Workflow("card-payment", MkCode = "CreditCardPayment")]
 [Description("Kredi kartı borcu ödeme akışı için gereken parametre slot nesnesi.")]
 public sealed record PaymentSlots(
-    [property: Description("Borcu ödenecek olan kredi kartı kimliği (örn: CARD-2002)")]
+    [property: Description("Borcu ödenecek kredi kartının dahili kimliği. Kullanıcıya bu kimliği ASLA sorma; list_cards aracıyla kartları getir, kullanıcıdan kart adı veya son 4 haneyle seçim iste, karşılık gelen id'yi buraya kaydet.")]
     string CardId,
 
     [property: Description("Kart borcundan ödenecek tutar (TL cinsinden)")]
     decimal Amount,
 
-    [property: Description("Ödemenin çekileceği vadesiz banka hesabı kimliği (örn: ACC-1001)")]
+    [property: Description("Ödemenin çekileceği vadesiz hesabın dahili kimliği. Kullanıcıya bu kimliği ASLA sorma; list_accounts aracıyla hesapları getir, kullanıcıdan hesap adıyla seçim iste, karşılık gelen id'yi buraya kaydet.")]
     string SourceAccountId,
 
     DateOnly Date

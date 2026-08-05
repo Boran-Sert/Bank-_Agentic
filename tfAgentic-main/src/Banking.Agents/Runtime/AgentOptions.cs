@@ -8,11 +8,11 @@ public sealed class AgentOptions
 {
     public const string SectionName = "Agents";
 
-    /// <summary>LLM sağlayıcısı. Şu an "openai" desteklenir.</summary>
-    public string Provider { get; set; } = "openai";
+    /// <summary>LLM sağlayıcısı. "openai" veya OpenAI-uyumlu API sunan "ollama" desteklenir.</summary>
+    public string Provider { get; set; } = "Ollama";
 
-    /// <summary>OpenAI model adı (tool-calling destekli olmalı).</summary>
-    public string Model { get; set; } = "gpt-4o-mini";
+    /// <summary>Model adı (tool-calling destekli olmalı).</summary>
+    public string Model { get; set; } = "gemma4:31b-cloud";
 
     /// <summary>LLM sıcaklık (temperature) parametresi. Deterministik yanıtlar için düşük (0.1) tutulur.</summary>
     public float Temperature { get; set; } = 0.1f;

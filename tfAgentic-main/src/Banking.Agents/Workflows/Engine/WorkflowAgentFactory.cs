@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Banking.Agents.Mcp;
 using Banking.Agents.Prompts;
 using Banking.Agents.Sessions;
@@ -29,6 +30,19 @@ public sealed class WorkflowAgentFactory(
     TraceHub hub)
 {
     private const string UpdateSlotToolName = "update_slot";
+
+    /// <summary>
+    /// <c>update_slot</c>'un <c>value</c> parametresi <c>object</c> tipinde olduğu için üretilen şema
+    /// "her JSON değeri kabul edilir" anlamına gelen çıplak <c>true</c> düğümüdür (bkz. AIFunctionFactory
+    /// dokümantasyonu). OpenAI bunu tolere eder; Ollama'nın Go tarafındaki tool-calling ayrıştırıcısı
+    /// <c>properties</c> altında obje bekler ve bool görünce "cannot unmarshal bool into ... ToolProperty"
+    /// hatasıyla 400 döner. Anlamca eşdeğer ama sözdizimsel olarak obje olan <c>{}</c> ile değiştirilir.
+    /// </summary>
+    private static readonly AIJsonSchemaCreateOptions OllamaCompatibleSchemaOptions = new()
+    {
+        TransformSchemaNode = (_, schema) =>
+            schema.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? new JsonObject() : schema
+    };
 
     private readonly ConcurrentDictionary<string, AIAgent> _agentsByName = new(StringComparer.Ordinal);
 
@@ -87,7 +101,12 @@ public sealed class WorkflowAgentFactory(
         var tool = AIFunctionFactory.Create(
             (string key, object value, CancellationToken cancellationToken) =>
                 slotWriter.WriteSlotIfBankAcceptsAsync(key, value, cancellationToken),
-            new AIFunctionFactoryOptions { Name = UpdateSlotToolName, Description = description });
+            new AIFunctionFactoryOptions
+            {
+                Name = UpdateSlotToolName,
+                Description = description,
+                JsonSchemaCreateOptions = OllamaCompatibleSchemaOptions
+            });
 
         return new TracingAIFunction(tool, hub, TraceCategories.Workflow, UpdateSlotToolName, "Oturum Parametresi Güncelleme");
     }

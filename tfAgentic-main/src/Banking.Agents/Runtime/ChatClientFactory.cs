@@ -9,7 +9,9 @@ public static class ChatClientFactory
 {
     public static ChatClient Create(AgentOptions options)
     {
-        if (!string.Equals(options.Provider, "openai", StringComparison.OrdinalIgnoreCase))
+        var isSupported = string.Equals(options.Provider, "openai", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(options.Provider, "ollama", StringComparison.OrdinalIgnoreCase);
+        if (!isSupported)
             throw new NotSupportedException($"Desteklenmeyen sağlayıcı: {options.Provider}");
 
         // Anahtar yoksa, ajan grafiğinin LLM çağrısı yapmadan kurulabilmesi (wiring testi)

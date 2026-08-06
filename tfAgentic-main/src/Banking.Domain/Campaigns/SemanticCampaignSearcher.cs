@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using Banking.Domain.Data;
 using Banking.Domain.Models;
+using Banking.Domain.Services;
 using Microsoft.Extensions.Logging;
 using SmartComponents.LocalEmbeddings;
 
@@ -16,16 +16,16 @@ namespace Banking.Domain.Campaigns;
 public class SemanticCampaignSearcher
 {
     private readonly LocalEmbedder _embedder;
-    private readonly InMemoryBankStore _bankStore;
+    private readonly ICampaignCatalogService _campaignCatalog;
     private readonly ILogger<SemanticCampaignSearcher> _logger;
     private readonly List<(EmbeddingF32 Vector, Campaign Campaign)> _cache = new();
     private readonly object _cacheLock = new();
     private bool _isInitialized = false;
 
-    public SemanticCampaignSearcher(LocalEmbedder embedder, InMemoryBankStore bankStore, ILogger<SemanticCampaignSearcher> logger)
+    public SemanticCampaignSearcher(LocalEmbedder embedder, ICampaignCatalogService campaignCatalog, ILogger<SemanticCampaignSearcher> logger)
     {
         _embedder = embedder;
-        _bankStore = bankStore;
+        _campaignCatalog = campaignCatalog;
         _logger = logger;
     }
 
@@ -37,7 +37,7 @@ public class SemanticCampaignSearcher
     {
         if (_isInitialized) return;
 
-        var campaigns = _bankStore.Campaigns.Where(c => c.IsActive).ToList();
+        var campaigns = _campaignCatalog.GetActiveCampaigns();
 
         lock (_cacheLock)
         {

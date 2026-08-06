@@ -25,10 +25,11 @@ public interface ICampaignCatalogService
 public sealed class CampaignCatalogService(InMemoryBankStore store) : ICampaignCatalogService
 {
     public IReadOnlyList<Campaign> GetActiveCampaigns() =>
-        store.Campaigns.Where(campaign => campaign.IsActive).ToList();
+        store.Campaigns.Values.Where(campaign => campaign.IsActive).ToList();
 
     public Campaign? FindCampaignById(string campaignId) =>
-        string.IsNullOrWhiteSpace(campaignId) ? null : store.GetCampaign(campaignId);
+        string.IsNullOrWhiteSpace(campaignId) ? null : store.Campaigns.GetValueOrDefault(campaignId);
 
-    public void AddCampaign(Campaign campaign) => store.UpsertCampaign(campaign);
+    /// <summary>Aynı Id zaten varsa üzerine yazar (backend senkronizasyonu için).</summary>
+    public void AddCampaign(Campaign campaign) => store.Campaigns[campaign.Id] = campaign;
 }

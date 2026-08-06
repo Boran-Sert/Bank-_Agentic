@@ -27,6 +27,11 @@ public interface ITransferService
     TransferReceipt Transfer(string sourceAccountId, string targetIban, decimal amount, string description);
 }
 
+/// <summary>
+/// Para transferinin <b>tek</b> sahibi: hem ön-doğrulama hem de hesap bakiyelerini ve hareket
+/// satırlarını değiştiren para hareketi burada. Veri katmanı
+/// (<see cref="InMemoryBankStore"/>) yalnızca koleksiyonları tutar.
+/// </summary>
 public sealed class TransferService(InMemoryBankStore store) : ITransferService
 {
     public BankValidationResult ValidateMoneyTransferBeforeExecution(
@@ -34,7 +39,7 @@ public sealed class TransferService(InMemoryBankStore store) : ITransferService
         string? targetIban,
         decimal? transferAmount)
     {
-        var sourceAccount = string.IsNullOrWhiteSpace(sourceAccountId) ? null : store.GetAccount(sourceAccountId);
+        var sourceAccount = FindAccount(sourceAccountId);
         if (!string.IsNullOrWhiteSpace(sourceAccountId) && sourceAccount is null)
         {
             return BankValidationResult.Rejected(
@@ -78,17 +83,46 @@ public sealed class TransferService(InMemoryBankStore store) : ITransferService
 
     public TransferReceipt Transfer(string sourceAccountId, string targetIban, decimal amount, string description)
     {
-        // Yürütme anındaki kontrol ile ön-doğrulama AYNI kod yolunu kullanır.
-        var validation = ValidateMoneyTransferBeforeExecution(sourceAccountId, targetIban, amount);
-        if (!validation.IsAcceptable)
-            throw new InvalidOperationException(validation.UserFacingMessage);
-
         var date = BankClock.Today;
-        var updatedSource = store.ApplyTransfer(sourceAccountId, targetIban, amount, description);
-        var receiptId = $"TR-{date:yyyyMMdd}-{Guid.NewGuid():N}"[..20];
 
-        return new TransferReceipt(receiptId, sourceAccountId, targetIban, amount, date, updatedSource.Balance, "Başarılı");
+        // Doğrulama, bakiye düşümü ve hareket satırları tek atomik adım.
+        lock (store.MoneyGate)
+        {
+            // Yürütme anındaki kontrol ile ön-doğrulama AYNI kod yolunu kullanır.
+            var validation = ValidateMoneyTransferBeforeExecution(sourceAccountId, targetIban, amount);
+            if (!validation.IsAcceptable)
+                throw new InvalidOperationException(validation.UserFacingMessage);
+
+            var sourceAccount = FindAccount(sourceAccountId)
+                                ?? throw new InvalidOperationException($"Kaynak hesap bulunamadı: {sourceAccountId}");
+
+            // Kaynak hesaptan düş
+            var updatedSource = sourceAccount with { Balance = sourceAccount.Balance - amount };
+            store.Accounts[sourceAccountId] = updatedSource;
+
+            // Giden işlem kaydı
+            store.Transactions.Add(new Transaction(
+                $"TXN-TR-OUT-{Guid.NewGuid():N}"[..16], sourceAccountId, date, description, -amount, "Giden"));
+
+            // Hedef IBAN bankamızda bir hesaba mı ait? (Havale senaryosu)
+            if (FindAccountByIban(targetIban) is { } targetAccount)
+            {
+                store.Accounts[targetAccount.Id] = targetAccount with { Balance = targetAccount.Balance + amount };
+                store.Transactions.Add(new Transaction(
+                    $"TXN-TR-IN-{Guid.NewGuid():N}"[..16], targetAccount.Id, date, description, amount, "Gelen"));
+            }
+
+            var receiptId = $"TR-{date:yyyyMMdd}-{Guid.NewGuid():N}"[..20];
+            return new TransferReceipt(receiptId, sourceAccountId, targetIban, amount, date, updatedSource.Balance, "Başarılı");
+        }
     }
+
+    private Account? FindAccount(string? accountId) =>
+        string.IsNullOrWhiteSpace(accountId) ? null : store.Accounts.GetValueOrDefault(accountId);
+
+    private Account? FindAccountByIban(string targetIban) =>
+        store.Accounts.Values.FirstOrDefault(account =>
+            TurkishIbanValidator.Normalize(account.Iban) == TurkishIbanValidator.Normalize(targetIban));
 
     private static BankValidationResult ValidateTargetIban(string targetIban, Account? sourceAccount)
     {

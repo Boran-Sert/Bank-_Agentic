@@ -10,18 +10,30 @@ public interface IAccountService
     IReadOnlyList<Transaction> GetTransactions(string accountId, DateOnly? from = null, DateOnly? to = null);
 }
 
+/// <summary>
+/// Hesap okuma yolu. Para hareketi <b>burada değildir</b>: transfer <see cref="ITransferService"/>,
+/// kart tahsilatı <see cref="ICollectionService"/> içindedir — para taşıyan tek bir kod yolu olsun diye.
+/// </summary>
 public sealed class AccountService(InMemoryBankStore store) : IAccountService
 {
     public IReadOnlyList<Account> GetAccounts(string customerId) =>
-        store.AccountsOf(customerId).ToList();
+        store.Accounts.Values.Where(account => account.CustomerId == customerId).ToList();
 
-    public Account? GetAccount(string accountId) => store.GetAccount(accountId);
+    public Account? GetAccount(string accountId) =>
+        store.Accounts.TryGetValue(accountId, out var account) ? account : null;
 
     public IReadOnlyList<Transaction> GetTransactions(string accountId, DateOnly? from = null, DateOnly? to = null)
     {
-        var query = store.TransactionsOf(accountId);
-        if (from is not null) query = query.Where(t => t.Date >= from);
-        if (to is not null) query = query.Where(t => t.Date <= to);
-        return query.ToList();
+        // Hareket listesi düz bir List; transfer servisi aynı listeye kilit altında ekleme
+        // yapıyor. Kilitsiz enumerate etmek "Collection was modified" ile patlardı.
+        lock (store.MoneyGate)
+        {
+            var query = store.Transactions.Where(transaction => transaction.AccountId == accountId);
+
+            if (from is not null) query = query.Where(transaction => transaction.Date >= from);
+            if (to is not null) query = query.Where(transaction => transaction.Date <= to);
+
+            return query.OrderByDescending(transaction => transaction.Date).ToList();
+        }
     }
 }

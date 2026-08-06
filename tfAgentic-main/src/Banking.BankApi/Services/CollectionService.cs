@@ -27,6 +27,11 @@ public interface ICollectionService
     PaymentReceipt Charge(string cardId, decimal amount, string sourceAccountId, DateOnly date);
 }
 
+/// <summary>
+/// Kart borcu tahsilatının <b>tek</b> sahibi: hem ön-doğrulama hem de kayıtları güncelleyen
+/// para hareketi burada. Veri katmanı (<see cref="InMemoryBankStore"/>) yalnızca koleksiyonları
+/// tutar; kural ve mutasyon bu dosyadadır.
+/// </summary>
 public sealed class CollectionService(InMemoryBankStore store) : ICollectionService
 {
     public BankValidationResult ValidateCardPaymentBeforeExecution(
@@ -34,7 +39,7 @@ public sealed class CollectionService(InMemoryBankStore store) : ICollectionServ
         decimal? paymentAmount,
         string? sourceAccountId)
     {
-        var card = string.IsNullOrWhiteSpace(cardId) ? null : store.GetCard(cardId);
+        var card = FindCard(cardId);
         if (!string.IsNullOrWhiteSpace(cardId) && card is null)
         {
             return BankValidationResult.Rejected(
@@ -42,7 +47,7 @@ public sealed class CollectionService(InMemoryBankStore store) : ICollectionServ
                 $"'{cardId}' numaralı bir kredi kartı bulunamadı.");
         }
 
-        var sourceAccount = string.IsNullOrWhiteSpace(sourceAccountId) ? null : store.GetAccount(sourceAccountId);
+        var sourceAccount = FindAccount(sourceAccountId);
         if (!string.IsNullOrWhiteSpace(sourceAccountId) && sourceAccount is null)
         {
             return BankValidationResult.Rejected(
@@ -93,16 +98,35 @@ public sealed class CollectionService(InMemoryBankStore store) : ICollectionServ
 
     public PaymentReceipt Charge(string cardId, decimal amount, string sourceAccountId, DateOnly date)
     {
-        // Yürütme anındaki kontrol ile ön-doğrulama AYNI kod yolunu kullanır:
-        // kural çiftlenmesi olmaz, ikisi asla birbirinden sapmaz.
-        var validation = ValidateCardPaymentBeforeExecution(cardId, amount, sourceAccountId);
-        if (!validation.IsAcceptable)
-            throw new InvalidOperationException(validation.UserFacingMessage);
+        // Doğrulama ve mutasyon AYNI kilit altında: aradaki pencerede başka bir işlem bakiyeyi
+        // değiştirirse "kabul edildi ama uygulanamadı" durumu oluşurdu.
+        lock (store.MoneyGate)
+        {
+            // Yürütme anındaki kontrol ile ön-doğrulama AYNI kod yolunu kullanır:
+            // kural çiftlenmesi olmaz, ikisi asla birbirinden sapmaz.
+            var validation = ValidateCardPaymentBeforeExecution(cardId, amount, sourceAccountId);
+            if (!validation.IsAcceptable)
+                throw new InvalidOperationException(validation.UserFacingMessage);
 
-        var (card, _) = store.ApplyPayment(cardId, sourceAccountId, amount);
-        var receiptId = $"RCPT-{cardId}-{date:yyyyMMdd}-{(int)amount}";
-        return new PaymentReceipt(receiptId, cardId, amount, sourceAccountId, date, card.CurrentDebt, "Başarılı");
+            var card = FindCard(cardId) ?? throw new InvalidOperationException($"Kart bulunamadı: {cardId}");
+            var account = FindAccount(sourceAccountId) ?? throw new InvalidOperationException($"Hesap bulunamadı: {sourceAccountId}");
+
+            var updatedCard = card with { CurrentDebt = card.CurrentDebt - amount };
+            var updatedAccount = account with { Balance = account.Balance - amount };
+
+            store.Cards[cardId] = updatedCard;
+            store.Accounts[sourceAccountId] = updatedAccount;
+
+            var receiptId = $"RCPT-{date:yyyyMMdd}-{Guid.NewGuid():N}"[..22];
+            return new PaymentReceipt(receiptId, cardId, amount, sourceAccountId, date, updatedCard.CurrentDebt, "Başarılı");
+        }
     }
+
+    private Card? FindCard(string? cardId) =>
+        string.IsNullOrWhiteSpace(cardId) ? null : store.Cards.GetValueOrDefault(cardId);
+
+    private Account? FindAccount(string? accountId) =>
+        string.IsNullOrWhiteSpace(accountId) ? null : store.Accounts.GetValueOrDefault(accountId);
 
     private static IReadOnlyDictionary<string, object?> BuildAcceptableHints(Card? card, Account? sourceAccount)
     {

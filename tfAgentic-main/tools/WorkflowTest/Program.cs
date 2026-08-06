@@ -21,8 +21,8 @@ async Task RunScenarioAsync(bool approve)
     var accounts = new AccountService(store);
     var collections = new CollectionService(store);
 
-    var card = store.GetCard("CARD-2002")!;
-    Console.WriteLine($"  Başlangıç → borç {card.CurrentDebt:N2} ₺, hesap bakiye {store.GetAccount("ACC-1001")!.Balance:N2} ₺");
+    var card = cards.GetCard("CARD-2002")!;
+    Console.WriteLine($"  Başlangıç → borç {card.CurrentDebt:N2} ₺, hesap bakiye {accounts.GetAccount("ACC-1001")!.Balance:N2} ₺");
 
     var executor = new PaymentActionExecutor(collections, cards, accounts, hub);
     var view = executor.BuildConfirmationView(slots);
@@ -72,8 +72,8 @@ async Task RunScenarioAsync(bool approve)
         }
     }
 
-    var c = store.GetCard("CARD-2002")!;
-    Console.WriteLine($"  SONUÇ → borç {c.CurrentDebt:N2} ₺, hesap bakiye {store.GetAccount("ACC-1001")!.Balance:N2} ₺");
+    var c = cards.GetCard("CARD-2002")!;
+    Console.WriteLine($"  SONUÇ → borç {c.CurrentDebt:N2} ₺, hesap bakiye {accounts.GetAccount("ACC-1001")!.Balance:N2} ₺");
 }
 
 await RunScenarioAsync(approve: true);

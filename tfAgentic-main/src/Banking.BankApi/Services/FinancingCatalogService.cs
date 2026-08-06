@@ -24,12 +24,12 @@ public interface IFinancingCatalogService
 public sealed class FinancingCatalogService(InMemoryBankStore store) : IFinancingCatalogService
 {
     public IReadOnlyList<FinancingOption> GetAllFinancingOptions() =>
-        store.FinancingOptions.ToList();
+        store.FinancingOptions.Values.ToList();
 
     public IReadOnlyList<FinancingOption> FindFinancingOptionsByType(string financingType) =>
         string.IsNullOrWhiteSpace(financingType)
             ? GetAllFinancingOptions()
-            : store.FinancingOptions
+            : store.FinancingOptions.Values
                 .Where(option => string.Equals(option.Type, financingType, StringComparison.OrdinalIgnoreCase))
                 .ToList();
 }

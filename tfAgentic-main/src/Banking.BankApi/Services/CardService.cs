@@ -7,17 +7,17 @@ public interface ICardService
 {
     IReadOnlyList<Card> GetCards(string customerId);
     Card? GetCard(string cardId);
-    
-    Card? PayCreditCardPayment(string cardId, decimal amount, string sourceAccountId);
 }
 
+/// <summary>
+/// Kart okuma yolu. Kart borcu tahsilatı <b>burada değildir</b>: <see cref="ICollectionService.Charge"/>
+/// içindedir — ön-doğrulama ile tahsilatın aynı kod yolunu kullanması için.
+/// </summary>
 public sealed class CardService(InMemoryBankStore store) : ICardService
 {
     public IReadOnlyList<Card> GetCards(string customerId) =>
-        store.CardsOf(customerId).ToList();
+        store.Cards.Values.Where(card => card.CustomerId == customerId).ToList();
 
-    public Card? GetCard(string cardId) => store.GetCard(cardId);
-    
-    public Card? PayCreditCardPayment(string cardId, decimal amount, string sourceAccountId) =>
-        store.ApplyPayment(cardId, sourceAccountId, amount).card;
+    public Card? GetCard(string cardId) =>
+        store.Cards.TryGetValue(cardId, out var card) ? card : null;
 }

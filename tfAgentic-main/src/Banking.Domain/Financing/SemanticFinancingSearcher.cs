@@ -1,7 +1,7 @@
 
 using System.Text;
-using Banking.Domain.Data;
 using Banking.Domain.Models;
+using Banking.Domain.Services;
 using Microsoft.Extensions.Logging;
 using SmartComponents.LocalEmbeddings;
 
@@ -10,15 +10,15 @@ namespace Banking.Domain.Financing;
 public class SemanticFinancingSearcher
 {
     private readonly LocalEmbedder _embedder;
-    private readonly InMemoryBankStore _bankStore;
+    private readonly IFinancingCatalogService _financingCatalog;
     private readonly ILogger<SemanticFinancingSearcher> _logger;
     private readonly List<(EmbeddingF32 Vector, FinancingOption Option)> _cache = new();
     private bool _isInitialized = false;
 
-    public SemanticFinancingSearcher(LocalEmbedder embedder, InMemoryBankStore bankStore, ILogger<SemanticFinancingSearcher> logger)
+    public SemanticFinancingSearcher(LocalEmbedder embedder, IFinancingCatalogService financingCatalog, ILogger<SemanticFinancingSearcher> logger)
     {
         _embedder = embedder;
-        _bankStore = bankStore;
+        _financingCatalog = financingCatalog;
         _logger = logger;
     }
 
@@ -26,7 +26,7 @@ public class SemanticFinancingSearcher
     {
         if (_isInitialized) return;
 
-        var options = _bankStore.FinancingOptions.ToList();
+        var options = _financingCatalog.GetAllFinancingOptions();
         _cache.Clear();
 
         foreach (var option in options)

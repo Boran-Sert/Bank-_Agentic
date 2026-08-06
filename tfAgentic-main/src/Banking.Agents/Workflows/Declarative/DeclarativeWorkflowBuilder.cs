@@ -55,6 +55,9 @@ public static class DeclarativeWorkflowBuilder
         if (!string.IsNullOrWhiteSpace(definition.Instructions))
         {
             instructions.AppendLine("<custom_instructions>");
+            // Kimlik guardrail'i buraya eklenmez: BuildSlotFillingRules zaten koruma bloğunda
+            // veriyor. İki kez basılması hem token yakıyor hem de YAML'da 'instructions' yoksa
+            // kuralın bir kopyasının hiç eklenmemesi gibi tutarsız bir davranış üretiyordu.
             instructions.AppendLine(definition.Instructions);
             instructions.AppendLine("</custom_instructions>").AppendLine();
         }

@@ -78,6 +78,14 @@ public sealed class ToolRegistry : IToolRegistry
     }
 
     /// <summary>
+    /// Keşfedilen tüm araç tanımlarını döner (uzman tanımlama ekranındaki araç seçimi için).
+    /// </summary>
+    public IReadOnlyList<ToolDefinition> GetAllTools()
+    {
+        return _definitions.Values.ToList();
+    }
+
+    /// <summary>
     /// Belirli bir araç grubuna ait tüm araç isimlerini liste olarak döner.
     /// </summary>
     public IReadOnlyList<string> GetNamesByGroup(ToolGroup group)

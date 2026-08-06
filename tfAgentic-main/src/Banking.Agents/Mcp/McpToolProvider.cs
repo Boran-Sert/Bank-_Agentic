@@ -53,6 +53,36 @@ public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<
     }
 
     /// <summary>
+    /// Adı verilen MCP araçlarını izleme sarmalayıcısıyla döner — arayüzden tanımlanan uzmanlar
+    /// kapsamlarını grup yerine tek tek araç seçerek belirler.
+    /// <para>
+    /// Bilinmeyen bir ad <b>sessizce atlanmaz</b>: uzman, kendisine verildiğini sandığı araç
+    /// olmadan çalışmaya devam eder ve kullanıcıya sebebi görünmeyen bir "yapamıyorum" döner.
+    /// </para>
+    /// </summary>
+    public async Task<IList<AITool>> GetTracedToolsByNamesAsync(
+        IReadOnlyCollection<string> toolNames, CancellationToken cancellationToken = default)
+    {
+        var allTools = await EnsureConnectedAsync(cancellationToken);
+        var requested = toolNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var tracedTools = allTools
+            .Where(tool => requested.Contains(tool.Name))
+            .Select(tool => (AITool)new TracingAIFunction(tool, hub, TraceCategories.Mcp, tool.Name, "→ MCP"))
+            .ToList();
+
+        if (tracedTools.Count != requested.Count)
+        {
+            var missing = requested.Except(tracedTools.Select(tool => tool.Name), StringComparer.OrdinalIgnoreCase);
+            throw new InvalidOperationException(
+                $"Tanımlı olmayan MCP aracı istendi: {string.Join(", ", missing)}. " +
+                "Uzman tanımındaki araç adlarını kontrol edin.");
+        }
+
+        return tracedTools;
+    }
+
+    /// <summary>
     /// MCP bağlantısını (bir kez) kurar ve keşfedilen araç listesini döner.
     /// </summary>
     private async Task<IList<McpClientTool>> EnsureConnectedAsync(CancellationToken cancellationToken)

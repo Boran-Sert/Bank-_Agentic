@@ -29,6 +29,13 @@ public sealed record ToolDefinition(
 public interface IToolRegistry
 {
     ToolDefinition Get(string name);
+
+    /// <summary>
+    /// Keşfedilen tüm araç tanımları. Uzman ajan tanımlanırken arayüze sunulan araç listesi
+    /// buradan gelir — seçenekler elle yazılmaz, kayıt defterinin kendisinden okunur.
+    /// </summary>
+    IReadOnlyList<ToolDefinition> GetAllTools();
+
     IReadOnlyList<string> GetNamesByGroup(ToolGroup group);
     IReadOnlyList<string> GetAllSanitizableToolNames();
     void ScanAssembly(System.Reflection.Assembly assembly);

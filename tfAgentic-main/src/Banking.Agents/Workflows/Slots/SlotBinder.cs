@@ -1,23 +1,23 @@
-using System.Collections;
-using System.Collections.Concurrent;
-using System.Reflection;
-using Banking.Domain;
+using Banking.Agents.Workflows.Declarative;
 
 namespace Banking.Agents.Workflows.Slots;
 
 /// <summary>Bir akışın parametre kümesinin anlık durumu.</summary>
 /// <param name="FilledSlots">Değeri girilmiş ve anlamlı olan parametreler.</param>
-/// <param name="MissingSlots">Henüz sorulmamış veya boş bırakılmış parametreler.</param>
+/// <param name="MissingSlots">Henüz sorulmamış veya boş bırakılmış <b>zorunlu</b> parametreler.</param>
+/// <param name="OptionalSlots">Doldurulmamış ama zorunlu da olmayan parametreler.</param>
 public sealed record SlotStatus(
     IReadOnlyDictionary<string, object> FilledSlots,
-    IReadOnlyList<string> MissingSlots)
+    IReadOnlyList<string> MissingSlots,
+    IReadOnlyList<string> OptionalSlots)
 {
+    /// <summary>Zorunlu alanların tamamı dolu mu? Opsiyoneller tamlığı engellemez.</summary>
     public bool IsComplete => MissingSlots.Count == 0;
 
     /// <summary>LLM'e verilecek tek satırlık durum özeti.</summary>
     public string Describe()
     {
-        if (FilledSlots.Count == 0 && MissingSlots.Count == 0)
+        if (FilledSlots.Count == 0 && MissingSlots.Count == 0 && OptionalSlots.Count == 0)
             return "Henüz parametre toplanmadı.";
 
         var filledText = FilledSlots.Count > 0
@@ -25,182 +25,120 @@ public sealed record SlotStatus(
             : "Dolu Parametre Yok";
 
         var missingText = MissingSlots.Count > 0
-            ? "Eksik Parametreler: [" + string.Join(", ", MissingSlots) + "]"
-            : "Tüm Parametreler Tamamlandı";
+            ? "Eksik Zorunlu Parametreler: [" + string.Join(", ", MissingSlots) + "]"
+            : "Tüm Zorunlu Parametreler Tamamlandı";
 
-        return $"{filledText}. {missingText}.";
+        var optionalText = OptionalSlots.Count > 0
+            ? $" Opsiyonel (boş bırakılabilir): [{string.Join(", ", OptionalSlots)}]."
+            : string.Empty;
+
+        return $"{filledText}. {missingText}.{optionalText}";
     }
 }
 
 /// <summary>
-/// Ham slot sözlüğü ile tipli slot record'ları arasındaki <b>saf</b> dönüşüm katmanı.
+/// Toplanan ham değerler ile YAML şeması arasındaki <b>saf</b> karşılaştırma katmanı.
 /// <para>
-/// Hiçbir bağımlılığı, durumu veya yan etkisi yoktur: verilen sözlüğü okur, sonucu döner.
-/// Oturum yönetimi, kalıcılık ve izleme <see cref="Sessions.SessionContext"/>'e aittir —
-/// bu ayrım sayesinde slot mantığı tek başına okunabilir ve akıl yürütülebilir kalır.
+/// Hiçbir bağımlılığı, durumu veya yan etkisi yoktur: verilen sözlüğü ve şemayı okur, sonucu
+/// döner. Oturum yönetimi, kalıcılık ve izleme <see cref="Sessions.SessionContext"/>'e aittir.
+/// </para>
+/// <para>
+/// Eskiden burada bir de <i>record kurma</i> dalı vardı: akış başına yazılan slot record'unun
+/// birincil yapıcısı reflection'la bulunur, her parametre tipe dönüştürülmeye çalışılırdı.
+/// Slot record'ları kalktığı için o dalın tamamı silindi — akışın alanları artık yalnızca
+/// YAML'da tanımlı.
 /// </para>
 /// </summary>
 internal static class SlotBinder
 {
-    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> PropertyCache = new();
-    private static readonly ConcurrentDictionary<Type, PropertyInfo[]> DatePropertyCache = new();
-
-    /// <summary>Slot tipi bir sözlük mü (deklaratif YAML akışları) yoksa record mü?</summary>
-    public static bool IsDictionarySlotType<TSlots>() =>
-        typeof(IDictionary).IsAssignableFrom(typeof(TSlots));
-
     /// <summary>
-    /// Tarih alanlarını sistem tarihinden doldurur; kullanıcıya sorulmaz.
-    /// Tip adına değil <see cref="DateOnly"/> özelliklerine bakar — yeni akış eklerken kod değişmez.
+    /// Dolu, eksik ve opsiyonel parametreleri tespit eder.
     /// </summary>
-    /// <returns>En az bir değer eklendiyse <c>true</c>.</returns>
-    public static bool ApplyDateDefaults<TSlots>(IDictionary<string, object?> slotValues)
-        where TSlots : class
-    {
-        var wasModified = false;
-
-        foreach (var dateProperty in DatePropertiesOf(typeof(TSlots)))
-        {
-            if (slotValues.ContainsKey(dateProperty.Name)) continue;
-
-            slotValues[dateProperty.Name] = BankClock.Today;
-            wasModified = true;
-        }
-
-        return wasModified;
-    }
-
-    /// <summary>
-    /// Dolu ve eksik parametreleri tespit eder.
-    /// </summary>
-    /// <param name="slotValues">Toplanan ham değerler.</param>
-    /// <param name="schemaTemplate">
-    /// Sözlük tabanlı (deklaratif) akışlarda beklenen anahtarların şablonu; record tabanlı
-    /// akışlarda kullanılmaz çünkü alanlar tipin kendisinden okunur.
+    /// <param name="slotValues">Toplanan ham değerler (StateBag).</param>
+    /// <param name="expectedSlots">
+    /// Akışın YAML şeması. <c>null</c> veya boşsa beklenen alan bilinmiyordur; bu durumda
+    /// yalnızca toplanmış olanlar dolu sayılır ve eksik yoktur.
     /// </param>
-    public static SlotStatus GetStatus<TSlots>(
-        IReadOnlyDictionary<string, object?> slotValues, object? schemaTemplate)
-        where TSlots : class
+    public static SlotStatus GetStatus(
+        IReadOnlyDictionary<string, object?> slotValues,
+        IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
     {
         var filled = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
         var missing = new List<string>();
+        var optional = new List<string>();
 
-        foreach (var slotName in ResolveSlotNames<TSlots>(slotValues, schemaTemplate))
+        foreach (var slotName in ResolveSlotNames(slotValues, expectedSlots))
         {
             if (slotValues.TryGetValue(slotName, out var value) && value is not null && !IsBlank(value))
+            {
                 filled[slotName] = value;
-            else
-                missing.Add(slotName);
+                continue;
+            }
+
+            // required: false olan alan boş kalabilir; akışı bekletmez.
+            if (IsRequired(slotName, expectedSlots)) missing.Add(slotName);
+            else optional.Add(slotName);
         }
 
-        return new SlotStatus(filled, missing);
+        return new SlotStatus(filled, missing, optional);
     }
 
     /// <summary>
-    /// Ham değerlerden <typeparamref name="TSlots"/> nesnesini kurar.
-    /// <para>
-    /// Dönüştürülemeyen bir değer <b>sessizce varsayılana düşürülmez</b>: geçersiz olarak
-    /// raporlanır ve <paramref name="onInvalidSlot"/> ile çağırana bildirilir (çağıran o değeri
-    /// sözlükten siler ki kullanıcı aynı hatayı sonsuza kadar tekrarlamasın).
-    /// </para>
+    /// Onaya sunulacak parametre sözlüğünü kurar. Zorunlu bir alan eksikse kurulmaz —
+    /// hangi alanların sorulacağı çağırana bildirilir.
     /// </summary>
-    public static SlotConstructionResult<TSlots> Construct<TSlots>(
+    public static SlotConstructionResult Construct(
         IReadOnlyDictionary<string, object?> slotValues,
-        Action<string, object?, Type>? onInvalidSlot = null)
-        where TSlots : class
+        IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
     {
-        if (IsDictionarySlotType<TSlots>())
-        {
-            var dictionarySlots = new Dictionary<string, object?>(
-                slotValues.ToDictionary(entry => entry.Key, entry => entry.Value), StringComparer.OrdinalIgnoreCase);
+        var status = GetStatus(slotValues, expectedSlots);
 
-            return new SlotConstructionResult<TSlots>(dictionarySlots as TSlots, [], []);
-        }
+        if (!status.IsComplete)
+            return new SlotConstructionResult(null, status.MissingSlots);
 
-        var primaryConstructor = typeof(TSlots).GetConstructors()
-            .MaxBy(constructor => constructor.GetParameters().Length);
+        var slots = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (slotName, slotValue) in status.FilledSlots)
+            slots[slotName] = slotValue;
 
-        if (primaryConstructor is null)
-            return new SlotConstructionResult<TSlots>(null, [], []);
-
-        var parameters = primaryConstructor.GetParameters();
-        var arguments = new object?[parameters.Length];
-        var invalidSlots = new List<string>();
-        var missingSlots = new List<string>();
-
-        for (var index = 0; index < parameters.Length; index++)
-        {
-            var parameter = parameters[index];
-            var slotName = parameter.Name!;
-
-            if (!slotValues.TryGetValue(slotName, out var rawValue) || rawValue is null)
-            {
-                missingSlots.Add(slotName);
-                continue;
-            }
-
-            if (!SlotValueConverter.TryConvert(rawValue, parameter.ParameterType, out var convertedValue))
-            {
-                invalidSlots.Add(slotName);
-                onInvalidSlot?.Invoke(slotName, rawValue, parameter.ParameterType);
-                continue;
-            }
-
-            arguments[index] = convertedValue;
-        }
-
-        return invalidSlots.Count > 0 || missingSlots.Count > 0
-            ? new SlotConstructionResult<TSlots>(null, invalidSlots, missingSlots)
-            : new SlotConstructionResult<TSlots>((TSlots)primaryConstructor.Invoke(arguments), [], []);
-    }
-
-    /// <summary>Kurulmuş bir slot nesnesini tekrar düz anahtar/değer çiftlerine açar.</summary>
-    public static IEnumerable<KeyValuePair<string, object?>> Flatten<TSlots>(TSlots slots)
-        where TSlots : class
-    {
-        if (slots is IDictionary dictionary)
-        {
-            foreach (DictionaryEntry entry in dictionary)
-            {
-                var key = entry.Key?.ToString();
-                if (!string.IsNullOrEmpty(key) && entry.Value is not null)
-                    yield return new KeyValuePair<string, object?>(key, entry.Value);
-            }
-
-            yield break;
-        }
-
-        foreach (var property in PublicPropertiesOf(typeof(TSlots)))
-        {
-            var value = property.GetValue(slots);
-            if (value is not null)
-                yield return new KeyValuePair<string, object?>(property.Name, value);
-        }
+        return new SlotConstructionResult(slots, []);
     }
 
     /// <summary>
-    /// Beklenen slot adlarını çözer. Sözlük tabanlı akışlarda hem toplanan anahtarlar hem de
-    /// şema şablonundaki anahtarlar birleştirilir.
+    /// Beklenen slot adlarını çözer: hem toplanan anahtarlar hem de şemadaki alanlar.
+    /// Şemada olmayan ama model tarafından yazılmış bir anahtar da görünür kalır —
+    /// sessizce kaybolması, hata ayıklamayı imkânsız kılardı.
     /// </summary>
-    private static IEnumerable<string> ResolveSlotNames<TSlots>(
-        IReadOnlyDictionary<string, object?> slotValues, object? schemaTemplate)
-        where TSlots : class
+    private static IEnumerable<string> ResolveSlotNames(
+        IReadOnlyDictionary<string, object?> slotValues,
+        IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
     {
-        if (!IsDictionarySlotType<TSlots>())
-            return PublicPropertiesOf(typeof(TSlots)).Select(property => property.Name);
-
         var slotNames = new HashSet<string>(slotValues.Keys, StringComparer.OrdinalIgnoreCase);
 
-        if (schemaTemplate is IDictionary template)
+        if (expectedSlots is not null)
         {
-            foreach (DictionaryEntry entry in template)
-            {
-                var key = entry.Key?.ToString();
-                if (!string.IsNullOrEmpty(key)) slotNames.Add(key);
-            }
+            foreach (var slotName in expectedSlots.Keys)
+                slotNames.Add(slotName);
         }
 
         return slotNames;
+    }
+
+    /// <summary>
+    /// Alan zorunlu mu? Şemada tanımlı değilse zorunlu <b>sayılmaz</b>: modelin fazladan yazdığı
+    /// bir anahtar yüzünden akış sonsuza kadar "eksik parametre" durumunda kalamaz.
+    /// </summary>
+    private static bool IsRequired(
+        string slotName, IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
+    {
+        if (expectedSlots is null) return false;
+
+        foreach (var (declaredName, propertyConfig) in expectedSlots)
+        {
+            if (string.Equals(declaredName, slotName, StringComparison.OrdinalIgnoreCase))
+                return propertyConfig.Required ?? true;
+        }
+
+        return false;
     }
 
     /// <summary>Değer var ama anlamsız mı? (boş metin, sıfır/negatif tutar)</summary>
@@ -211,15 +149,4 @@ internal static class SlotBinder
         int number => number <= 0,
         _ => false
     };
-
-    private static PropertyInfo[] DatePropertiesOf(Type slotType) =>
-        DatePropertyCache.GetOrAdd(slotType, type => PublicPropertiesOf(type)
-            .Where(property => (Nullable.GetUnderlyingType(property.PropertyType) ?? property.PropertyType) == typeof(DateOnly))
-            .ToArray());
-
-    private static PropertyInfo[] PublicPropertiesOf(Type type) =>
-        PropertyCache.GetOrAdd(type, resolvedType => resolvedType
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(property => property.GetIndexParameters().Length == 0)
-            .ToArray());
 }

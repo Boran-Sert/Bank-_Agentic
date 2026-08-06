@@ -10,4 +10,8 @@
     <PackageReference Include="SmartComponents.LocalEmbeddings" Version="0.1.0-preview10148" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Banking.BankApi\Banking.BankApi.csproj" />
+  </ItemGroup>
+
 </Project>

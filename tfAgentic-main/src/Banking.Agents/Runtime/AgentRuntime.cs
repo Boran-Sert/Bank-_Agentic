@@ -164,7 +164,7 @@ public sealed class AgentRuntime(
                 Name = "Orkestrator",
                 ChatOptions = new ChatOptions
                 {
-                    Temperature = 0.1f,
+                    Temperature = 0.0f,
                     Instructions = AgentPrompts.GetOrchestratorInstructions(BuildSpecialistRoutingRules()),
                     Tools = tools
                 },
@@ -287,7 +287,8 @@ public sealed class AgentRuntime(
     }
 
     /// <summary>Adı verilen iş akışını aktif oturumda başlatır ve ilk soruyu döner.</summary>
-    private async Task<string> StartWorkflowAsync(string workflowName, CancellationToken cancellationToken)
+    private async Task<string> 
+        StartWorkflowAsync(string workflowName, CancellationToken cancellationToken)
     {
         logger.LogInformation("Jenerik iş akışının başlatılması istendi: {WorkflowName}", workflowName);
 

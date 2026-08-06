@@ -6,6 +6,11 @@
     <ProjectReference Include="..\Banking.Mcp\Banking.Mcp.csproj" />
   </ItemGroup>
 
+  <!-- IHttpContextAccessor: A2A dağıtıcısı hedef uzmanı istek yolundan çözüyor. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Agents.AI" Version="1.11.1" />
     <PackageReference Include="Microsoft.Agents.AI.A2A" Version="1.11.1-preview.260625.1" />

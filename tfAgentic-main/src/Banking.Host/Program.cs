@@ -1,7 +1,9 @@
 
 using Banking.Agents.Mcp;
+using Banking.Agents.Prompts;
 using Banking.Agents.Runtime;
 using Banking.Agents.Specialists;
+using Banking.Agents.Specialists.Declarative;
 using Banking.Agents.Sessions;
 using Banking.Agents.Workflows;
 using Banking.Agents.Workflows.Actions;
@@ -18,6 +20,8 @@ using Banking.Gateway.Models;
 using Banking.Domain.Financing;
 using Banking.Domain.Workflows;
 using Banking.Domain.Constants;
+using Banking.Domain.Data;
+using Banking.Domain.Services;
 using Microsoft.Agents.AI.Hosting;
 using OpenAI.Chat;
 using Microsoft.Extensions.AI;
@@ -45,7 +49,16 @@ builder.Services.AddSingleton(agentOptions);
 builder.WebHost.UseUrls("http://*:5080");
 
 // --- Domain (in-memory bankacılık simülasyonu) ---
+builder.Services.AddSingleton<InMemoryBankStore>();
 builder.Services.AddSingleton<ICampaignSyncService, CampaignSyncService>();
+builder.Services.AddSingleton<ICampaignCatalogService, CampaignCatalogService>();
+builder.Services.AddSingleton<IFinancingCatalogService, FinancingCatalogService>();
+
+// MCP araçlarının (AccountsTools/CardsTools) okuma yolu. Para hareketi buradan GEÇMEZ:
+// o yol RestWorkflowExecutor üzerinden bankanın kendi servisine gider.
+builder.Services.AddSingleton<IAccountService, AccountService>();
+builder.Services.AddSingleton<ICardService, CardService>();
+builder.Services.AddSingleton<CustomerContext>();
 
 // --- Semantik Arama & Embedding ---
 builder.Services.AddSingleton<LocalEmbedder>();
@@ -53,6 +66,7 @@ builder.Services.AddSingleton<SemanticMkCodeSearcher>();
 builder.Services.AddSingleton<SemanticCampaignSearcher>();
 builder.Services.AddSingleton<SemanticFinancingSearcher>();
 builder.Services.AddSingleton<SemanticWorkflowSearcher>();
+builder.Services.AddSingleton<IAnalyzeService, AnalyzeService>();
 
 
 // --- Tool Registry (Merkezi araç haritası & otomatik keşif) ---
@@ -119,14 +133,16 @@ builder.Services.AddMcpServer()
     .WithTools<CardsTools>()
     .WithTools<AnalyzeTools>();
 
-// --- A2A host: Uzman ajanları kaydet + A2A server kaydı ---
-// Uzman listesi burada TEKRARLANMAZ: AgentCard'lardan keşfedilir.
-foreach (var specialistCard in SpecialistCatalog.DiscoverCards())
-{
-    var specialistName = specialistCard.Name;
-    builder.Services.AddAIAgent(specialistName, (sp, _) => sp.GetRequiredService<AgentRuntime>().GetSpecialist(specialistName))
-        .AddA2AServer();
-}
+// --- A2A host: yol parametreli TEK endpoint ---
+// Uzman başına endpoint açılmaz: uzman listesi çalışma zamanında değişebildiği için
+// (arayüzden yeni uzman tanımlanabiliyor) endpoint tablosuna bağlanamaz. Hedefi
+// isteğin yolundan SpecialistRoutingAgent çözer.
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<SpecialistRoutingAgent>();
+builder.Services.AddAIAgent(
+        AgentConstants.A2ADispatcherAgentName,
+        (sp, _) => sp.GetRequiredService<SpecialistRoutingAgent>())
+    .AddA2AServer();
 
 var app = builder.Build();
 
@@ -169,6 +185,29 @@ using (var scope = app.Services.CreateScope())
 
     var workflowSearcher = scope.ServiceProvider.GetRequiredService<SemanticWorkflowSearcher>();
     workflowSearcher.Initialize(registry.DiscoveredWorkflows);
+
+    // Diskteki uzman ajan tanımlarını yükle. A2A adresleri endpoint tablosunda değil
+    // dağıtıcının arkasında çözüldüğü için bu yükleme app.Build()'dan sonra yapılabilir.
+    var specialistCatalog = scope.ServiceProvider.GetRequiredService<SpecialistCatalog>();
+    var specialistsDir = Path.Combine(app.Environment.ContentRootPath, "specialist-agents");
+    Directory.CreateDirectory(specialistsDir);
+    foreach (var filePath in Directory.GetFiles(specialistsDir)
+                 .Where(file => file.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase)
+                                || file.EndsWith(".yml", StringComparison.OrdinalIgnoreCase)
+                                || file.EndsWith(".json", StringComparison.OrdinalIgnoreCase)))
+    {
+        try
+        {
+            var content = File.ReadAllText(filePath);
+            specialistCatalog.RegisterDeclarativeSpecialist(content.TrimStart().StartsWith('{')
+                ? DeclarativeSpecialistBuilder.ParseFromJson(content)
+                : DeclarativeSpecialistBuilder.ParseFromYaml(content));
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Diskteki uzman ajan tanımı yüklenemedi: {FilePath}", filePath);
+        }
+    }
 }
 
 app.UseDefaultFiles();
@@ -176,8 +215,9 @@ app.UseStaticFiles();
 
 // Protokol endpoint'leri 
 app.MapMcp("/mcp");
-foreach (var specialistCard in SpecialistCatalog.DiscoverCards())
-    app.MapA2AJsonRpc(specialistCard.Name, $"/a2a/{specialistCard.A2ARoute}");
+app.MapA2AJsonRpc(
+    AgentConstants.A2ADispatcherAgentName,
+    $"/a2a/{{{SpecialistRoutingAgent.RouteValueName}}}");
 
 // --- Q&A: orkestratör (GatewayService üzerinden tekil oturum yönetimi) ---
 app.MapPost("/api/chat", async (ChatRequest req, GatewayService gw, CancellationToken ct) =>
@@ -264,6 +304,79 @@ app.MapPost("/api/workflows/register-declarative", async (HttpContext httpContex
 
     return Results.Ok(new { message = $"Microsoft Agent Framework Declarative Agent '{definition.Name}' başarıyla kaydoldu, diske kaydedildi ve RAG semantik indeksine eklendi.", agent = definition });
 });
+
+// --- Uzman ajan tanımlama (arayüzden, yeniden derlemeden) ---
+// Akış tanımlarıyla aynı desen: ayrıştır → kaydet (çakışma korumalı) → diske yaz.
+// A2A adresi ayrıca açılmaz; tek dağıtıcı endpoint yeni uzmanı aynı anda görür.
+app.MapPost("/api/specialists/register-declarative", async (HttpRequest request, SpecialistCatalog catalog, IHostEnvironment env, TraceHub hub) =>
+{
+    using var reader = new StreamReader(request.Body);
+    var content = await reader.ReadToEndAsync();
+
+    if (string.IsNullOrWhiteSpace(content))
+        return Results.BadRequest(new { error = "İstek gövdesi boş." });
+
+    SpecialistDefinition definition;
+    try
+    {
+        definition = content.TrimStart().StartsWith('{')
+            ? DeclarativeSpecialistBuilder.ParseFromJson(content)
+            : DeclarativeSpecialistBuilder.ParseFromYaml(content);
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = $"Uzman tanımı ayrıştırma hatası: {ex.Message}" });
+    }
+
+    // 'name' doğrudan dosya yoluna giriyor: dizin dışına yazılmasını engelle.
+    var fileName = (definition.Name ?? string.Empty).ToLowerInvariant();
+    if (fileName.Length == 0 || !fileName.All(character => char.IsAsciiLetterOrDigit(character) || character is '-' or '_'))
+        return Results.BadRequest(new { error = "'name' zorunludur ve yalnızca harf, rakam, '-' ve '_' içerebilir." });
+
+    AgentCard card;
+    try
+    {
+        card = catalog.RegisterDeclarativeSpecialist(definition);
+    }
+    catch (InvalidOperationException ex)
+    {
+        // Örn. derlenmiş bir uzmanın adını/yolunu ezmeye çalışmak; istek hatasıdır.
+        return Results.BadRequest(new { error = ex.Message });
+    }
+
+    var specialistsFolder = Path.Combine(env.ContentRootPath, "specialist-agents");
+    Directory.CreateDirectory(specialistsFolder);
+    await File.WriteAllTextAsync(Path.Combine(specialistsFolder, $"{fileName}.yaml"), content);
+
+    hub.Publish(TraceCategories.System,
+        $"[UZMAN KAYDEDİLDİ] '{card.DisplayName}' çalışma zamanında eklendi ve diske kaydedildi",
+        $"Köprü aracı: {card.BridgeToolName} · Adres: /a2a/{card.A2ARoute} · Dosya: specialist-agents/{fileName}.yaml");
+
+    return Results.Ok(new
+    {
+        message = $"Uzman ajan '{card.Name}' kaydedildi; orkestratör ve iş akışı ajanları onu bu andan itibaren görüyor.",
+        specialist = new { card.Name, card.DisplayName, card.Description, card.BridgeToolName, a2aUrl = $"/a2a/{card.A2ARoute}", card.ToolNames }
+    });
+});
+
+// --- Uzman listesi (arayüzdeki kartlar için) ---
+app.MapGet("/api/specialists", (SpecialistCatalog catalog) =>
+    Results.Ok(catalog.Cards.Select(card => new
+    {
+        card.Name,
+        card.DisplayName,
+        card.Description,
+        card.BridgeToolName,
+        a2aUrl = $"/a2a/{card.A2ARoute}",
+        tools = card.ToolNames ?? [],
+        toolGroup = card.ToolNames is null ? card.ToolGroup.ToString() : null
+    })));
+
+// --- Araç kataloğu: uzman tanımlarken hangi MCP araçlarının seçilebileceğini arayüze verir ---
+app.MapGet("/api/tools", (IToolRegistry toolRegistry) =>
+    Results.Ok(toolRegistry.GetAllTools()
+        .Where(tool => tool.Type == ToolType.Mcp)
+        .Select(tool => new { tool.Name, group = tool.Group.ToString(), tool.Description })));
 
 // --- Tanılama: anahtarsız bile MCP/A2A/uzman wiring'ini doğrular ---
 app.MapGet("/api/diag", async (AgentRuntime runtime, CancellationToken ct) =>

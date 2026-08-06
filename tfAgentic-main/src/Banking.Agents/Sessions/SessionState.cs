@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Banking.Agents.Workflows;
+using Banking.Agents.Workflows.Declarative;
 using Banking.Domain.Constants;
 
 namespace Banking.Agents.Sessions;
@@ -25,11 +26,23 @@ public sealed class SessionState
     /// <summary>idle | slot_filling | awaiting_approval | completed | cancelled</summary>
     public string Phase { get; set; } = WorkflowPhases.Idle;
 
-    /// <summary>Toplanan ham parametre değerleri. Slot doldurma boyunca büyür.</summary>
+    /// <summary>Toplanan ham parametre değerleri (StateBag). Slot doldurma boyunca büyür.</summary>
     public Dictionary<string, object?> SlotValues { get; } = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Onaya sunulan, tipi akışa göre değişen slot nesnesi.</summary>
-    public object? ProposedSlots { get; set; }
+    /// <summary>
+    /// Aktif akışın YAML şeması: alan adı → tip + zorunluluk. Motor "ne eksik" sorusunu buradan
+    /// yanıtlar, <c>update_slot</c> tip kontrolünü buradan yapar.
+    /// <para>
+    /// <b>Neden ayrı bir alan:</b> eskiden beklenen alanlar, değerleri <c>null</c> olan bir
+    /// şablon olarak <see cref="ProposedSlots"/>'a yazılıyordu. Model teklif aracını çağırmadan
+    /// tüm slotlar dolduğunda motor bu şablonu <i>gerçek teklif</i> sanıp onay ekranını tamamı
+    /// boş parametrelerle üretebiliyordu. Şablon ile teklif artık ayrı.
+    /// </para>
+    /// </summary>
+    public Dictionary<string, DeclarativePropertyConfig>? ExpectedSlots { get; set; }
+
+    /// <summary>Onaya sunulan parametre kümesi. Yalnızca <b>gerçek</b> teklif; şablon değil.</summary>
+    public Dictionary<string, object?>? ProposedSlots { get; set; }
 
     /// <summary>Onay ekranına gönderilen görünüm; onay beklenirken doludur.</summary>
     public GenericConfirmationView? PendingConfirmation { get; set; }

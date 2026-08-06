@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Banking.Agents.Tracing;
 using Banking.Agents.Workflows;
+using Banking.Agents.Workflows.Declarative;
 using Banking.Agents.Workflows.Slots;
 using Banking.Domain.Constants;
 
@@ -114,50 +115,36 @@ public sealed class SessionContext
         _hub.Publish(TraceCategories.Workflow, $"StateBag Parametre Eklendi → [{slotName} = {slotValue}] (Session: {SessionId})");
     }
 
-    /// <summary>
-    /// Dolu ve eksik parametreleri döner. Tarih alanları bu çağrıda sistem tarihinden doldurulur.
-    /// </summary>
-    public SlotStatus GetSlotStatus<TSlots>() where TSlots : class
+    /// <summary>Dolu, eksik ve opsiyonel parametreleri döner (akışın YAML şemasına göre).</summary>
+    public SlotStatus GetSlotStatus()
     {
-        SlotBinder.ApplyDateDefaults<TSlots>(State.SlotValues);
-
-        var status = SlotBinder.GetStatus<TSlots>(State.SlotValues, State.ProposedSlots);
+        var status = SlotBinder.GetStatus(State.SlotValues, State.ExpectedSlots);
         _hub.Publish(TraceCategories.Workflow,
             $"StateBag Durumu Sorgulandı → Dolu: {status.FilledSlots.Count}, Eksik: {status.MissingSlots.Count} | Tamamlandı: {status.IsComplete}");
 
         return status;
     }
 
-    /// <summary>
-    /// Toplanan değerlerden slot nesnesini kurar. Dönüştürülemeyen değerler sözlükten silinir ki
-    /// kullanıcı aynı hatayı sonsuza kadar tekrarlamasın.
-    /// </summary>
-    public SlotConstructionResult<TSlots> ConstructSlots<TSlots>() where TSlots : class
-    {
-        SlotBinder.ApplyDateDefaults<TSlots>(State.SlotValues);
-
-        return SlotBinder.Construct<TSlots>(State.SlotValues, (slotName, rawValue, expectedType) =>
-        {
-            State.SlotValues.Remove(slotName);
-            _hub.Publish(TraceCategories.Workflow,
-                $"Slot dönüşümü başarısız → [{slotName} = '{rawValue}'] beklenen tip: {expectedType.Name}");
-        });
-    }
+    /// <summary>Toplanan değerlerden onaya sunulacak parametre kümesini kurar.</summary>
+    public SlotConstructionResult ConstructSlots() =>
+        SlotBinder.Construct(State.SlotValues, State.ExpectedSlots);
 
     /// <summary>
-    /// Kurulmuş slot nesnesini onaya hazır olarak saklar ve alanlarını tekrar sözlüğe yazar
-    /// (böylece bir sonraki turda özet ve doğrulama aynı değerleri görür).
+    /// Kurulmuş parametre kümesini onaya hazır olarak saklar ve alanlarını tekrar StateBag'e
+    /// yazar (böylece bir sonraki turda özet aynı değerleri görür).
     /// </summary>
-    public void StoreProposedSlots<TSlots>(string workflowName, TSlots slots) where TSlots : class
+    public void StoreProposedSlots(string workflowName, Dictionary<string, object?> slots)
     {
         ArgumentNullException.ThrowIfNull(slots);
 
         State.ActiveWorkflowName = workflowName;
-        State.ProposedSlots = slots;
+        State.ProposedSlots = new Dictionary<string, object?>(slots, StringComparer.OrdinalIgnoreCase);
 
         var storedValues = new List<string>();
-        foreach (var (slotName, slotValue) in SlotBinder.Flatten(slots))
+        foreach (var (slotName, slotValue) in slots)
         {
+            if (slotValue is null) continue;
+
             State.SlotValues[slotName] = slotValue;
             storedValues.Add($"{slotName}={slotValue}");
         }
@@ -166,20 +153,23 @@ public sealed class SessionContext
             $"StateBag Kaydedildi → Workflow: '{workflowName}' | Saklanan Değerler: [{string.Join(", ", storedValues)}]");
     }
 
-    /// <summary>Deklaratif akışların şema anahtarlarını beklenen parametre listesi olarak tanımlar.</summary>
-    public void DeclareExpectedSlots(IEnumerable<string> slotNames)
+    /// <summary>
+    /// Akışın YAML şemasını oturuma tanıtır: hangi alanlar beklenir, tipleri ne, hangileri zorunlu.
+    /// Akış her başladığında yeniden yazılır — düzenlenmiş bir YAML'ın eski şemayla çalışması,
+    /// hata vermeden yanlış alan toplamak demekti.
+    /// </summary>
+    public void DeclareExpectedSlots(IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
     {
-        if (State.ProposedSlots is not null) return;
-
-        var template = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var slotName in slotNames)
-            template[slotName] = null;
-
-        if (template.Count > 0) State.ProposedSlots = template;
+        State.ExpectedSlots = expectedSlots is { Count: > 0 }
+            ? new Dictionary<string, DeclarativePropertyConfig>(expectedSlots, StringComparer.OrdinalIgnoreCase)
+            : null;
     }
 
-    /// <summary>Onaya sunulmuş slot nesnesi; beklenen tipte değilse <c>null</c>.</summary>
-    public TSlots? ReadProposedSlots<TSlots>() where TSlots : class => State.ProposedSlots as TSlots;
+    /// <summary>Aktif akışın beklenen alan şeması; akış yoksa <c>null</c>.</summary>
+    public IReadOnlyDictionary<string, DeclarativePropertyConfig>? ExpectedSlots => State.ExpectedSlots;
+
+    /// <summary>Onaya sunulmuş parametre kümesi; teklif yoksa <c>null</c>.</summary>
+    public Dictionary<string, object?>? ReadProposedSlots() => State.ProposedSlots;
 
     // =================================================================================
     // 3. ONAY VE İDEMPOTENSİ
@@ -225,6 +215,7 @@ public sealed class SessionContext
         State.ActiveWorkflowName = null;
         State.Phase = finalPhase;
         State.SlotValues.Clear();
+        State.ExpectedSlots = null;
         State.ProposedSlots = null;
         State.PendingConfirmation = null;
         State.SerializedWorkflowSession = null;

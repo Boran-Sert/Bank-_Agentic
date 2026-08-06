@@ -17,6 +17,11 @@ namespace Banking.Agents.Specialists;
 /// <param name="BridgeToolName">Orkestratörün bu uzmana danışmak için çağırdığı araç adı.</param>
 /// <param name="A2ARoute">A2A endpoint yolu son eki (örn. <c>hesap</c> → <c>/a2a/hesap</c>).</param>
 /// <param name="DisplayName">Trace çıktılarında gösterilen kısa ad.</param>
+/// <param name="ToolNames">
+/// Uzmanın alacağı MCP araçlarının <b>tek tek</b> adları. Arayüzden tanımlanan uzmanlar araçlarını
+/// isim isim seçer; <c>null</c> ise <paramref name="ToolGroup"/>'un tamamı verilir. İkisi birden
+/// kullanılmaz — kapsamın tek bir kaynağı olsun diye isim listesi varsa grup yok sayılır.
+/// </param>
 public record AgentCard(
     string Name,
     string Description,
@@ -24,4 +29,5 @@ public record AgentCard(
     ToolGroup ToolGroup,
     string BridgeToolName,
     string A2ARoute,
-    string DisplayName);
+    string DisplayName,
+    IReadOnlyList<string>? ToolNames = null);

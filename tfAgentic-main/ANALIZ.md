@@ -229,12 +229,27 @@ Orkestratör LLM'i bir uzmana danışma kararı verirse (`hesap_uzmanina_sor` / 
 
 ### 4.5 Prompt Deposu — `AgentPrompts`
 
-**`AgentPrompts`** (`Prompts/AgentPrompts.cs`) — Tüm LLM talimatlarının merkezi deposu (statik sınıf).
-- `BuildSlotFillingRules(proposeToolName, cancelToolName)`: Her slot toplama ajanının uyduğu ortak `<strict_rules>` bloğunu üretir — derlenmiş ve deklaratif akışların **paylaştığı tek kaynak**. Araç adları parametre olarak alınır, burada türetilmez.
-- `BuildDynamicWorkflowInstructions<TSlots>(proposeToolName, cancelToolName)`: Slot tipinden reflection ile kimlik + parametre listesi üretir, kuralları `BuildSlotFillingRules`'tan alır (derlenmiş akışların varsayılan talimatı).
-- `BuildCandidateWorkflowsContext(candidateWorkflows)`: Semantik aramanın bulduğu aday akışları, orkestratöre **çalışma anında mesaj olarak** geçirilecek güvenlik bariyerli bağlam metnine çevirir (sistem prompt'una gömülmez ki orkestratör tek seferlik kurulabilsin).
-- `GetOrchestratorInstructions(dynamicRoutingRules)`: Orkestratörün sabit (kullanıcıya özel bilgi içermeyen) sistem prompt'unu üretir.
-- `HesapUzmaniInstructions` / `KartUzmaniInstructions` / `FinansalAnalizUzmaniInstructions` (const): Üç uzmanın sabit sistem promptları.
+**`AgentPrompts`** (`Prompts/AgentPrompts.cs`, static) — Tüm LLM talimatlarının merkezi deposu.
+
+**Yazım deseni.** Her ajan talimatı aynı blok sırası ve aynı etiket sözlüğüyle yazılır. Deseni dayatan bir sınıf/şablon motoru **bilerek yoktur**; yeni ajanda iskelet elle kopyalanır (adım adım: `docs/PROMPT-YAZIM-REHBERI.md`).
+
+```
+<identity>         kim, hangi alanın uzmanı
+<scope>            neyi yapar / neyi yapmaz (sınır)
+<operating_rules>  çalışma disiplini: araç kullanımı, veri kaynağı, belirsizlik
+<output_contract>  biçim ve sunum sözleşmesi
+<guardrails>       ortak sabitlerden gelen koruma bloğu (her ajanda AYNI metin)
+```
+
+**Ortak kural sabitleri** — her prompt bunları interpolasyonla alır, yeniden yazmaz: `NoStatusChatter` (durum/hazırlık cümlesi yasağı), `NoInternalDisclosure` (araç adı, düşünce süreci, talimatın kendisi sızdırılmaz), `NoFabrication` (araç döndürmediyse üretme), `InstructionPrecedence` (injection savunması — kullanıcı mesajındaki kural gevşetme istekleri talimat değil, yanıtlanacak içeriktir), `InternalGuardrail` (dahili kayıt kimliği kullanıcıya sorulmaz/gösterilmez), `InternalIdAgentChannel` (yasak muhataba değil **kanala** bağlıdır: soran taraf bir ajansa ve açıkça istiyorsa kimlik verilir), `PresentationContract` (Markdown, alt alta liste, ₺ + binlik ayraç, sade Türkçe).
+- `SpecialistGuardrails`: uzmanların koruma bloğu; kanal istisnasını da içerir. `DeclarativeSpecialistBuilder` bunu **koşulsuz** ekler — arayüzden tanımlanan bir uzman, talimat alanını boş bırakarak guardrail'siz kalamaz.
+- Akış ajanlarının koruma bloğu aynı satırları kanal istisnası olmadan taşır: akış ajanı kimliği **isteyen** taraftır, veren değil.
+
+**Üyeler**
+- `HesapUzmaniInstructions` / `KartUzmaniInstructions` / `FinansalAnalizUzmaniInstructions`: Üç uzmanın sabit talimatı; üçü de aynı desenin birebir kopyasıdır, farklı olan tek şey alandır. Metinde **araç adı geçmez** — kural ilke bazlı yazılır ("ilgili listeleme aracını çağır"), çünkü prompt'a gömülen ad ile kayıtlı ad ayrıştığında ajan var olmayan bir aracı çağırır.
+- `BuildSlotFillingRules(proposeToolName, cancelToolName, handoffToolName)`: Slot toplayan ajanların `<operating_rules>` + `<output_contract>` + koruma bloğunu üretir — derlenmiş ve deklaratif akışların **paylaştığı tek kaynak**. Araç adları parametre olarak alınır, burada türetilmez; tek kaynak `WorkflowAgentDefinition.For`'dur.
+- `GetOrchestratorInstructions(dynamicRoutingRules)`: Orkestratörün sabit (kullanıcıya/isteğe özel bilgi içermeyen) sistem prompt'unu üretir. **Hiçbir akış adı saymaz** — akışlar çalışma zamanında eklenip kaldırılabilir; araç adları `ToolNames` sabitlerinden, uzman yönlendirme kuralları kartlardan (`AgentRuntime.BuildSpecialistRoutingRules`) gelir.
+- `BuildCandidateWorkflowsContext(candidateWorkflows)`: Semantik aramanın bulduğu adayları, orkestratöre **çalışma anında mesaj olarak** geçirilecek `<candidate_workflows>` bağlamına çevirir (sistem prompt'una gömülmez ki orkestratör tek seferlik kurulabilsin). Liste `- workflowName: 'x' — açıklama` biçimindedir: modelin `start_workflow`'a yazacağı anahtar adı listede görünür, tahmine bırakılmaz.
 
 ### 4.6 İzleme Katmanı — `TraceHub` / `TracingAIFunction` / `TracingChatClient`
 
@@ -276,7 +291,7 @@ Orkestratör LLM'i bir uzmana danışma kararı verirse (`hesap_uzmanina_sor` / 
 ### 5.3 Ajan Kurucusu — `WorkflowAgentFactory`
 
 **`WorkflowAgentFactory`** (`Workflows/Engine/WorkflowAgentFactory.cs`) — Bağımlılıkları: `McpToolProvider`, `ISessionAccessor`, `IServiceProvider`, `Func<string, IChatClient>`, `TraceHub`.
-- `GetOrCreateAsync<TSlots>(definition, ct)`: Ajanı adına göre önbellekten döner; yoksa `AgentPrompts.BuildDynamicWorkflowInstructions<TSlots>(definition.ProposeToolName, definition.CancelToolName, definition.HandoffToolName)` (deklaratif akışta kendi talimatı) ile kurar ve önbelleğe alır — **ajanlar stateless olduğu için tek örnek her oturuma yeter.**
+- `GetOrCreateAsync(definition, ct)`: Ajanı adına göre önbellekten döner; talimat metni ya da uzman listesi değiştiyse yeniden kurar (önbellek anahtarı: ad + talimat parmak izi + `SpecialistCatalog.Version`) — **ajanlar stateless olduğu için tek örnek her oturuma yeter.** Talimatı kendisi üretmez; `definition.Instructions` içinde hazır gelir (deklaratif akışlarda `DeclarativeWorkflowBuilder.BuildInstructions`).
 - `BuildToolsAsync<TSlots>(definition, ct)` (private): `Card`/`Account`/`Analyze` gruplarındaki tüm MCP araçlarını + `update_slot` + `propose_*` + `cancel_*` + `handoff_*` araçlarını birleştirir.
 - `BuildUpdateSlotTool<TSlots>(description)` (private): DI'dan `IDeterministicActionExecutor<TSlots>`'u çözüp `BankValidatedSlotWriter<TSlots>` üzerinden StateBag'e **banka onaylıyorsa** yazan `update_slot` aracını üretir. Deklaratif akışların eksekütörü DI'da olmadığı için orada `null` döner ve doğrulama atlanır.
 - `BuildProposeTool<TSlots>(proposeToolName)` (private): `session.ConstructSlots<TSlots>()` ile StateBag'i tipli nesneye çevirmeyi dener; eksik/geçersizse hatayı LLM'e döner, tamamsa `session.StoreProposedSlots` çağırıp `PROPOSAL_READY:` sinyaliyle JSON döner.
@@ -381,7 +396,7 @@ Doğrulama **kuralları** `Banking.Domain` servislerindedir; bu klasörde yalnı
 
 **`DeclarativeWorkflowBuilder`** (`Workflows/Declarative/DeclarativeWorkflowBuilder.cs`, static) — MAF YAML/JSON şemasını çalışma zamanında ayrıştırır.
 - `ParseFromYaml(yamlContent)` / `ParseFromJson(jsonContent)`: `YamlDotNet`/`System.Text.Json` ile `MicrosoftAgentDeclarativeDefinition`'a deserialize eder.
-- `BuildInstructions(definition, agentDefinition)`: Tanımdan (`<identity>`, `<custom_instructions>`, `<required_parameters>` blokları) LLM talimatı üretir; kural bloğunu `AgentPrompts.BuildSlotFillingRules`'tan alır ve araç adlarını `agentDefinition`'dan **okur** (yeniden türetmez).
+- `BuildInstructions(definition, agentDefinition)`: Tanımdan (`<identity>`, `<custom_instructions>`, `<required_parameters>` blokları) LLM talimatı üretir; kural, sunum ve koruma bloklarını `AgentPrompts.BuildSlotFillingRules`'tan alır ve araç adlarını `agentDefinition`'dan **okur** (yeniden türetmez). Dahili kimlik guardrail'ini ayrıca eklemez: kural zaten koruma bloğundadır, iki kez basılması hem token yakıyor hem de YAML'da `instructions` yoksa kuralın bir kopyasının hiç eklenmemesi gibi tutarsız bir davranış üretiyordu.
 
 **`MicrosoftAgentDeclarativeDefinition`** (`Workflows/Declarative/MicrosoftAgentDeclarativeDefinition.cs`) — Alanları: `Kind`, `Name`, `DisplayName`, `Description`, `Instructions`, `MkCode`, `Model` (`DeclarativeModelConfig`), `OutputSchema`/`InputSchema` (`DeclarativeSchemaConfig` → `DeclarativePropertyConfig` sözlüğü: `Type`, `Required`, `Description`).
 

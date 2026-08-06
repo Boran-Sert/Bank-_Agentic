@@ -1,5 +1,56 @@
 # Mimari Değişiklik Günlüğü (Changelog)
 
+## Sürüm: [Prompt-Deseni-Standardizasyonu] - 2026-08-06
+
+> Kapsam: `Banking.Agents/Prompts/AgentPrompts.cs` ile prompt üreten iki deklaratif kurucu. Motor sözleşmesi (sinyal araçları, HITL kapısı, oturum yolu) değişmedi; değişen yalnızca LLM'e giden metin ve o metnin tek kaynaktan üretilme biçimi.
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+1. **Ortak kural bloğu ajanların bir kısmına hiç ulaşmıyordu:** `BuildSpecialistRules()` yalnızca YAML'dan doğan uzmanlara ekleniyordu; derlenmiş `HesapUzmani`/`KrediKartiUzmani`/`AnalizUzmani` kendi güvenlik bloklarının inline kopyasını taşıyordu. Ortak bloğa eklenen bir kural bu üç uzmana girmiyordu — sapma teoride değil, fiilen mevcuttu: "veri uydurma" kuralı Analiz uzmanında hiç yoktu, para formatı kuralı iki uzmanda vardı birinde yoktu.
+2. **Prompt'a gömülü araç adları:** `BuildSlotFillingRules` araç adlarını bilinçli olarak parametre alırken (prompt'taki ad ile kayıtlı ad ayrışırsa ajan var olmayan bir aracı çağırır), uzman promptları `list_accounts`, `get_card_debt`, `AnalyzeStatementSummary` gibi adları literal yazıyordu. Öngörülen hata gerçekleşmişti: Analiz uzmanının prompt'u kayıtlı olmayan `kampanya_vektorel_ara` adını söylüyor, aynı prompt iki satır aşağıda doğru adı (`KampanyaVektorelAra`) kullanıyordu.
+3. **İfade kara listeleri:** "Bekleyin", "Bir dakika lütfen", "X aracını çağırıyorum" gibi yasak cümleler altı ayrı blokta, her kopyada biraz farklı yazılmıştı. Dile bağımlı, eksik ve token yakan bir yöntemdi; sızıntının deterministik kapısı zaten `ResponseSanitizer`'dır.
+4. **Dört ayrı prompt şeması yan yanaydı:** düz madde listesi (Hesap/Kart), tam XML ağacı (`<system_prompt><identity><purpose><workflow_guidelines>`, Analiz), `<identity>/<custom_instructions>/<strict_rules>` kompozisyonu (deklaratif kurucular). Aynı işi gören dört etiket dolaşıyordu: `<response_guidelines>`, `<strict_rules>`, `<guardrails>`, `<security_guardrails>`.
+5. **Guardrail bazen iki kez, bazen hiç basılıyordu:** `DeclarativeWorkflowBuilder` dahili kimlik kuralını `<custom_instructions>` içine ekliyor, `BuildSlotFillingRules` aynı metni koruma bloğunda tekrar veriyordu. YAML'da `instructions` alanı yoksa ilk kopya hiç eklenmiyordu.
+6. **Orkestratör prompt'u akış adı sayıyordu:** akışlar çalışma zamanında YAML ile eklenip kaldırılabilirken prompt "borç ödeme / EFT / Havale" örneklerini sabit taşıyordu; diskteki `limit-artirim` ve `otomatik-odeme-talimati` prompt'ta hiç yoktu. Araç adları da `ToolNames` sabitleri yerine literal yazılmıştı.
+7. **Aday akış listesi parametre adını söylemiyordu:** `BuildCandidateWorkflowsContext` listeyi `- Workflow: 'x' (Tanım: y)` diye basıp ardından "'workflowName' değerlerini kullan" diyordu; modelin araca yazacağı anahtar adı listede hiç geçmiyordu.
+8. **Prompt injection savunması yoktu:** hiçbir ajan talimatında talimat hiyerarşisi kuralı bulunmuyordu.
+
+### Çözüm ve Yeni Yapı
+
+#### 1. Tek yazım deseni (`AgentPrompts.cs` dosya başındaki yorumda tarif edilir)
+Her ajan talimatı aynı blok sırası ve aynı etiket sözlüğüyle yazılır: `<identity>` → `<scope>` → `<operating_rules>` → `<output_contract>` → `<guardrails>`. Deseni dayatan bir sınıf/şablon motoru **bilerek eklenmedi**: yeni bir ajan gerektiğinde iskelet elle kopyalanır. Şablon üreten bir tip, prompt yazmayı kolaylaştırmadan bir soyutlama katmanı daha getirirdi.
+
+#### 2. Ortak kural sabitleri
+Tekrarlanan kurallar tek tek sabite indi: `NoStatusChatter`, `NoInternalDisclosure`, `NoFabrication`, `InstructionPrecedence` (yeni — injection savunması), `InternalGuardrail`, `InternalIdAgentChannel`, `PresentationContract`. Koruma bloğu iki hazır sabitten okunur: `SpecialistGuardrails` (kimlik kuralının kanal istisnasını içerir) ve akış ajanları için kullanılan varyantı. Sabitler derleme zamanında çözülür; çalışma anında string birleştirme maliyeti yoktur.
+
+#### 3. Uzman promptları
+Üç uzman talimatı da aynı desene göre yeniden yazıldı; ortak sözleşme ve koruma blokları artık interpolasyonla gelir, inline kopya kalmadı. Analiz uzmanının 45 satırlık XML ağacı düzleştirildi ve metindeki bozuk Türkçe karakterler onarıldı. Her uzmana `<scope>` bloğu eklendi: neyi yapmadığı ve alan dışı soruyla ne yapacağı artık açıkça yazılı.
+
+#### 4. Araç adları prompt metninden çıktı
+Uzman promptlarındaki tüm literal araç adları kaldırıldı; kurallar ilke bazlı yazıldı ("ilgili listeleme aracını çağır"). Kayıtlı olmayan `kampanya_vektorel_ara` adı böylece ortadan kalktı. Adı zorunlu olan tek yer motorun sinyal araçlarıdır (`propose_*`/`cancel_*`/`handoff_*`); onlar tek kaynaktan (`WorkflowAgentDefinition.For`) parametreyle gelmeye devam ediyor. Orkestratörde araç adları `ToolNames` sabitlerinden interpolasyonla giriyor.
+
+#### 5. Orkestratör ve aday akış bağlamı
+Sistem prompt'u artık hiçbir akış adı saymıyor; akış listesi zaten her istekte `<candidate_workflows>` mesajıyla geliyor. Sistem prompt'unun istek-bağımsız kalması korundu — orkestratörün uygulama ömrü boyunca bir kez kurulması buna bağlı. Aday listesi `- workflowName: 'x' — açıklama` biçimine geçti; modelin araca yazacağı anahtar adı listede görünüyor.
+
+#### 6. Akış (slot doldurma) bloğu
+Dokuz kuralın tamamı korundu — "asla değer uydurma", uzmandan gelen cevabı aynı turda kaydetme, konu dışı mesajda `handoff_*` çağırma dahil. Bloğa `<output_contract>` ve koruma bloğu eklendi (akış ajanlarında ikisi de hiç yoktu) ve "işlemi ilerleten tek yol bu araçlardır" kuralı yazıya döküldü.
+
+#### 7. Maliyet etkisi (bilinçli kabul)
+Render edilen prompt boyutu uzman başına ~%15-35 arttı (ortak sunum sözleşmesi, `<scope>` ve injection kuralı artık her ajanda var); akış ajanı bloğu ~1.600 → ~3.400 karaktere çıktı, çünkü daha önce sunum sözleşmesi ve koruma bloğu hiç almıyordu. Karşılığında dört şema yerine tek şema ve sıfır kural tekrarı elde edildi.
+
+### Doğrulama
+- `dotnet build BankingAgents.sln` → 0 uyarı, 0 hata.
+- Render edilmiş prompt dökümü alındı: iç içe raw-string interpolasyonunda girinti kayması yok, araç adları doğru yerleşiyor, yönlendirme kuralları doğru iç içe geçiyor.
+- `tools/WorkflowTest` → onay / ret / çift tıklama senaryolarının üçü de geçti; idempotency ve tek makbuz garantisi korunuyor.
+- LLM'li davranış testi yapılmadı (depoda otomatik eval yok); önerilen manuel vakalar `docs/PROMPT-YAZIM-REHBERI.md` içindedir.
+
+### Dışa Kapalı (Internal) C# Değişiklikleri
+- **[Güncellendi]** `src/Banking.Agents/Prompts/AgentPrompts.cs`: Tek desene göre yeniden yazıldı; ortak kural sabitleri eklendi, `BuildSpecialistRules()` metodu yerini `SpecialistGuardrails` sabitine bıraktı, sınıf `static class` oldu, kullanılmayan `using`'ler (`System.ComponentModel`, `System.Reflection`, `System.Text`) kaldırıldı.
+- **[Güncellendi]** `src/Banking.Agents/Specialists/Declarative/DeclarativeSpecialistBuilder.cs`: `SpecialistGuardrails` kullanımına geçti; deklaratif uzmanlarda hiç bulunmayan `<output_contract>` bloğu eklendi.
+- **[Güncellendi]** `src/Banking.Agents/Workflows/Declarative/DeclarativeWorkflowBuilder.cs`: İkinci kez basılan dahili kimlik guardrail'i, çift `using` ve gereksiz alan kaldırıldı.
+- **[Güncellendi]** `src/Banking.Agents/Runtime/AgentRuntime.cs`: `BuildSpecialistRoutingRules` artık prompt girintisini (11 boşluk) runtime'a sızdırmıyor; biçim prompt tarafında.
+- **[Güncellendi]** `src/Banking.Host/Program.cs`: Hiçbir yerden enjekte edilmeyen ölü `AddSingleton<AgentPrompts>()` kaydı kaldırıldı (sınıf artık statik).
+- **[Yeni Dosya]** `docs/PROMPT-YAZIM-REHBERI.md`: Desenin tarifi, yeni ajan promptu ekleme adımları, kuralların gerekçeleri ve manuel test vakaları.
+
 ## Sürüm: [Modüler-Stateless-Fintech-Mimarisi-Refactor] - 2026-08-04
 
 > Kapsamlı kod incelemesi ve `REFACTOR-PLAN.md` planına dayanır; bkz. o belgedeki K/Y/O bulgu kodları.

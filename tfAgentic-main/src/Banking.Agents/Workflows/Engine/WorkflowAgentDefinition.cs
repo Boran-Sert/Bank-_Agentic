@@ -21,6 +21,11 @@ namespace Banking.Agents.Workflows.Engine;
 /// gelen değeri bu tanıma göre reddeder. Derlenmiş akışlarda <c>null</c>'dır — orada tipi slot
 /// record'unun kendisi zaten dayatır.
 /// </param>
+/// <param name="Temperature">
+/// YAML'daki <c>model.options.temperature</c>. <c>null</c> ise ajan kendi değerini dayatmaz ve
+/// <c>TracingChatClient</c> yapılandırmadaki <c>Agents:Temperature</c>'ı doldurur.
+/// </param>
+/// <param name="TopP">YAML'daki <c>model.options.topP</c>; <c>null</c> ise modelin varsayılanı geçerlidir.</param>
 public sealed record WorkflowAgentDefinition(
     string AgentName,
     string? Instructions,
@@ -28,13 +33,16 @@ public sealed record WorkflowAgentDefinition(
     string ProposeToolName,
     string CancelToolName,
     string HandoffToolName,
-    IReadOnlyDictionary<string, DeclarativePropertyConfig>? SlotSchema = null)
+    IReadOnlyDictionary<string, DeclarativePropertyConfig>? SlotSchema = null,
+    float? Temperature = null,
+    float? TopP = null)
 {
     /// <summary>Akış adından ajan ve araç adlarını türetir.</summary>
     public static WorkflowAgentDefinition For(
         string workflowName,
         string? instructions = null,
-        IReadOnlyDictionary<string, DeclarativePropertyConfig>? slotSchema = null)
+        IReadOnlyDictionary<string, DeclarativePropertyConfig>? slotSchema = null,
+        DeclarativeModelOptionsConfig? modelOptions = null)
     {
         var identifier = workflowName.Replace("-", "_").ToLowerInvariant();
 
@@ -45,6 +53,8 @@ public sealed record WorkflowAgentDefinition(
             ProposeToolName: $"propose_{identifier}",
             CancelToolName: $"cancel_{identifier}",
             HandoffToolName: $"handoff_{identifier}",
-            SlotSchema: slotSchema);
+            SlotSchema: slotSchema,
+            Temperature: modelOptions?.Temperature,
+            TopP: modelOptions?.TopP);
     }
 }

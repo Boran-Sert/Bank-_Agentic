@@ -73,7 +73,8 @@ public sealed class WorkflowRegistry(
             session.DeclareExpectedSlots(schemaProperties);
 
             // Ajan kimliği önce kurulur; talimat metni araç adlarını ondan okur, kendi türetmez.
-            var agentDefinition = WorkflowAgentDefinition.For(workflowName, slotSchema: schemaProperties);
+            var agentDefinition = WorkflowAgentDefinition.For(
+                workflowName, slotSchema: schemaProperties, modelOptions: definition.Model?.Options);
             agentDefinition = agentDefinition with
             {
                 Instructions = DeclarativeWorkflowBuilder.BuildInstructions(definition, agentDefinition)

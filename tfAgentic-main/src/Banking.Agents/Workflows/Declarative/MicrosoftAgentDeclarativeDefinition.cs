@@ -21,7 +21,10 @@ public sealed class MicrosoftAgentDeclarativeDefinition
     /// <summary>YAML'daki "mkCode" alanı — bu akışın ekranda hangi sayfayı açacağını belirtir.</summary>
     public string? MkCode { get; set; }
 
-    /// <summary>YAML'daki "model" bloğu — hangi yapay zeka modelinin kullanılacağı (şu an sistemde etkisi yok, okunmuyor).</summary>
+    /// <summary>
+    /// YAML'daki "model" bloğu — model ayarları. <c>options</c> altındaki değerler akışın ajanına
+    /// uygulanır; <c>id</c> henüz okunmuyor (süreçte tek bir <c>ChatClient</c> var).
+    /// </summary>
     public DeclarativeModelConfig? Model { get; set; }
 
     /// <summary>YAML'daki "outputSchema" bloğu — akışın toplayacağı bilgilerin listesi.</summary>
@@ -54,17 +57,24 @@ public sealed class DeclarativeModelConfig
     /// <summary>YAML'daki "model.id" alanı — model adı, örn. "gpt-4o" (şu an sistemde etkisi yok).</summary>
     public string? Id { get; set; }
 
-    /// <summary>YAML'daki "model.options" bloğu — model ayarları (şu an sistemde etkisi yok).</summary>
+    /// <summary>YAML'daki "model.options" bloğu — akışın ajanına uygulanan model ayarları.</summary>
     public DeclarativeModelOptionsConfig? Options { get; set; }
 }
 
-/// <summary>YAML'daki "model.options" bloğunun C# karşılığı.</summary>
+/// <summary>
+/// YAML'daki "model.options" bloğunun C# karşılığı.
+/// <para>
+/// Alanların tamamı isteğe bağlıdır: yazılmayan alan akışa <b>dayatılmaz</b>, yapılandırmadaki
+/// (<c>Agents:Temperature</c>) ya da modelin kendi varsayılanı geçerli olur. Buraya bir sabit
+/// yazmak, o varsayılan zincirini kullanılamaz hale getirirdi.
+/// </para>
+/// </summary>
 public sealed class DeclarativeModelOptionsConfig
 {
-    /// <summary>YAML'daki "model.options.temperature" alanı — modelin ne kadar yaratıcı cevap vereceği (şu an sistemde etkisi yok).</summary>
+    /// <summary>YAML'daki "model.options.temperature" alanı — modelin ne kadar yaratıcı cevap vereceği.</summary>
     public float? Temperature { get; set; }
 
-    /// <summary>YAML'daki "model.options.topP" alanı — ince model ayarı (şu an sistemde etkisi yok).</summary>
+    /// <summary>YAML'daki "model.options.topP" alanı — ince model ayarı.</summary>
     public float? TopP { get; set; }
 }
 

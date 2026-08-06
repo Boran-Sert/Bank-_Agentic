@@ -23,16 +23,5 @@ public static class AgentConstants
         public const string Account = "Account";
         public const string Card = "Card";
         public const string Analyze = "Analyze";
-        public const string Orchestrator = "Orchestrator";
-        public const string Workflow = "Workflow";
-    }
-
-    /// <summary>
-    /// Sistemdeki varsayılan iş akışı (Workflow) isimleri.
-    /// </summary>
-    public static class WorkflowNames
-    {
-        public const string CardPayment = "card-payment";
-        public const string MoneyTransfer = "money-transfer";
     }
 }

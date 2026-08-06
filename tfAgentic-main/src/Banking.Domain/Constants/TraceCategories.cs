@@ -14,5 +14,5 @@ public static class TraceCategories
     public const string Llm = "LLM";
     public const string Context = "CONTEXT";
     public const string Mcp = "MCP";
-    public const string A2a = "A2A";
+    public const string A2A = "A2A";
 }

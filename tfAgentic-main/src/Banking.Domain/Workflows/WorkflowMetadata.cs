@@ -1,8 +1,7 @@
-using System;
-
 namespace Banking.Domain.Workflows;
 
 /// <summary>
-/// Sistemde otomatik keşfedilen (Auto-Discovered) iş akışlarının meta verilerini temsil eden model.
+/// Semantik yönlendiricinin gördüğü iş akışı meta verisi. Akışların alanları YAML'da tanımlı
+/// olduğu için burada bir C# slot tipi taşınmaz.
 /// </summary>
-public record WorkflowMetadata(string WorkflowName, string Description, Type SlotType);
+public record WorkflowMetadata(string WorkflowName, string Description);

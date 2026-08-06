@@ -6,6 +6,7 @@ using Banking.Agents.Sessions;
 using Banking.Agents.Workflows;
 using Banking.Agents.Workflows.Actions;
 using Banking.Agents.Workflows.Declarative;
+using Banking.BankApi.Client;
 using Banking.Agents.Workflows.Engine;
 using Banking.Agents.Tracing;
 using Banking.Domain.Campaigns;
@@ -17,7 +18,6 @@ using Banking.Gateway.Models;
 using Banking.Domain.Financing;
 using Banking.Domain.Workflows;
 using Banking.Domain.Constants;
-using Banking.Domain.Records;
 using Microsoft.Agents.AI.Hosting;
 using OpenAI.Chat;
 using Microsoft.Extensions.AI;
@@ -95,11 +95,14 @@ builder.Services.AddSingleton<WorkflowDispatcher>();
 builder.Services.AddSingleton<OrchestratorFallback>(sp => async (userMessage, cancellationToken) =>
     (await sp.GetRequiredService<AgentRuntime>().AskOrchestratorAsync(userMessage, cancellationToken)).Reply ?? string.Empty);
 
-// --- Akış eylemleri: yeni bir akış eklemek = bir eksekütör + bir kayıt satırı ---
-// Eksekütör hem onay ekranını hem eylemi hem de banka ön-doğrulamasını taşır;
-// update_slot her değeri oturuma yazmadan önce aynı eksekütörden geçirir.
-builder.Services.AddSingleton<IDeterministicActionExecutor<PaymentSlots>, PaymentActionExecutor>();
-builder.Services.AddSingleton<IDeterministicActionExecutor<TransferSlots>, TransferActionExecutor>();
+// --- Banka istemcisi: bu sistemin bankaya açılan tek kapısı ---
+// Akışa özel eksekütör YOKTUR; tek jenerik RestWorkflowExecutor onay sonrası buraya tek istek atar.
+// Yeni bir akış eklemek = bir YAML (veya [Workflow] etiketli bir record); C# eksekütör yazılmaz.
+builder.Services.AddBankApiClient(builder.Configuration);
+
+// Onay sonrası bankaya giden TEK bileşen. Durumsuz olduğu için singleton; akışın kimliği ve
+// gideceği yol her çağrıda parametre olarak gelir.
+builder.Services.AddSingleton<IDeterministicActionExecutor, RestWorkflowExecutor>();
 
 // --- MW Gateway (Java MW ↔ .NET iletişimi) ---
 builder.Services.AddSingleton<FlowRouter>();
@@ -140,8 +143,6 @@ using (var scope = app.Services.CreateScope())
     financingSearcher.Initialize();
 
     var registry = scope.ServiceProvider.GetRequiredService<WorkflowRegistry>();
-    // Slot record'ları Banking.Domain'de, eksekütörler Banking.Agents'ta — iki assembly de taranır.
-    registry.AutoDiscoverWorkflows(typeof(PaymentSlots).Assembly, typeof(PaymentActionExecutor).Assembly);
 
     // Disk üzerindeki kayıtlı tüm MAF deklaratif YAML/JSON dosyalarını yükle (Kalıcılık - Disk Persistence)
     var agentsDir = Path.Combine(app.Environment.ContentRootPath, "declarative-agents");
@@ -254,7 +255,7 @@ app.MapPost("/api/workflows/register-declarative", async (HttpContext httpContex
 
     // Yeni MAF deklaratif ajanı anında RAG semantik indeksine al (Sıfır Cold Start)
     var searcher = sp.GetRequiredService<SemanticWorkflowSearcher>();
-    var newWorkflowMetadata = new WorkflowMetadata(workflowFileName, definition.Description, typeof(Dictionary<string, object?>));
+    var newWorkflowMetadata = new WorkflowMetadata(workflowFileName, definition.Description);
     searcher.AddOrUpdate(newWorkflowMetadata);
 
     // TraceHub canlı akışına anında log yayınla

@@ -1,4 +1,4 @@
-using System.Reflection;
+
 using Banking.Agents.Mcp;
 using Banking.Agents.Runtime;
 using Banking.Agents.Specialists;
@@ -9,9 +9,7 @@ using Banking.Agents.Workflows.Declarative;
 using Banking.Agents.Workflows.Engine;
 using Banking.Agents.Tracing;
 using Banking.Domain.Campaigns;
-using Banking.Domain.Data;
 using Banking.Domain.MkCodes;
-using Banking.Domain.Services;
 using Banking.Mcp;
 using Banking.Mcp.Registry;
 using Banking.Gateway;
@@ -47,16 +45,7 @@ builder.Services.AddSingleton(agentOptions);
 builder.WebHost.UseUrls("http://*:5080");
 
 // --- Domain (in-memory bankacılık simülasyonu) ---
-builder.Services.AddSingleton<InMemoryBankStore>();
-builder.Services.AddSingleton<CustomerContext>();
-builder.Services.AddSingleton<IAccountService, AccountService>();
-builder.Services.AddSingleton<ICardService, CardService>();
-builder.Services.AddSingleton<ICollectionService, CollectionService>();
-builder.Services.AddSingleton<ITransferService, TransferService>();
-builder.Services.AddSingleton<IAnalyzeService, AnalyzeService>();
-builder.Services.AddSingleton<ICampaignCatalogService, CampaignCatalogService>();
 builder.Services.AddSingleton<ICampaignSyncService, CampaignSyncService>();
-builder.Services.AddSingleton<IFinancingCatalogService, FinancingCatalogService>();
 
 // --- Semantik Arama & Embedding ---
 builder.Services.AddSingleton<LocalEmbedder>();

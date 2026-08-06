@@ -5,6 +5,7 @@
     <ProjectReference Include="..\Banking.Mcp\Banking.Mcp.csproj" />
     <ProjectReference Include="..\Banking.Domain\Banking.Domain.csproj" />
     <ProjectReference Include="..\Banking.Gateway\Banking.Gateway.csproj" />
+    <ProjectReference Include="..\Banking.BankApi.Client\Banking.BankApi.Client.csproj" />
     <ProjectReference Include="..\Banking.BankApi\Banking.BankApi.csproj" />
   </ItemGroup>
 

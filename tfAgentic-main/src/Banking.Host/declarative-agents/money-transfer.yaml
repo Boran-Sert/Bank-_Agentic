@@ -1,0 +1,33 @@
+kind: Workflow
+name: money-transfer
+displayName: Para Transferi
+description: IBAN'a para transferi, EFT ve havale işlemleri.
+mkCode: TransferMenu
+instructions: |
+  Kullanıcının parayı hangi hesaptan göndereceğini, hedef IBAN'ı ve tutarı netleştir.
+  Kaynak hesap kimliğini kullanıcıya sorma; araçlarla hesapları getir, seçim iste ve
+  seçtiği hesabın kimliğini yaz. Açıklama zorunlu değildir, eklemek isteyip istemediğini sor.
+outputSchema:
+  type: object
+  properties:
+    sourceAccountId:
+      type: string
+      required: true
+      description: Paranın çekileceği banka hesabının kimliği. list_accounts aracından gelir.
+    targetIban:
+      type: string
+      required: true
+      description: >-
+        Paranın gönderileceği IBAN. Kullanıcının verdiği değer olduğu gibi yazılır;
+        biçimi ve geçerliliği bankanın kararıdır.
+    amount:
+      type: number
+      required: true
+      description: Transfer edilecek tutar, sayı olarak. Kullanıcının açıkça söylediği rakamdır.
+    description:
+      type: string
+      required: false
+      description: İşlem açıklaması veya alıcı adı. Kullanıcı vermek istemezse boş bırakılır.
+action:
+  method: PUT
+  path: /api/money-transfer

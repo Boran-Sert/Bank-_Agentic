@@ -957,6 +957,9 @@
       <button class="tab-btn" onclick="switchTab('studio-tab', event)">
         <i class="fa-solid fa-wand-magic-sparkles"></i> Deklaratif Agent Studio (Görsel Form)
       </button>
+      <button class="tab-btn" onclick="switchTab('specialist-tab', event); loadSpecialistStudio();">
+        <i class="fa-solid fa-user-gear"></i> Uzman Ajan Studio (A2A)
+      </button>
       <button class="tab-btn" onclick="switchTab('diag-tab', event); fetchDiag();">
         <i class="fa-solid fa-chart-line"></i> Sistem Tanılama
       </button>
@@ -1117,7 +1120,70 @@
       </div>
     </div>
 
-    <!-- TAB 3: Diagnostics Page -->
+    <!-- TAB 3: Uzman Ajan Studio — uzman tanımı, araç kapsamı ve A2A adresi arayüzden -->
+    <div id="specialist-tab" class="tab-content">
+      <div class="diag-container">
+        <h2 style="font-size: 20px; font-weight: 700;">Uzman Ajan Studio</h2>
+        <p style="color: var(--text-muted); margin: 6px 0 18px; font-size: 13px;">
+          Uzman ajanlar banka verisine erişen tek katmandır; iş akışı ajanları veriyi yalnızca buradan,
+          A2A üzerinden alır. Kaydettiğiniz uzman <b>yeniden başlatmaya gerek kalmadan</b> anında konuşulabilir olur.
+        </p>
+
+        <div class="form-grid">
+          <div class="form-group">
+            <label><i class="fa-solid fa-id-badge"></i> Uzman Adı (teknik kimlik)</label>
+            <input id="sp-name" class="form-control" placeholder="kredi" oninput="updateSpecialistYaml()">
+          </div>
+          <div class="form-group">
+            <label><i class="fa-solid fa-tag"></i> Görünen Ad</label>
+            <input id="sp-display" class="form-control" placeholder="Kredi Uzmanı" oninput="updateSpecialistYaml()">
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label><i class="fa-solid fa-circle-info"></i> Açıklama — <b>ne zaman bu uzmana sorulacağını</b> bu metin belirler</label>
+            <input id="sp-desc" class="form-control" placeholder="Kredi, taksit ve finansman sorularını yanıtlayan uzman." oninput="updateSpecialistYaml()">
+          </div>
+          <div class="form-group" style="grid-column: 1 / -1;">
+            <label><i class="fa-solid fa-scroll"></i> Talimat (nasıl davranacağı)</label>
+            <textarea id="sp-instructions" class="form-control" rows="4" oninput="updateSpecialistYaml()"
+              placeholder="Kullanıcıya uygun finansman seçeneklerini bul ve faiz oranıyla birlikte sade bir dille anlat."></textarea>
+          </div>
+          <div class="form-group">
+            <label><i class="fa-solid fa-diagram-project"></i> A2A Adresi</label>
+            <input id="sp-route" class="form-control" placeholder="kredi" oninput="updateSpecialistYaml()">
+            <small style="color: var(--text-muted);">Adres: <code id="sp-route-preview">/a2a/...</code></small>
+          </div>
+          <div class="form-group">
+            <label><i class="fa-solid fa-plug"></i> Köprü Aracı Adı (çağıranların göreceği ad)</label>
+            <input id="sp-bridge" class="form-control" placeholder="kredi_uzmanina_sor" oninput="updateSpecialistYaml()">
+          </div>
+          <div class="form-group">
+            <label><i class="fa-solid fa-temperature-half"></i> Temperature</label>
+            <input id="sp-temp" class="form-control" type="number" step="0.1" min="0" max="2" placeholder="0.1" oninput="updateSpecialistYaml()">
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 14px;">
+          <label><i class="fa-solid fa-screwdriver-wrench"></i> Kullanabileceği Araçlar — seçilmeyen araca <b>erişemez</b></label>
+          <div id="sp-tools" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; max-height: 260px; overflow-y: auto; padding: 10px; border: 1px solid var(--border); border-radius: 8px;"></div>
+        </div>
+
+        <div class="editor-actions" style="margin-top: 16px;">
+          <button class="btn-primary" onclick="registerSpecialist()">
+            <i class="fa-solid fa-cloud-arrow-up"></i> Uzmanı Kaydet & A2A'ya Bağla
+          </button>
+        </div>
+
+        <div id="sp-status" class="status-toast"></div>
+
+        <h3 style="margin-top: 26px; font-size: 16px; font-weight: 700;">Kayıtlı Uzmanlar</h3>
+        <div id="sp-list" class="diag-grid" style="margin-top: 10px;"></div>
+
+        <h3 style="margin-top: 26px; font-size: 16px; font-weight: 700;">Üretilen Tanım</h3>
+        <textarea id="sp-yaml" class="yaml-editor" spellcheck="false" readonly style="min-height: 200px;"></textarea>
+      </div>
+    </div>
+
+    <!-- TAB 4: Diagnostics Page -->
     <div id="diag-tab" class="tab-content">
       <div class="diag-container">
         <h2 style="font-size: 20px; font-weight: 700;">Sistem Diagnostik & RAG Durumu</h2>
@@ -1177,6 +1243,122 @@ function switchTab(tabId, evt) {
     evt.currentTarget.classList.add('active');
   }
   document.getElementById(tabId).classList.add('active');
+}
+
+// =====================================================================
+// UZMAN AJAN STUDIO
+// Araç listesi ve kayıtlı uzmanlar sunucudan okunur; hiçbiri burada sabit
+// yazılmaz — yeni bir MCP aracı eklendiğinde bu ekran kendiliğinden görür.
+// =====================================================================
+let specialistToolCatalog = [];
+
+async function loadSpecialistStudio() {
+  try {
+    const [tools, specialists] = await Promise.all([
+      fetch('/api/tools').then(r => r.json()),
+      fetch('/api/specialists').then(r => r.json())
+    ]);
+
+    specialistToolCatalog = tools;
+    renderSpecialistTools(tools);
+    renderSpecialistList(specialists);
+    updateSpecialistYaml();
+  } catch (err) {
+    showSpecialistStatus('Araç ve uzman listesi alınamadı: ' + err.message, false);
+  }
+}
+
+function renderSpecialistTools(tools) {
+  const container = document.getElementById('sp-tools');
+  const byGroup = {};
+  tools.forEach(tool => (byGroup[tool.group] ||= []).push(tool));
+
+  container.innerHTML = Object.keys(byGroup).sort().map(group => `
+    <div style="grid-column: 1 / -1; font-weight: 700; font-size: 12px; color: var(--text-muted); margin-top: 6px;">${group}</div>
+    ${byGroup[group].map(tool => `
+      <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 12px; cursor: pointer;">
+        <input type="checkbox" class="sp-tool" value="${tool.name}" onchange="updateSpecialistYaml()">
+        <span><b>${tool.name}</b><br><span style="color: var(--text-muted);">${(tool.description || '').slice(0, 90)}</span></span>
+      </label>`).join('')}
+  `).join('');
+}
+
+function renderSpecialistList(specialists) {
+  document.getElementById('sp-list').innerHTML = specialists.map(s => `
+    <div class="diag-card">
+      <h3><i class="fa-solid fa-user-gear"></i> ${s.displayName || s.name}</h3>
+      <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">${s.description || ''}</div>
+      <div style="font-size: 12px;"><b>Köprü:</b> <code>${s.bridgeToolName}</code></div>
+      <div style="font-size: 12px;"><b>A2A:</b> <code>${s.a2aUrl}</code></div>
+      <div style="font-size: 12px;"><b>Araçlar:</b> ${(s.tools && s.tools.length) ? s.tools.join(', ') : ('grup: ' + s.toolGroup)}</div>
+    </div>`).join('') || '<div style="color: var(--text-muted);">Kayıtlı uzman yok.</div>';
+}
+
+function selectedSpecialistTools() {
+  return Array.from(document.querySelectorAll('.sp-tool:checked')).map(c => c.value);
+}
+
+function updateSpecialistYaml() {
+  const value = id => (document.getElementById(id).value || '').trim();
+
+  const name = value('sp-name');
+  const route = value('sp-route') || name;
+  const bridge = value('sp-bridge') || (name ? name.replace(/-/g, '_') + '_uzmanina_sor' : '');
+  const temperature = value('sp-temp');
+  const instructions = value('sp-instructions');
+  const tools = selectedSpecialistTools();
+
+  document.getElementById('sp-route-preview').textContent = '/a2a/' + (route || '...');
+
+  let yaml = `kind: Specialist\nname: ${name}\n`;
+  if (value('sp-display')) yaml += `displayName: ${value('sp-display')}\n`;
+  yaml += `description: ${value('sp-desc')}\n`;
+  if (instructions) yaml += `instructions: |\n${instructions.split('\n').map(l => '  ' + l).join('\n')}\n`;
+  if (route) yaml += `a2aRoute: ${route}\n`;
+  if (bridge) yaml += `bridgeToolName: ${bridge}\n`;
+  if (tools.length) yaml += `tools:\n${tools.map(t => '  - ' + t).join('\n')}\n`;
+  if (temperature) yaml += `model:\n  options:\n    temperature: ${temperature}\n`;
+
+  document.getElementById('sp-yaml').value = yaml;
+}
+
+function showSpecialistStatus(message, ok) {
+  const status = document.getElementById('sp-status');
+  status.textContent = message;
+  status.style.color = ok ? 'var(--accent-emerald)' : '#e5484d';
+}
+
+async function registerSpecialist() {
+  const name = (document.getElementById('sp-name').value || '').trim();
+  const description = (document.getElementById('sp-desc').value || '').trim();
+
+  if (!name || !description) {
+    showSpecialistStatus('Ad ve açıklama zorunludur — açıklama, çağıranların bu uzmana ne zaman soracağını belirler.', false);
+    return;
+  }
+  if (!selectedSpecialistTools().length) {
+    showSpecialistStatus('En az bir araç seçin; araçsız uzman hiçbir soruya cevap veremez.', false);
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/specialists/register-declarative', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: document.getElementById('sp-yaml').value
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showSpecialistStatus(data.error || 'Kayıt başarısız.', false);
+      return;
+    }
+
+    showSpecialistStatus(data.message, true);
+    renderSpecialistList(await fetch('/api/specialists').then(r => r.json()));
+  } catch (err) {
+    showSpecialistStatus('Kayıt sırasında hata: ' + err.message, false);
+  }
 }
 
 function addMsg(text, type) {

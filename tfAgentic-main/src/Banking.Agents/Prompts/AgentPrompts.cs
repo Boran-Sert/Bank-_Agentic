@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Reflection;
 using System.Text;
-using Banking.Domain.Attributes;
 using Banking.Domain.Workflows;
 
 namespace Banking.Agents.Prompts;
@@ -50,41 +49,6 @@ public static class AgentPrompts
         7. {InternalIdGuardrail}
         </strict_rules>
         """;
-
-    /// <summary>
-    /// Herhangi bir TSlots modeli için Reflection kullanarak otomatik ve dinamik slot-filling prompt'u üretir.
-    /// </summary>
-    /// <param name="proposeToolName">Parametreler tamamlandığında çağrılacak aracın <b>gerçek</b> adı.</param>
-    /// <param name="cancelToolName">Kullanıcı vazgeçtiğinde çağrılacak aracın <b>gerçek</b> adı.</param>
-    /// <param name="handoffToolName">Mesaj konu dışıysa çağrılacak aracın <b>gerçek</b> adı.</param>
-    public static string BuildDynamicWorkflowInstructions<TSlots>(
-        string proposeToolName, string cancelToolName, string handoffToolName)
-    {
-        var slotType = typeof(TSlots);
-        var workflowAttribute = slotType.GetCustomAttribute<WorkflowAttribute>();
-        var descriptionAttribute = slotType.GetCustomAttribute<DescriptionAttribute>();
-
-        var workflowName = workflowAttribute?.WorkflowName ?? slotType.Name.ToLowerInvariant();
-        var workflowDescription = descriptionAttribute?.Description ?? $"{workflowName} iş akışı.";
-
-        var stringBuilder = new StringBuilder();
-
-        stringBuilder.AppendLine("<identity>");
-        stringBuilder.AppendLine($"Sen bir {slotType.Name} ({workflowName}) parametre toplama asistanısın. Görevin, müşteriden '{workflowDescription}' işlemi için gerekli parametreleri eksiksiz toplamaktır.");
-        stringBuilder.AppendLine("</identity>");
-        stringBuilder.AppendLine();
-        stringBuilder.AppendLine("<required_parameters>");
-        foreach (var property in slotType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-        {
-            var propertyDescription = property.GetCustomAttribute<DescriptionAttribute>()?.Description ?? property.Name;
-            stringBuilder.AppendLine($"- {property.Name} ({property.PropertyType.Name}): {propertyDescription}");
-        }
-        stringBuilder.AppendLine("</required_parameters>");
-        stringBuilder.AppendLine();
-        stringBuilder.Append(BuildSlotFillingRules(proposeToolName, cancelToolName, handoffToolName));
-
-        return stringBuilder.ToString();
-    }
 
     /// <summary>
     /// Semantik aramanın bulduğu aday iş akışlarını, <b>çalışma anında mesaj olarak</b> geçirilecek

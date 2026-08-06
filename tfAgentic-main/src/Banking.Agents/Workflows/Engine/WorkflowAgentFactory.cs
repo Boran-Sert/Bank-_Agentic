@@ -2,15 +2,14 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Banking.Agents.Mcp;
-using Banking.Agents.Prompts;
 using Banking.Agents.Sessions;
 using Banking.Agents.Tracing;
 using Banking.Agents.Validation;
+using Banking.Agents.Workflows.Declarative;
 using Banking.Domain.Constants;
 using Banking.Mcp.Registry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Banking.Agents.Workflows.Engine;
 
@@ -25,7 +24,6 @@ namespace Banking.Agents.Workflows.Engine;
 public sealed class WorkflowAgentFactory(
     McpToolProvider mcpToolProvider,
     ISessionAccessor sessionAccessor,
-    IServiceProvider serviceProvider,
     Func<string, IChatClient> tracedChatClientFactory,
     TraceHub hub)
 {
@@ -47,9 +45,8 @@ public sealed class WorkflowAgentFactory(
     private readonly ConcurrentDictionary<string, AIAgent> _agentsByName = new(StringComparer.Ordinal);
 
     /// <summary>Slot şemasına göre iş akışı ajanını döner; ilk çağrıda kurar, sonrakilerde önbellekten verir.</summary>
-    public async Task<AIAgent> GetOrCreateAsync<TSlots>(
+    public async Task<AIAgent> GetOrCreateAsync(
         WorkflowAgentDefinition definition, CancellationToken cancellationToken = default)
-        where TSlots : class
     {
         if (_agentsByName.TryGetValue(definition.AgentName, out var cachedAgent))
             return cachedAgent;
@@ -60,26 +57,24 @@ public sealed class WorkflowAgentFactory(
             ChatOptions = new ChatOptions
             {
                 Temperature = 0.1f,
-                Instructions = definition.Instructions ?? AgentPrompts.BuildDynamicWorkflowInstructions<TSlots>(
-                    definition.ProposeToolName, definition.CancelToolName, definition.HandoffToolName),
-                Tools = await BuildToolsAsync<TSlots>(definition, cancellationToken)
+                Instructions = definition.Instructions,
+                Tools = await BuildToolsAsync(definition, cancellationToken)
             }
         });
 
         return _agentsByName.GetOrAdd(definition.AgentName, agent);
     }
 
-    private async Task<List<AITool>> BuildToolsAsync<TSlots>(
+    private async Task<List<AITool>> BuildToolsAsync(
         WorkflowAgentDefinition definition, CancellationToken cancellationToken)
-        where TSlots : class
     {
         var tools = new List<AITool>();
 
         foreach (var group in new[] { ToolGroup.Card, ToolGroup.Account, ToolGroup.Analyze })
             tools.AddRange(await mcpToolProvider.GetTracedToolsForGroupAsync(group, cancellationToken));
 
-        tools.Add(BuildUpdateSlotTool<TSlots>(definition.SlotUpdateDescription));
-        tools.Add(BuildProposeTool<TSlots>(definition.ProposeToolName));
+        tools.Add(BuildUpdateSlotTool(definition));
+        tools.Add(BuildProposeTool(definition));
         tools.Add(BuildCancelTool(definition.CancelToolName));
         tools.Add(BuildHandoffTool(definition.HandoffToolName));
 
@@ -87,24 +82,20 @@ public sealed class WorkflowAgentFactory(
     }
 
     /// <summary>
-    /// Her parametreyi oturuma yazmadan önce bankanın ön-doğrulamasından geçirir; böylece
-    /// yetersiz bakiye gibi hatalar onay ekranında değil, kullanıcı değeri girdiği anda bildirilir.
+    /// Her parametreyi oturuma yazmadan önce YAML'daki tip tanımından geçirir; uymayan değer
+    /// kaydedilmez ve onay ekranına ulaşamaz. Bankacılık kuralı burada uygulanmaz — o bankanın
+    /// kendi backend'inin işidir.
     /// </summary>
-    private AITool BuildUpdateSlotTool<TSlots>(string description) where TSlots : class
+    private AITool BuildUpdateSlotTool(WorkflowAgentDefinition definition)
     {
-        // Eksekütör hem doğrulamayı hem eylemi taşır. Deklaratif akışların eksekütörü DI'da
-        // değil, WorkflowRegistry içinde kurulduğu için burada null dönebilir — o durumda
-        // doğrulama atlanır (deklaratif akışlar zaten para hareketi yapmaz).
-        var slotWriter = new BankValidatedSlotWriter<TSlots>(
-            sessionAccessor, serviceProvider.GetService<IDeterministicActionExecutor<TSlots>>(), hub);
+        var slotWriter = new SchemaValidatedSlotWriter(sessionAccessor, hub, definition.SlotSchema);
 
         var tool = AIFunctionFactory.Create(
-            (string key, object value, CancellationToken cancellationToken) =>
-                slotWriter.WriteSlotIfBankAcceptsAsync(key, value, cancellationToken),
+            (string key, object value) => slotWriter.WriteSlotIfSchemaAccepts(key, value),
             new AIFunctionFactoryOptions
             {
                 Name = UpdateSlotToolName,
-                Description = description,
+                Description = definition.SlotUpdateDescription + DescribeExpectedTypes(definition.SlotSchema),
                 JsonSchemaCreateOptions = OllamaCompatibleSchemaOptions
             });
 
@@ -112,16 +103,38 @@ public sealed class WorkflowAgentFactory(
     }
 
     /// <summary>
+    /// Beklenen tipleri aracın <b>açıklamasına</b> yazar.
+    /// <para>
+    /// Şemaya yazılamıyor: <c>value</c> parametresi <c>object</c> olduğu için üretilen düğüm
+    /// <see cref="OllamaCompatibleSchemaOptions"/> tarafından <c>{}</c>'a indirgeniyor ve tip
+    /// bilgisi kayboluyor. Açıklama ise modele olduğu gibi ulaşır — tipin modele ulaştığı tek
+    /// kanal budur. Kural yine de burada dayatılmaz; dayatma <c>update_slot</c>'un arkasındaki
+    /// şema kapısındadır. Bu metin yalnızca modelin baştan doğru göndermesini sağlar.
+    /// </para>
+    /// </summary>
+    private static string DescribeExpectedTypes(IReadOnlyDictionary<string, DeclarativePropertyConfig>? slotSchema)
+    {
+        if (slotSchema is not { Count: > 0 }) return string.Empty;
+
+        var expectedTypes = string.Join(", ", slotSchema.Select(slot => $"{slot.Key}: {slot.Value.Type}"));
+
+        return $" Beklenen değer tipleri — {expectedTypes}. " +
+               "Değeri bu tipte gönder; uymayan değer kaydedilmez.";
+    }
+
+    /// <summary>
     /// Toplanan parametrelerden slot nesnesini kurar. Eksik veya dönüştürülemeyen alan varsa
     /// teklif üretilmez; LLM'e hangi alanın sorulacağı açıkça bildirilir.
     /// </summary>
-    private AITool BuildProposeTool<TSlots>(string proposeToolName) where TSlots : class
+    private AITool BuildProposeTool(WorkflowAgentDefinition definition)
     {
+        var proposeToolName = definition.ProposeToolName;
+
         var tool = AIFunctionFactory.Create(
             () =>
             {
                 var session = sessionAccessor.Current;
-                var construction = session.ConstructSlots<TSlots>();
+                var construction = session.ConstructSlots();
 
                 if (!construction.IsComplete)
                 {
@@ -129,15 +142,15 @@ public sealed class WorkflowAgentFactory(
                     return $"ERROR: Teklif oluşturulamadı ({construction.DescribeProblems()}). Bu alanları kullanıcıdan tekrar iste.";
                 }
 
-                session.StoreProposedSlots(session.ActiveWorkflowName ?? typeof(TSlots).Name, construction.Slots!);
-                hub.Publish(TraceCategories.Workflow, $"{typeof(TSlots).Name} parametreleri onaya hazır");
+                session.StoreProposedSlots(session.ActiveWorkflowName ?? definition.AgentName, construction.Slots!);
+                hub.Publish(TraceCategories.Workflow, $"{definition.AgentName} parametreleri onaya hazır");
 
                 return WorkflowAgentSignals.ProposalReady + JsonSerializer.Serialize(construction.Slots);
             },
             new AIFunctionFactoryOptions
             {
                 Name = proposeToolName,
-                Description = $"Aktif {typeof(TSlots).Name} iş akışının tüm parametreleri netleştiğinde çağrılır."
+                Description = "Aktif iş akışının tüm zorunlu parametreleri netleştiğinde çağrılır."
             });
 
         return new TracingAIFunction(tool, hub, TraceCategories.Workflow, proposeToolName, "Onaya sunuluyor");

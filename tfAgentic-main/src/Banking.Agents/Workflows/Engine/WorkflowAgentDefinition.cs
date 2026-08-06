@@ -1,3 +1,5 @@
+using Banking.Agents.Workflows.Declarative;
+
 namespace Banking.Agents.Workflows.Engine;
 
 /// <summary>
@@ -14,16 +16,25 @@ namespace Banking.Agents.Workflows.Engine;
 /// <param name="ProposeToolName">Parametreler tamamlandığında çağrılacak araç.</param>
 /// <param name="CancelToolName">Kullanıcı vazgeçtiğinde çağrılacak araç.</param>
 /// <param name="HandoffToolName">Kullanıcının mesajı akışla ilgisizse çağrılacak araç.</param>
+/// <param name="SlotSchema">
+/// Deklaratif akışın YAML'daki parametre tanımları (slot adı → tip/açıklama). <c>update_slot</c>
+/// gelen değeri bu tanıma göre reddeder. Derlenmiş akışlarda <c>null</c>'dır — orada tipi slot
+/// record'unun kendisi zaten dayatır.
+/// </param>
 public sealed record WorkflowAgentDefinition(
     string AgentName,
     string? Instructions,
     string SlotUpdateDescription,
     string ProposeToolName,
     string CancelToolName,
-    string HandoffToolName)
+    string HandoffToolName,
+    IReadOnlyDictionary<string, DeclarativePropertyConfig>? SlotSchema = null)
 {
     /// <summary>Akış adından ajan ve araç adlarını türetir.</summary>
-    public static WorkflowAgentDefinition For(string workflowName, string? instructions = null)
+    public static WorkflowAgentDefinition For(
+        string workflowName,
+        string? instructions = null,
+        IReadOnlyDictionary<string, DeclarativePropertyConfig>? slotSchema = null)
     {
         var identifier = workflowName.Replace("-", "_").ToLowerInvariant();
 
@@ -33,6 +44,7 @@ public sealed record WorkflowAgentDefinition(
             SlotUpdateDescription: $"Aktif '{workflowName}' iş akışı için alınan her parametreyi oturuma kaydeder.",
             ProposeToolName: $"propose_{identifier}",
             CancelToolName: $"cancel_{identifier}",
-            HandoffToolName: $"handoff_{identifier}");
+            HandoffToolName: $"handoff_{identifier}",
+            SlotSchema: slotSchema);
     }
 }

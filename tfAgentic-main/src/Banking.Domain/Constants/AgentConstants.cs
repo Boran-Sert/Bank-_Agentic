@@ -24,4 +24,10 @@ public static class AgentConstants
         public const string Card = "Card";
         public const string Analyze = "Analyze";
     }
+
+    /// <summary>
+    /// Tüm A2A trafiğini karşılayan yol parametreli dağıtıcı ajanın adı. Uzman başına
+    /// endpoint açılmadığı için A2A tarafında kayıtlı tek ajan budur.
+    /// </summary>
+    public const string A2ADispatcherAgentName = "uzman-dagitici";
 }

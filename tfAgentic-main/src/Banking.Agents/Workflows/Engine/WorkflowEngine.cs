@@ -1,8 +1,7 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using Banking.Agents.Sessions;
 using Banking.Agents.Tracing;
+using Banking.Agents.Workflows.Actions;
 using Banking.Agents.Workflows.Approval;
 using Banking.Domain.Constants;
 using Microsoft.Agents.AI;
@@ -17,8 +16,8 @@ namespace Banking.Agents.Workflows.Engine;
 public delegate Task<string> OrchestratorFallback(string userMessage, CancellationToken cancellationToken);
 
 /// <summary>
-/// <b>Tüm iş akışlarının tek motoru.</b> Akışa özgü hiçbir kod içermez; farklı olan sadece
-/// <typeparamref name="TSlots"/> ve eksekütördür.
+/// <b>Tüm iş akışlarının tek motoru.</b> Akışa özgü hiçbir kod ve hiçbir tip içermez; farklı
+/// olan sadece YAML'dan gelen <see cref="WorkflowActionDefinition"/>'dır.
 /// <para>
 /// Akış üç evreden ibarettir ve motorun tek genel metodu <see cref="AdvanceWorkflowStepAsync"/> bu evreleri
 /// açık bir <c>switch</c> ile ayırır:
@@ -37,13 +36,13 @@ public delegate Task<string> OrchestratorFallback(string userMessage, Cancellati
 /// karşılayabilir ve bellekte asılı kalan konuşma nesnesi olmaz.
 /// </para>
 /// </summary>
-public sealed class WorkflowEngine<TSlots>(
+public sealed class WorkflowEngine(
     SessionContext session,
+    WorkflowActionDefinition action,
     AIAgent workflowAgent,
-    IDeterministicActionExecutor<TSlots> actionExecutor,
+    IDeterministicActionExecutor actionExecutor,
     OrchestratorFallback orchestratorFallback,
     TraceHub hub) : IWorkflowEngine
-    where TSlots : class
 {
     /// <summary>
     /// Akışı bir adım ilerletir. Hangi evrede olunduğu oturumdan okunur; çağıranın bilmesine
@@ -69,7 +68,7 @@ public sealed class WorkflowEngine<TSlots>(
     {
         session.Phase = WorkflowPhases.SlotFilling;
 
-        var slotSummary = session.GetSlotStatus<TSlots>().Describe();
+        var slotSummary = session.GetSlotStatus().Describe();
 
         var kickoffMessage = string.IsNullOrWhiteSpace(initialMessage)
             ? $"İşlemi başlatmak istiyorum. Lütfen gerekli bilgileri sırayla sor.\n\n({slotSummary})"
@@ -90,7 +89,7 @@ public sealed class WorkflowEngine<TSlots>(
     private async Task<WorkflowStepResult> CollectSlotsAsync(string? userMessage, CancellationToken cancellationToken)
     {
         var answer = userMessage ?? string.Empty;
-        var slotSummary = session.GetSlotStatus<TSlots>().Describe();
+        var slotSummary = session.GetSlotStatus().Describe();
 
         var agentText = await RunAgentTurnAsync($"{answer}\n\n({slotSummary})", cancellationToken);
         return await InterpretAgentOutputAsync(agentText, answer, cancellationToken);
@@ -131,13 +130,13 @@ public sealed class WorkflowEngine<TSlots>(
         }
 
         // 2.3 — Parametreler araç çağrılarıyla tamamlandı.
-        if (session.GetSlotStatus<TSlots>().IsComplete && session.ReadProposedSlots<TSlots>() is { } completedSlots)
+        if (session.GetSlotStatus().IsComplete && session.ReadProposedSlots() is { } completedSlots)
             return PresentConfirmation(completedSlots);
 
         // 2.4 — Ajan teklif JSON'ı ürettiyse ayrıştırılıp saklanır.
         if (Contains(agentText, WorkflowAgentSignals.ProposalReady) && TryParseProposal(agentText!) is { } proposedSlots)
         {
-            session.StoreProposedSlots(session.ActiveWorkflowName ?? typeof(TSlots).Name, proposedSlots);
+            session.StoreProposedSlots(action.WorkflowName, proposedSlots);
             return PresentConfirmation(proposedSlots);
         }
 
@@ -154,9 +153,9 @@ public sealed class WorkflowEngine<TSlots>(
     /// Onay ekranını hazırlar ve oturumu onay bekler duruma alır. <b>MAF workflow'u burada
     /// başlatılmaz</b>: onay gelene kadar sunucuda asılı bir çalıştırma bulunmaz.
     /// </summary>
-    private WorkflowStepResult PresentConfirmation(TSlots slots)
+    private WorkflowStepResult PresentConfirmation(Dictionary<string, object?> slots)
     {
-        var confirmationView = actionExecutor.BuildConfirmationView(slots);
+        var confirmationView = actionExecutor.BuildConfirmationView(action, slots);
 
         session.StoreProposedSlots(confirmationView.WorkflowName, slots);
         session.PendingConfirmation = confirmationView;
@@ -187,7 +186,7 @@ public sealed class WorkflowEngine<TSlots>(
                 "Cevabınızı anlayamadım. İşlemi onaylıyor musunuz? Lütfen \"onaylıyorum\" ya da \"iptal\" yazın.");
         }
 
-        if (session.ReadProposedSlots<TSlots>() is not { } slots || session.PendingConfirmation is not { } confirmationView)
+        if (session.ReadProposedSlots() is not { } slots || session.PendingConfirmation is not { } confirmationView)
         {
             hub.Publish(TraceCategories.Workflow, "Onay bekleyen veri bulunamadı → oturum zaman aşımı");
             session.CancelWorkflow();
@@ -216,10 +215,10 @@ public sealed class WorkflowEngine<TSlots>(
     /// </para>
     /// </summary>
     private async Task<WorkflowOutcome> RunApprovalGraphAsync(
-        TSlots slots, GenericConfirmationView confirmationView, bool isApproved, CancellationToken cancellationToken)
+        Dictionary<string, object?> slots, GenericConfirmationView confirmationView, bool isApproved, CancellationToken cancellationToken)
     {
         var workflow = DeterministicActionWorkflow.Build(
-            workflowName: confirmationView.WorkflowName,
+            action: action,
             slots: slots,
             actionExecutor: actionExecutor,
             hub: hub,
@@ -315,14 +314,14 @@ public sealed class WorkflowEngine<TSlots>(
     private static bool Contains(string? agentText, string marker) =>
         agentText?.Contains(marker, StringComparison.Ordinal) == true;
 
-    private static TSlots? TryParseProposal(string agentText)
+    private static Dictionary<string, object?>? TryParseProposal(string agentText)
     {
         var jsonStartIndex = agentText.IndexOf(WorkflowAgentSignals.ProposalReady, StringComparison.Ordinal)
                              + WorkflowAgentSignals.ProposalReady.Length;
 
         try
         {
-            return JsonSerializer.Deserialize<TSlots>(agentText[jsonStartIndex..].Trim());
+            return JsonSerializer.Deserialize<Dictionary<string, object?>>(agentText[jsonStartIndex..].Trim());
         }
         catch (JsonException)
         {
@@ -332,15 +331,9 @@ public sealed class WorkflowEngine<TSlots>(
 
     /// <summary>
     /// Onaya sunulan parametre kümesinin parmak izi. Aynı ekran için gelen ikinci onay isteği
-    /// bu anahtarla tanınır; farklı bir teklif ise yeni anahtar üretilir.
+    /// bu anahtarla tanınır; farklı bir teklif ise yeni anahtar üretilir. Hesap
+    /// <see cref="GenericConfirmationView"/>'dadır — eksekütör bankaya aynı anahtarı gönderir.
     /// </summary>
-    private static string ComputeIdempotencyToken(GenericConfirmationView confirmationView)
-    {
-        var canonicalForm = new StringBuilder(confirmationView.WorkflowName);
-
-        foreach (var parameter in confirmationView.Parameters.OrderBy(parameter => parameter.Key, StringComparer.OrdinalIgnoreCase))
-            canonicalForm.Append('|').Append(parameter.Key).Append('=').Append(parameter.Value);
-
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalForm.ToString())));
-    }
+    private static string ComputeIdempotencyToken(GenericConfirmationView confirmationView) =>
+        GenericConfirmationView.ComputeIdempotencyToken(confirmationView);
 }

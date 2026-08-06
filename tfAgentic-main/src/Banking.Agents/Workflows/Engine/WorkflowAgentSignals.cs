@@ -4,7 +4,7 @@ namespace Banking.Agents.Workflows.Engine;
 /// İş akışı ajanının araç sonuçlarıyla motora verdiği sinyaller.
 /// <para>
 /// Sinyalleri <b>üreten</b> (<see cref="WorkflowAgentFactory"/>) ve <b>okuyan</b>
-/// (<see cref="WorkflowEngine{TSlots}"/>) taraflar aynı sabitleri kullanır; metinler iki yerde
+/// (<see cref="WorkflowEngine"/>) taraflar aynı sabitleri kullanır; metinler iki yerde
 /// ayrı ayrı yazılsaydı biri değiştiğinde akış sessizce durur, hata da vermezdi.
 /// </para>
 /// </summary>

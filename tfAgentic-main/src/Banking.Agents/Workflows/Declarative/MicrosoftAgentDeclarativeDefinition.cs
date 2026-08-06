@@ -29,6 +29,23 @@ public sealed class MicrosoftAgentDeclarativeDefinition
 
     /// <summary>YAML'daki "inputSchema" bloğu — outputSchema yoksa onun yerine kullanılır.</summary>
     public DeclarativeSchemaConfig? InputSchema { get; set; }
+
+    /// <summary>
+    /// YAML'daki "action" bloğu — kullanıcı onayladığında bankaya hangi yola, hangi metotla
+    /// istek atılacağı. Tanımlanmazsa akış bankayı hiç çağırmaz: onay yalnızca kayda geçer ve
+    /// makbuz üretilmez.
+    /// </summary>
+    public DeclarativeActionConfig? Action { get; set; }
+}
+
+/// <summary>YAML'daki "action" bloğunun C# karşılığı.</summary>
+public sealed class DeclarativeActionConfig
+{
+    /// <summary>YAML'daki "action.method" alanı — HTTP metodu. Para hareketleri "PUT"tur.</summary>
+    public string Method { get; set; } = "PUT";
+
+    /// <summary>YAML'daki "action.path" alanı — bankadaki yol, örn. "/api/card-payment".</summary>
+    public string Path { get; set; } = string.Empty;
 }
 
 /// <summary>YAML'daki "model" bloğunun C# karşılığı.</summary>

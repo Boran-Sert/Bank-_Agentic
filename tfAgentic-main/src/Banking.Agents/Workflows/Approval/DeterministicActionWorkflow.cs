@@ -1,4 +1,5 @@
 using Banking.Agents.Tracing;
+using Banking.Agents.Workflows.Actions;
 using Banking.Domain.Constants;
 using Microsoft.Agents.AI.Workflows;
 
@@ -14,27 +15,27 @@ namespace Banking.Agents.Workflows.Approval;
 /// </summary>
 public static class DeterministicActionWorkflow
 {
-    /// <summary>Verilen slot nesnesi ve eksekütör ile MAF <see cref="Workflow"/> grafiğini inşa eder.</summary>
-    public static Workflow Build<TSlots>(
-        string workflowName,
-        TSlots slots,
-        IDeterministicActionExecutor<TSlots> actionExecutor,
+    /// <summary>Verilen akış tanımı ve parametrelerle MAF <see cref="Workflow"/> grafiğini inşa eder.</summary>
+    public static Workflow Build(
+        WorkflowActionDefinition action,
+        IReadOnlyDictionary<string, object?> slots,
+        IDeterministicActionExecutor actionExecutor,
         TraceHub hub,
         bool requiresApproval = true)
-        where TSlots : class
     {
-        var executorStep = new DeterministicActionStep<TSlots>($"{workflowName}-executor", slots, actionExecutor, hub);
+        var executorStep = new DeterministicActionStep(
+            $"{action.WorkflowName}-executor", action, slots, actionExecutor, hub);
 
         if (!requiresApproval)
         {
-            hub.Publish(TraceCategories.Workflow, $"{workflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
+            hub.Publish(TraceCategories.Workflow, $"{action.WorkflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
             return new WorkflowBuilder(executorStep)
                 .WithOutputFrom(executorStep)
                 .Build();
         }
 
-        hub.Publish(TraceCategories.Workflow, $"{workflowName}: MAF RequestPort onay gate'i oluşturuldu");
-        var approvalPort = RequestPort.Create<GenericConfirmationView, bool>($"{workflowName}-approval-port");
+        hub.Publish(TraceCategories.Workflow, $"{action.WorkflowName}: MAF RequestPort onay gate'i oluşturuldu");
+        var approvalPort = RequestPort.Create<GenericConfirmationView, bool>($"{action.WorkflowName}-approval-port");
 
         return new WorkflowBuilder(approvalPort)
             .AddEdge(approvalPort, executorStep)
@@ -44,18 +45,18 @@ public static class DeterministicActionWorkflow
 }
 
 /// <summary>Onay kararını alıp eylemi LLM müdahalesi olmadan çalıştıran MAF adımı.</summary>
-internal sealed class DeterministicActionStep<TSlots>(
+internal sealed class DeterministicActionStep(
     string id,
-    TSlots slots,
-    IDeterministicActionExecutor<TSlots> actionExecutor,
+    WorkflowActionDefinition action,
+    IReadOnlyDictionary<string, object?> slots,
+    IDeterministicActionExecutor actionExecutor,
     TraceHub hub)
     : Executor<bool, WorkflowOutcome>(id)
-    where TSlots : class
 {
     public override async ValueTask<WorkflowOutcome> HandleAsync(
         bool approved, IWorkflowContext context, CancellationToken cancellationToken = default)
     {
         hub.Publish(TraceCategories.Workflow, $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");
-        return await actionExecutor.ExecuteAsync(slots, approved, cancellationToken);
+        return await actionExecutor.ExecuteAsync(action, slots, approved, cancellationToken);
     }
 }

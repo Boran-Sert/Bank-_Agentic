@@ -1,21 +1,18 @@
-using System.Collections;
-using System.Reflection;
-using Banking.Domain.Attributes;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Banking.Agents.Workflows;
 
 /// <summary>
-/// StateBag'deki parametrelerden dinamik olarak türetilen jenerik onay ekranı görünümü.
-/// Herhangi bir TSlots Record türüne (PaymentSlots, TransferSlots vb.) otomatik adapte olur.
+/// StateBag'deki parametrelerden türetilen <b>tek</b> onay ekranı görünümü. Akışa özel bir
+/// görünüm tipi yoktur ve olmamalıdır: alanlar YAML'da tanımlıdır, burada yalnızca taşınır.
 /// </summary>
-/// <param name="WorkflowName">
-/// Akışın <c>[Workflow("...")]</c> adı (örn. <c>card-payment</c>). Attribute yoksa tip adına düşer.
-/// </param>
-/// <param name="Parameters">Onay ekranında gösterilecek alanlar.</param>
+/// <param name="WorkflowName">Akışın adı (örn. <c>card-payment</c>).</param>
+/// <param name="Parameters">Onay ekranında gösterilecek alanlar — YAML'daki adlarla birebir.</param>
 /// <param name="ScreenMkCode">
-/// Onay ekranının hangi UI ekranıyla render edileceğini belirten mkCode. Akış tanımından
-/// (<c>[Workflow(..., MkCode = "...")]</c> veya deklaratif YAML) gelir; bilinmiyorsa <c>null</c>.
-/// Gateway burada <b>tahmin yapmaz</b> — yanlış ekran render etmektense kod çözülemez olarak raporlanır.
+/// Onay ekranının hangi UI ekranıyla render edileceğini belirten mkCode; YAML'ın <c>mkCode</c>
+/// alanından gelir, bilinmiyorsa <c>null</c>. Gateway burada <b>tahmin yapmaz</b> — yanlış ekran
+/// render etmektense kod çözülemez olarak raporlanır.
 /// </param>
 public sealed record GenericConfirmationView(
     string WorkflowName,
@@ -23,48 +20,20 @@ public sealed record GenericConfirmationView(
     string? ScreenMkCode = null)
 {
     /// <summary>
-    /// Herhangi bir TSlots Record nesnesini Reflection ile sıfır hardcoded bağımlılıkla
-    /// <see cref="GenericConfirmationView"/>'a dönüştürür.
+    /// Onaya sunulan parametre kümesinin parmak izi.
+    /// <para>
+    /// İki yerden çağrılır ve <b>aynı</b> sonucu vermek zorundadır: motor bunu oturuma yazıp
+    /// ikinci onay isteğini tanır, eksekütör de aynı değeri bankaya <c>Idempotency-Key</c> olarak
+    /// gönderir. Ayrı ayrı hesaplanırlarsa çift tıklama koruması sessizce delinirdi.
+    /// </para>
     /// </summary>
-    public static GenericConfirmationView FromSlots<TSlots>(TSlots slots) where TSlots : class
+    public static string ComputeIdempotencyToken(GenericConfirmationView confirmationView)
     {
-        ArgumentNullException.ThrowIfNull(slots);
+        var canonicalForm = new StringBuilder(confirmationView.WorkflowName);
 
-        var workflowAttribute = typeof(TSlots).GetCustomAttribute<WorkflowAttribute>();
-        var workflowName = workflowAttribute?.WorkflowName ?? typeof(TSlots).Name;
+        foreach (var parameter in confirmationView.Parameters.OrderBy(parameter => parameter.Key, StringComparer.OrdinalIgnoreCase))
+            canonicalForm.Append('|').Append(parameter.Key).Append('=').Append(parameter.Value);
 
-        var parameters = slots is IDictionary dictionary
-            ? ReadDictionary(dictionary)
-            : ReadProperties(slots);
-
-        return new GenericConfirmationView(workflowName, parameters, workflowAttribute?.MkCode);
-    }
-
-    private static Dictionary<string, object?> ReadDictionary(IDictionary source)
-    {
-        var parameters = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (DictionaryEntry entry in source)
-        {
-            var key = entry.Key?.ToString();
-            if (!string.IsNullOrEmpty(key) && entry.Value is not null)
-                parameters[key] = entry.Value;
-        }
-
-        return parameters;
-    }
-
-    private static Dictionary<string, object?> ReadProperties<TSlots>(TSlots slots) where TSlots : class
-    {
-        var parameters = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-
-        var properties = typeof(TSlots)
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(property => property.GetIndexParameters().Length == 0);
-
-        foreach (var property in properties)
-            parameters[property.Name] = property.GetValue(slots);
-
-        return parameters;
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalForm.ToString())));
     }
 }

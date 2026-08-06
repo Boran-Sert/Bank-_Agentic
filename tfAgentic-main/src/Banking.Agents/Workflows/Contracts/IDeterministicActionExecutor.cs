@@ -1,46 +1,34 @@
-using Banking.Domain.Validation;
+using Banking.Agents.Workflows.Actions;
 
 namespace Banking.Agents.Workflows;
 
 /// <summary>
-/// Bir iş akışının <b>banka tarafındaki tüm temas noktalarını</b> taşıyan sözleşme:
-/// parametreler dolarken ön-doğrulama, onay ekranı üretimi ve onay sonrası eylem.
+/// Onay ekranını üretip, onaylanan işlemi bankaya ileten <b>tek</b> bileşenin sözleşmesi.
 /// <para>
-/// Onay görünümü <see cref="GenericConfirmationView"/>, sonuç ise <see cref="WorkflowOutcome"/>
-/// olmak üzere <b>tek tiptir</b>: üst katmanlar akışa özel tip tanımak zorunda kalmaz.
-/// Akışa özgü olan tek şey <typeparamref name="TSlots"/>'tur.
+/// Jenerik değildir ve akış başına bir implementasyonu yoktur: akışın kimliği ve nereye gideceği
+/// <paramref name="action"/> ile <b>parametre olarak</b> gelir, parametreler de düz bir sözlük
+/// olarak. Bu sayede implementasyon durumsuzdur ve <b>singleton</b> olarak kaydedilir; her akış,
+/// her durum aynı örneği kullanır.
 /// </para>
 /// <para>
-/// Yeni bir akış eklemek için tek yapılacak, bu arayüzü uygulayan <b>bir</b> sınıf yazıp DI'a
-/// kaydetmektir; yönlendirme, oturum ve onay kodu <b>değişmez</b>. Doğrulama ayrı bir arayüze
-/// bölünmez — akış başına iki paralel soyutlama, birinin diğerinden habersiz değişmesi demekti.
+/// Burada bankacılık kuralı, tutar/bakiye karşılaştırması ya da akışa özel metin yoktur —
+/// hepsi bankanın kendi backend'inde.
 /// </para>
 /// </summary>
-/// <typeparam name="TSlots">Akışın parametre kümesini taşıyan <c>[Workflow]</c> etiketli record.</typeparam>
-public interface IDeterministicActionExecutor<in TSlots>
+public interface IDeterministicActionExecutor
 {
-    /// <summary>
-    /// Şu ana kadar toplanmış parametrelerle bankanın işlemi kabul edip etmeyeceğini sorar.
-    /// <para>
-    /// <b>Bu metot bankacılık kuralı içermez</b>; yalnızca isimlendirilmiş slot değerlerini
-    /// bankanın metot imzasına eşler. Kod incelemesinde bir karşılaştırma (<c>&gt;</c>,
-    /// bakiye/limit kontrolü) görülüyorsa tasarım ihlal edilmiş demektir — kural bankaya aittir.
-    /// </para>
-    /// </summary>
-    /// <param name="filledSlotValues">
-    /// Slot adı → değer. <b>Eksik slotlar bu sözlükte bulunmaz</b>; slotlar dolarken de
-    /// çağrıldığı için banka eksik bilgiyle ilgili kuralları kendisi atlar.
-    /// </param>
-    ValueTask<BankValidationResult> ValidateFilledSlotsAsync(
-        IReadOnlyDictionary<string, object?> filledSlotValues,
-        CancellationToken cancellationToken);
-
     /// <summary>Toplanan parametrelerden kullanıcıya gösterilecek onay ekranını üretir.</summary>
-    GenericConfirmationView BuildConfirmationView(TSlots slots);
+    GenericConfirmationView BuildConfirmationView(
+        WorkflowActionDefinition action,
+        IReadOnlyDictionary<string, object?> slots);
 
     /// <summary>
-    /// Kullanıcı kararını uygular. <b>Hiçbir koşulda exception sızdırmaz</b>; servis reddi
-    /// dahil tüm başarısızlıklar <see cref="WorkflowOutcome.Failure"/> olarak döner.
+    /// Kullanıcı kararını uygular. <b>Hiçbir koşulda exception sızdırmaz</b>; banka reddi dahil
+    /// tüm başarısızlıklar <see cref="WorkflowOutcome.Failure"/> olarak döner.
     /// </summary>
-    ValueTask<WorkflowOutcome> ExecuteAsync(TSlots slots, bool approved, CancellationToken cancellationToken);
+    ValueTask<WorkflowOutcome> ExecuteAsync(
+        WorkflowActionDefinition action,
+        IReadOnlyDictionary<string, object?> slots,
+        bool approved,
+        CancellationToken cancellationToken);
 }

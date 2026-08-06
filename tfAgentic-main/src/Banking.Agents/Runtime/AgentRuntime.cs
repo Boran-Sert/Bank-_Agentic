@@ -64,6 +64,9 @@ public sealed class AgentRuntime(
     private readonly SemaphoreSlim _orchestratorGate = new(1, 1);
     private AIAgent? _orchestrator;
 
+    /// <summary>Orkestratörün kurulduğu andaki uzman listesi sürümü (bkz. <see cref="SpecialistCatalog.Version"/>).</summary>
+    private int _orchestratorSpecialistVersion = -1;
+
     /// <summary>Uzmanlara hangi taşıma katmanıyla erişildiği (tanı ekranı için).</summary>
     public string SpecialistTransport => specialistCatalog.Transport;
 
@@ -144,15 +147,21 @@ public sealed class AgentRuntime(
     /// Orkestratörü <b>bir kez</b> kurar. Sistem prompt'u kullanıcıya/isteğe özel hiçbir bilgi
     /// içermez; RAG adayları çalışma anında mesaj olarak geçer. Bu yüzden yeniden kurulum ve
     /// global kilit üzerinde serileşme yoktur.
+    /// <para>
+    /// Tek istisna uzman listesinin değişmesidir: hem köprü araçları hem de yönlendirme
+    /// kuralları kartlardan üretildiği için, yeni bir uzman eklendiğinde orkestratör yeniden
+    /// kurulmazsa o uzman hiç var olmamış gibi davranır.
+    /// </para>
     /// </summary>
     public async Task EnsureOrchestratorAsync(CancellationToken cancellationToken = default)
     {
-        if (_orchestrator is not null) return;
+        if (_orchestrator is not null && _orchestratorSpecialistVersion == specialistCatalog.Version) return;
 
         await _orchestratorGate.WaitAsync(cancellationToken);
         try
         {
-            if (_orchestrator is not null) return;
+            var specialistVersion = specialistCatalog.Version;
+            if (_orchestrator is not null && _orchestratorSpecialistVersion == specialistVersion) return;
 
             var tools = new List<AITool>();
             tools.AddRange(specialistCatalog.BuildBridgeTools());
@@ -170,6 +179,8 @@ public sealed class AgentRuntime(
                 },
                 AIContextProviders = [new ContextProviders.TopicContextProvider(hub)]
             });
+
+            _orchestratorSpecialistVersion = specialistVersion;
 
             logger.LogInformation("Orkestratör hazır (uzman erişimi: {Transport}).", specialistCatalog.Transport);
         }
@@ -317,7 +328,7 @@ public sealed class AgentRuntime(
     }
 
     /// <summary>Orkestratör prompt'undaki uzman yönlendirme kurallarını kartlardan üretir.</summary>
-    private static string BuildSpecialistRoutingRules() =>
-        string.Join("\n", SpecialistCatalog.DiscoverCards()
-            .Select(card => $"           - {card.Description} için SADECE '{card.BridgeToolName}' aracını kullan."));
+    private string BuildSpecialistRoutingRules() =>
+        string.Join("\n", specialistCatalog.Cards
+            .Select(card => $"  - {card.Description} için SADECE '{card.BridgeToolName}' aracını kullan."));
 }

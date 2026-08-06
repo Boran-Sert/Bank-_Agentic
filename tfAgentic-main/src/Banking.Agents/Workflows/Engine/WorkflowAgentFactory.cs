@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using Banking.Agents.Mcp;
 using Banking.Agents.Sessions;
+using Banking.Agents.Specialists;
 using Banking.Agents.Tracing;
 using Banking.Agents.Validation;
 using Banking.Agents.Workflows.Declarative;
@@ -22,7 +22,7 @@ namespace Banking.Agents.Workflows.Engine;
 /// </para>
 /// </summary>
 public sealed class WorkflowAgentFactory(
-    McpToolProvider mcpToolProvider,
+    SpecialistCatalog specialistCatalog,
     ISessionAccessor sessionAccessor,
     Func<string, IChatClient> tracedChatClientFactory,
     TraceHub hub)
@@ -42,41 +42,73 @@ public sealed class WorkflowAgentFactory(
             schema.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? new JsonObject() : schema
     };
 
-    private readonly ConcurrentDictionary<string, AIAgent> _agentsByName = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CachedWorkflowAgent> _agentsByName = new(StringComparer.Ordinal);
 
-    /// <summary>Slot şemasına göre iş akışı ajanını döner; ilk çağrıda kurar, sonrakilerde önbellekten verir.</summary>
-    public async Task<AIAgent> GetOrCreateAsync(
+    /// <summary>
+    /// Önbellekteki ajan ve kurulduğu andaki girdiler.
+    /// <para>
+    /// Yalnızca ada göre önbelleklemek yetmiyordu: aynı adlı bir akış YAML'ı güncellendiğinde
+    /// (talimat/sıcaklık değişir) ya da yeni bir uzman eklendiğinde (araç listesi değişir)
+    /// eski ajan dönüyor ve değişiklik ancak süreç yeniden başlayınca görünüyordu.
+    /// </para>
+    /// </summary>
+    private sealed record CachedWorkflowAgent(AIAgent Agent, string InstructionsFingerprint, int SpecialistVersion);
+
+    /// <summary>Akış tanımına göre iş akışı ajanını döner; girdiler değişmediyse önbellekten verir.</summary>
+    public Task<AIAgent> GetOrCreateAsync(
         WorkflowAgentDefinition definition, CancellationToken cancellationToken = default)
     {
-        if (_agentsByName.TryGetValue(definition.AgentName, out var cachedAgent))
-            return cachedAgent;
+        var specialistVersion = specialistCatalog.Version;
+        var fingerprint = definition.Instructions ?? string.Empty;
 
-        var agent = tracedChatClientFactory(definition.AgentName).AsAIAgent(new ChatClientAgentOptions
+        if (_agentsByName.TryGetValue(definition.AgentName, out var cached)
+            && cached.SpecialistVersion == specialistVersion
+            && string.Equals(cached.InstructionsFingerprint, fingerprint, StringComparison.Ordinal))
+            return Task.FromResult(cached.Agent);
+
+        AIAgent agent = tracedChatClientFactory(definition.AgentName).AsAIAgent(new ChatClientAgentOptions
         {
             Name = definition.AgentName,
+            // Sıcaklık burada sabitlenmez: YAML söylediyse o, susmuşsa null bırakılır ve
+            // TracingChatClient yapılandırmadaki değeri doldurur. Sabit bir 0.1f yazmak,
+            // o fallback'i ölü koda çeviriyordu.
             ChatOptions = new ChatOptions
             {
-                Temperature = 0.1f,
+                Temperature = definition.Temperature,
+                TopP = definition.TopP,
                 Instructions = definition.Instructions,
-                Tools = await BuildToolsAsync(definition, cancellationToken)
+                Tools = BuildTools(definition)
             }
         });
 
-        return _agentsByName.GetOrAdd(definition.AgentName, agent);
+        _agentsByName[definition.AgentName] = new CachedWorkflowAgent(agent, fingerprint, specialistVersion);
+
+        return Task.FromResult(agent);
     }
 
-    private async Task<List<AITool>> BuildToolsAsync(
-        WorkflowAgentDefinition definition, CancellationToken cancellationToken)
+    /// <summary>
+    /// Akış ajanının araç kümesi: <b>uzman köprüleri + motorun kontrol araçları</b>.
+    /// <para>
+    /// Akış ajanı artık banka verisine doğrudan (MCP ile) erişmez; ihtiyacı olan her bilgiyi
+    /// A2A üzerinden uzmanlara sorar. Böylece bir akış tanımı yazmak, o akışa banka
+    /// araçlarının tamamını açmak anlamına gelmez: kapsam, uzmanın kendi araç listesiyle
+    /// sınırlıdır ve akış tarafında hiç genişletilemez.
+    /// </para>
+    /// <para>
+    /// <c>update_slot</c>, <c>propose_*</c>, <c>cancel_*</c> ve <c>handoff_*</c> bu kısıtın
+    /// dışındadır: bunlar banka aracı değil, motorun <see cref="WorkflowEngine"/> ile
+    /// haberleştiği tek kanaldır — kaldırılırsa akış hiçbir sinyal üretemez ve durur.
+    /// </para>
+    /// </summary>
+    private List<AITool> BuildTools(WorkflowAgentDefinition definition)
     {
-        var tools = new List<AITool>();
-
-        foreach (var group in new[] { ToolGroup.Card, ToolGroup.Account, ToolGroup.Analyze })
-            tools.AddRange(await mcpToolProvider.GetTracedToolsForGroupAsync(group, cancellationToken));
-
-        tools.Add(BuildUpdateSlotTool(definition));
-        tools.Add(BuildProposeTool(definition));
-        tools.Add(BuildCancelTool(definition.CancelToolName));
-        tools.Add(BuildHandoffTool(definition.HandoffToolName));
+        var tools = new List<AITool>(specialistCatalog.BuildBridgeTools())
+        {
+            BuildUpdateSlotTool(definition),
+            BuildProposeTool(definition),
+            BuildCancelTool(definition.CancelToolName),
+            BuildHandoffTool(definition.HandoffToolName)
+        };
 
         return tools;
     }

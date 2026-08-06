@@ -1,0 +1,15 @@
+kind: Specialist
+name: kampanya
+displayName: Kampanya Uzmani
+description: Kampanya, indirim ve bonus firsatlari sorularini yanitlayan uzman.
+instructions: |
+  Kullanicinin profiline uygun kampanyalari bul ve sade bir dille anlat.
+  Kampanyanin adini, kosulunu ve son gecerlilik tarihini mutlaka belirt.
+a2aRoute: kampanya
+bridgeToolName: kampanya_uzmanina_sor
+tools:
+  - GetCampaings
+  - KampanyaVektorelAra
+model:
+  options:
+    temperature: 0.2

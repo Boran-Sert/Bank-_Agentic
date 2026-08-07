@@ -24,6 +24,18 @@ public static class TraceCategories
     /// <summary>Bankaya yapılan çağrılar ve dönen sonuçlar.</summary>
     public const string Service = "SERVICE";
 
+    /// <summary>
+    /// Bankaya giden isteğin kendisi: yol, metot ve gövdedeki her parametrenin adı ile değeri.
+    /// <see cref="Service"/> çağrının sonucunu özetler; bu kategori çağrının <b>içeriğini</b> taşır.
+    /// </summary>
+    public const string ApiRequest = "API-REQUEST";
+
+    /// <summary>Bankadan dönen yanıtın alanları, durum kodu ve süresi.</summary>
+    public const string ApiResponse = "API-RESPONSE";
+
+    /// <summary>Bankanın reddettiği ya da ulaşılamayan isteklerin gerekçesi ve gönderilen parametreler.</summary>
+    public const string ApiError = "API-ERROR";
+
     /// <summary>Model çağrıları, gönderilen istem ve dönen yanıt.</summary>
     public const string Llm = "LLM";
 

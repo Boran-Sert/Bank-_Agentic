@@ -1,5 +1,6 @@
 using System.Globalization;
 using Banking.BankApi.Contracts;
+using Banking.BankApi.Diagnostics;
 using Banking.Domain;
 using Banking.Domain.Data;
 using Banking.Domain.Services;
@@ -34,6 +35,9 @@ builder.Services.AddSingleton<ICampaignCatalogService, CampaignCatalogService>()
 builder.Services.AddSingleton<IFinancingCatalogService, FinancingCatalogService>();
 
 var app = builder.Build();
+
+// Gelen isteğin gövdesi ve dönen yanıt, uçlara dokunmadan tek yerden loglanır.
+app.UseApiTrafficLogging();
 
 // Bankanın varsayılan ekstre kaynağı. Gerçek backend'e geçildiğinde bu dosya okuması, müşteri ve
 // kart kimliğiyle yapılan bir ekstre servisi çağrısıyla değiştirilir.

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Banking.Agents.Prompts;
 using Banking.Agents.Sessions;
 using Banking.Agents.Tracing;
 using Banking.Agents.Workflows.Actions;
@@ -72,8 +73,8 @@ public sealed class WorkflowEngine(
         var slotSummary = session.GetSlotStatus().Describe();
 
         var kickoffMessage = string.IsNullOrWhiteSpace(initialMessage)
-            ? $"İşlemi başlatmak istiyorum. Lütfen gerekli bilgileri sırayla sor.\n\n({slotSummary})"
-            : $"{initialMessage.Trim()}\n\n({slotSummary})\n\n(Eğer eksik bilgi yoksa teklif aracını çağır; eksik varsa sırayla sor.)";
+            ? $"İşlemi başlatmak istiyorum. Lütfen eksik bilgileri sor.\n\n({slotSummary})"
+            : $"{initialMessage.Trim()}\n\n({slotSummary})\n\n{AgentPrompts.SlotTurnDirective}";
 
         var agentText = await RunAgentTurnAsync(kickoffMessage, cancellationToken);
         return await InterpretAgentOutputAsync(agentText, kickoffMessage, cancellationToken);
@@ -84,15 +85,21 @@ public sealed class WorkflowEngine(
     // =================================================================================
 
     /// <summary>
-    /// Kullanıcının yanıtını ajana iletir. Toplanan slotların özeti her tura eklenir; eksik slot
-    /// bilgisi ajanın hafızasına değil, oturum durumuna dayanır.
+    /// Kullanıcının yanıtını ajana iletir. Toplanan slotların özeti ve tur yönergesi her tura
+    /// eklenir; eksik slot bilgisi ajanın hafızasına değil, oturum durumuna dayanır.
+    /// <para>
+    /// Yönerge (<see cref="AgentPrompts.SlotTurnDirective"/>) her turda tekrarlanır: sistem talimatı
+    /// konuşma uzadıkça bağlamın başında kalırken, mesajın hemen yanındaki satır tek turda birden
+    /// fazla parametre yazma davranışını canlı tutar.
+    /// </para>
     /// </summary>
     private async Task<WorkflowStepResult> CollectSlotsAsync(string? userMessage, CancellationToken cancellationToken)
     {
         var answer = userMessage ?? string.Empty;
         var slotSummary = session.GetSlotStatus().Describe();
 
-        var agentText = await RunAgentTurnAsync($"{answer}\n\n({slotSummary})", cancellationToken);
+        var agentText = await RunAgentTurnAsync(
+            $"{answer}\n\n({slotSummary})\n\n{AgentPrompts.SlotTurnDirective}", cancellationToken);
         return await InterpretAgentOutputAsync(agentText, answer, cancellationToken);
     }
 
@@ -128,18 +135,18 @@ public sealed class WorkflowEngine(
             var orchestratorReply = await orchestratorFallback(userMessage, cancellationToken);
 
             return WorkflowStepResult.Ask(session.SessionId,
-                $"{orchestratorReply}\n\n---\n*İpucu: İşleminize kaldığınız yerden devam edebilirsiniz.*");
+                $"{orchestratorReply}\n\n---\n*Son işleminize isterseniz kaldığınız yerden devam edebilirsiniz.*");
         }
 
         // 2.3 — Parametreler araç çağrılarıyla tamamlandı.
         if (session.GetSlotStatus().IsComplete && session.ReadProposedSlots() is { } completedSlots)
-            return PresentConfirmation(completedSlots);
+            return await ConcludeSlotFillingAsync(completedSlots, cancellationToken);
 
         // 2.4 — Ajan teklif JSON'ı ürettiyse ayrıştırılıp saklanır.
         if (Contains(agentText, WorkflowAgentSignals.ProposalReady) && TryParseProposal(agentText!) is { } proposedSlots)
         {
             session.StoreProposedSlots(action.WorkflowName, proposedSlots);
-            return PresentConfirmation(proposedSlots);
+            return await ConcludeSlotFillingAsync(proposedSlots, cancellationToken);
         }
 
         // 2.5 — Eksik bilgi var; ajanın sorusu kullanıcıya iletilir.
@@ -152,11 +159,21 @@ public sealed class WorkflowEngine(
     // =================================================================================
 
     /// <summary>
-    /// Onay ekranını hazırlar ve oturumu onay bekler duruma alır. <b>MAF grafiği burada
-    /// başlatılmaz:</b> onay gelene kadar sunucuda askıda bir çalıştırma tutulmaz, bu yüzden
-    /// yapışkan oturum (sticky session) gerekmez.
+    /// Parametreler tamamlandığında akışı sonlandırma yoluna sokar: <b>onay kapısı yalnızca bankaya
+    /// istek gönderen akışlar için kurulur.</b>
+    /// <para>
+    /// Kapının gerekçesi para hareketidir (<see cref="WorkflowActionDefinition.CallsBank"/>). Hedef
+    /// yolu tanımlanmamış bir akış bankayı hiç çağırmaz; onaylanacak bir işlem olmadığı hâlde
+    /// kullanıcıyı ödeme onayı ekranına götürmek, gerçekleşmeyecek bir işlemi gerçekleşecekmiş gibi
+    /// gösterir. Ayrım YAML'daki <c>action.path</c> alanından okunur; akış adı veya türü sorulmaz.
+    /// </para>
+    /// <para>
+    /// Onaya çıkan yolda <b>MAF grafiği burada başlatılmaz:</b> onay gelene kadar sunucuda askıda bir
+    /// çalıştırma tutulmaz, bu yüzden yapışkan oturum (sticky session) gerekmez.
+    /// </para>
     /// </summary>
-    private WorkflowStepResult PresentConfirmation(Dictionary<string, object?> slots)
+    private async Task<WorkflowStepResult> ConcludeSlotFillingAsync(
+        Dictionary<string, object?> slots, CancellationToken cancellationToken)
     {
         var confirmationView = actionExecutor.BuildConfirmationView(action, slots);
 
@@ -164,6 +181,18 @@ public sealed class WorkflowEngine(
         session.PendingConfirmation = confirmationView;
         session.IdempotencyToken = ComputeIdempotencyToken(confirmationView);
         session.CompletedOutcome = null;
+
+        if (!action.CallsBank)
+        {
+            hub.Publish(TraceCategories.Workflow,
+                $"{action.WorkflowName} bankaya istek göndermiyor → onay kapısı kurulmadı, akış doğrudan sonuçlandırıldı");
+
+            var outcome = await RunActionGraphAsync(slots, confirmationView, isApproved: true, cancellationToken);
+            session.CompletedOutcome = outcome;
+
+            return FinishWorkflow(outcome);
+        }
+
         session.Phase = WorkflowPhases.AwaitingApproval;
 
         hub.Publish(TraceCategories.Workflow, "Onay ekranı kullanıcıya gönderildi → onay bekleniyor (HITL)");
@@ -203,7 +232,7 @@ public sealed class WorkflowEngine(
             return FinishWorkflow(alreadyProducedOutcome);
         }
 
-        var outcome = await RunApprovalGraphAsync(slots, confirmationView, intent == ApprovalIntent.Approved, cancellationToken);
+        var outcome = await RunActionGraphAsync(slots, confirmationView, intent == ApprovalIntent.Approved, cancellationToken);
         session.CompletedOutcome = outcome;
 
         return FinishWorkflow(outcome);
@@ -213,23 +242,32 @@ public sealed class WorkflowEngine(
     /// MAF grafiğini kurar, onay kararını porta aynı istek içinde iletir ve çıktı ile hata
     /// event'lerinin tamamını işler.
     /// <para>
+    /// Onay kapısının kurulup kurulmayacağını <see cref="WorkflowActionDefinition.CallsBank"/>
+    /// belirler; kapının girdisi onay ekranı, kapısız grafiğin girdisi ise doğrudan onay kararıdır.
+    /// Kapısız grafikte <see cref="RequestInfoEvent"/> hiç doğmaz, döngünün geri kalanı aynı kalır.
+    /// </para>
+    /// <para>
     /// Executor içinde oluşan istisnalar çağırana fırlamaz, event akışına düşer. Bu nedenle
     /// <see cref="ExecutorFailedEvent"/> ve <see cref="WorkflowErrorEvent"/> açıkça ele alınır ve
     /// hatanın gerekçesi kullanıcıya iletilen mesaja taşınır.
     /// </para>
     /// </summary>
     /// <returns>Başarılı sonuç, kullanıcı reddi veya gerekçesi taşınmış bir hata sonucu.</returns>
-    private async Task<WorkflowOutcome> RunApprovalGraphAsync(
+    private async Task<WorkflowOutcome> RunActionGraphAsync(
         Dictionary<string, object?> slots, GenericConfirmationView confirmationView, bool isApproved, CancellationToken cancellationToken)
     {
+        var requiresApproval = action.CallsBank;
+
         var workflow = DeterministicActionWorkflow.Build(
             action: action,
             slots: slots,
             actionExecutor: actionExecutor,
             hub: hub,
-            requiresApproval: true);
+            requiresApproval: requiresApproval);
 
-        var run = await InProcessExecution.RunStreamingAsync(workflow, confirmationView);
+        var run = requiresApproval
+            ? await InProcessExecution.RunStreamingAsync(workflow, confirmationView)
+            : await InProcessExecution.RunStreamingAsync(workflow, isApproved);
         await using var events = run.WatchStreamAsync(cancellationToken).GetAsyncEnumerator(cancellationToken);
 
         Exception? capturedFailure = null;

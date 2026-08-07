@@ -49,24 +49,6 @@ public sealed class AgentRuntime(
     ISessionAccessor sessionAccessor,
     Func<string, IChatClient> tracedChatClientFactory)
 {
-    /// <summary>
-    /// Semantik eşleşmenin geçerli sayılması için gereken en düşük skor. Bu eşiğin altındaki
-    /// eşleşmeler yalnızca orkestratöre bağlam olarak verilir.
-    /// </summary>
-    private const float SemanticWorkflowMatchThreshold = 0.65f;
-
-    /// <summary>
-    /// Birinci ve ikinci eşleşme arasında aranan en küçük skor farkı. Eşik sağlansa bile bu fark
-    /// yoksa doğrudan akış başlatılmaz.
-    /// <para>
-    /// <b>Vektör benzerliği konu yakınlığını ölçer, niyeti değil.</b> Aynı konudaki bir bilgi sorusu,
-    /// o konuya ait tüm işlem akışlarına birbirine yakın ve yüksek skor verir. Skorların kümelenmesi
-    /// aramanın adaylar arasında ayrım yapamadığı anlamına gelir; böyle bir durumda deterministik
-    /// olarak seçilebilecek bir akış yoktur ve karar, adayları bağlam olarak alan orkestratöre kalır.
-    /// </para>
-    /// </summary>
-    private const float SemanticWorkflowMatchMargin = 0.05f;
-
     private readonly SemaphoreSlim _orchestratorGate = new(1, 1);
     private AIAgent? _orchestrator;
 
@@ -98,18 +80,13 @@ public sealed class AgentRuntime(
         session.LastUserMessage = userMessage;
 
         // Aktif akış varken buraya yalnızca konu dışı bir sorunun devredilmesiyle gelinir
-        // (normal yolda FlowRouter orkestratöre hiç uğramaz). Böyle bir turda semantik
-        // başlatma çalıştırılsaydı, kullanıcının sorusu devam eden işlemi sessizce
-        // başka bir akışla değiştirirdi; burada yalnızca soru cevaplanır.
+        // (normal yolda FlowRouter orkestratöre hiç uğramaz). Böyle bir turda aday listesi
+        // verilseydi, kullanıcının sorusu devam eden işlemi sessizce başka bir akışla
+        // değiştirmeye davet ederdi; burada yalnızca soru cevaplanır.
         if (session.HasActiveWorkflow)
             return await AskLanguageModelAsync(session, userMessage, [], cancellationToken);
 
-        var (bestMatch, candidateWorkflows) = SearchMatchingWorkflows(userMessage);
-
-        // Eşik aşıldıysa LLM'e hiç uğramadan akış başlatılır (determinizm + maliyet).
-        return bestMatch is not null
-            ? await StartWorkflowDirectlyAsync(bestMatch, cancellationToken)
-            : await AskLanguageModelAsync(session, userMessage, candidateWorkflows, cancellationToken);
+        return await AskLanguageModelAsync(session, userMessage, SearchCandidateWorkflows(userMessage), cancellationToken);
     }
 
     /// <summary>Çalışma zamanının tanılama durumunu (ajanlar, taşıma katmanı, araç sayıları) döner.</summary>
@@ -251,51 +228,36 @@ public sealed class AgentRuntime(
     }
 
     // =================================================================================
-    // 3. SEMANTİK YÖNLENDİRME VE AKIŞ BAŞLATMA
+    // 3. SEMANTİK ADAY ARAMA VE AKIŞ BAŞLATMA
     // =================================================================================
 
     /// <summary>
-    /// Semantik arama sonucunu ikiye ayırır: doğrudan başlatılabilecek kesin eşleşme ve orkestratöre
-    /// bağlam olarak verilecek aday listesi.
+    /// Kullanıcının mesajına semantik olarak en yakın akışları döner. Bu liste orkestratöre
+    /// <b>bağlam</b> olarak verilir; kararı orkestratör verir.
+    /// <para>
+    /// <b>Arama akış başlatmaz.</b> Vektör benzerliği <i>konu</i> yakınlığını ölçer, <i>niyeti</i>
+    /// değil: bir konuya ait bilgi sorusu ile o konudaki işlem talebi aynı sözcükleri taşır ve
+    /// birbirine yakın skor alır. "Kartımın kullanılabilir limiti nedir?" — bir bilgi sorusu —
+    /// limit artırım akışıyla yüksek skor eşleşir; "Diğerini de yap sana zahmet" ise indekste
+    /// karşılığı olmayan bir isteği anlatır ama açıklamayla işlev sözcükleri örtüştüğü için yine
+    /// yüksek skor alır. Eşik veya rakiple fark koşulu bu ayrımı üretemez; ikisi de aynı ölçünün
+    /// türevidir. Bilgi sorusu ile iş talebi ayrımı orkestratörün talimatındaki kuraldır ve o kural
+    /// yalnızca cümlenin kendisini okuyarak uygulanabilir.
+    /// </para>
+    /// <para>
+    /// Aramanın kazandırdığı şey bu nedenle karar değil, <b>kapsam daraltmadır</b>: orkestratör
+    /// akışların tamamı yerine bir avuç adayı görür ve akış adları sistem talimatına gömülmediği
+    /// için çalışma zamanında eklenen akışlar da anında yönlendirilebilir olur.
+    /// </para>
     /// </summary>
-    private (WorkflowMetadata? BestMatch, IReadOnlyList<WorkflowMetadata> Candidates) SearchMatchingWorkflows(string userMessage)
+    private IReadOnlyList<WorkflowMetadata> SearchCandidateWorkflows(string userMessage)
     {
         if (serviceProvider.GetService<SemanticWorkflowSearcher>() is not { } searcher)
-            return (null, []);
+            return [];
 
-        var matches = searcher.Search(userMessage, topK: 3);
-        if (matches.Count == 0) return (null, []);
-
-        var candidates = matches.Select(match => match.Metadata).ToList();
-
-        if (matches[0] is not { Metadata: not null, Score: >= SemanticWorkflowMatchThreshold } bestMatch)
-            return (null, candidates);
-
-        // Eşik tek başına yetmez: ikinci aday da bu kadar yakınsa hangisinin kastedildiği
-        // belirsizdir ve LLM'i baypas etmek yanlış akış başlatmak demektir.
-        if (matches.Count > 1 && bestMatch.Score - matches[1].Score < SemanticWorkflowMatchMargin)
-        {
-            logger.LogInformation(
-                "[Semantik Vektör Eşleşmesi] Adaylar birbirine çok yakın ({Best:F3} vs {RunnerUp:F3}) → " +
-                "otomatik başlatma yapılmadı, karar orkestratöre bırakıldı.",
-                bestMatch.Score, matches[1].Score);
-
-            return (null, candidates);
-        }
-
-        return (bestMatch.Metadata, []);
-    }
-
-    private async Task<OrchestratorReply> StartWorkflowDirectlyAsync(WorkflowMetadata workflow, CancellationToken cancellationToken)
-    {
-        logger.LogInformation("[Semantik Vektör Eşleşmesi] Skor ≥ {Threshold} → Otomatik Workflow Başlatıldı: '{WorkflowName}'",
-            SemanticWorkflowMatchThreshold, workflow.WorkflowName);
-        hub.Publish(TraceCategories.FlowRouter, $"{workflow.WorkflowName} akışı başlatıldı.");
-
-        var prompt = await StartWorkflowAsync(workflow.WorkflowName, cancellationToken);
-
-        return new OrchestratorReply(prompt, ToolNames.StartWorkflow,
-            new Dictionary<string, object?> { ["workflowName"] = workflow.WorkflowName });
+        return searcher.Search(userMessage, topK: 3)
+            .Select(match => match.Metadata)
+            .ToList();
     }
 
     private AITool BuildStartWorkflowTool()

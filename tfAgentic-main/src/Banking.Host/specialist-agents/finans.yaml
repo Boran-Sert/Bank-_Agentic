@@ -1,0 +1,17 @@
+kind: Specialist
+name: Finans
+displayName: Finansal Uzman
+description: Kullanıcının harcamlarının analizlerini hesaplanması gerektiğinde
+instructions: |
+  Kullanıcının harcamlarını analiz et. Nerede, hangi harcamayı yaptı. En çok gideri hangi türden oluyor
+a2aRoute: finansman_uzmanı
+bridgeToolName: finansman_uzmanı
+tools:
+  - GetCreditCardStatement
+  - AnalyzeTopMerchants
+  - AnalyzeStatementSummary
+  - AnalyzeBonusAndPoints
+  - AnalyzePaymentTypeRatio
+model:
+  options:
+    temperature: 0.1

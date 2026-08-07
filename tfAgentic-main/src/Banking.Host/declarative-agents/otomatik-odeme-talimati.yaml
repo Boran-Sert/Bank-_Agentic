@@ -3,7 +3,9 @@ name: otomatik-odeme-talimati
 displayName: Otomatik Ödeme Talimatı Akışı
 description: Fatura veya kredi kartı ödemeleri için otomatik ödeme talimatı oluşturur.
 instructions: |
-  Kullanıcıdan otomatik ödemeye bağlanacak kart ve hesap bilgilerini topla.
+  Kullanıcının hangi kartını hangi hesaba bağlamak istediğini netleştir.
+  Kart ve hesap kimliklerini kullanıcıya sorma; kartı kart uzmanına, hesabı hesap uzmanına
+  danışarak bul, kullanıcı tarif ettiyse doğrudan eşle, tarif etmediyse seçenekleri sun.
 model:
   options:
     temperature: 0.1
@@ -12,10 +14,14 @@ inputSchema:
   properties:
     cardId:
       type: string
-      description: Otomatik ödemeye bağlanacak kart ID
+      description: >-
+        Otomatik ödemeye bağlanacak kartın kimliği. Kart uzmanından gelir; kart numarası
+        veya son haneler bu alana yazılmaz.
     sourceAccountId:
       type: string
-      description: Ödemenin çekileceği hesap ID
+      description: >-
+        Ödemenin çekileceği hesabın kimliği. Hesap uzmanından gelir; IBAN veya hesap adı
+        bu alana yazılmaz.
   required:
     - cardId
     - sourceAccountId

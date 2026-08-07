@@ -5,15 +5,17 @@ description: IBAN'a para transferi, EFT ve havale işlemleri.
 mkCode: TransferMenu
 instructions: |
   Kullanıcının parayı hangi hesaptan göndereceğini, hedef IBAN'ı ve tutarı netleştir.
-  Kaynak hesap kimliğini kullanıcıya sorma; araçlarla hesapları getir, seçim iste ve
-  seçtiği hesabın kimliğini yaz. Açıklama zorunlu değildir, eklemek isteyip istemediğini sor.
+  Kaynak hesap kimliğini kullanıcıya sorma; hesap uzmanına danışarak bul, kullanıcı tarif
+  ettiyse doğrudan eşle, tarif etmediyse seçenekleri sun. Açıklama zorunlu değildir.
 outputSchema:
   type: object
   properties:
     sourceAccountId:
       type: string
       required: true
-      description: Paranın çekileceği banka hesabının kimliği. list_accounts aracından gelir.
+      description: >-
+        Paranın çekileceği banka hesabının kimliği. Hesap uzmanından gelir; IBAN veya
+        hesap adı bu alana yazılmaz.
     targetIban:
       type: string
       required: true
@@ -23,7 +25,10 @@ outputSchema:
     amount:
       type: number
       required: true
-      description: Transfer edilecek tutar, sayı olarak. Kullanıcının açıkça söylediği rakamdır.
+      description: >-
+        Transfer edilecek tutar, sayı olarak. Kullanıcı rakamı söyleyebilir ya da tarif
+        edebilir (bakiyenin tamamı); tarif edildiyse güncel tutarı hesap uzmanından
+        öğrenip yaz, kendin hesaplama.
     description:
       type: string
       required: false

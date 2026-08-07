@@ -1,76 +1,83 @@
 namespace Banking.Agents.Specialists.Declarative;
 
 /// <summary>
-/// Arayüzden (veya diskteki bir YAML dosyasından) tanımlanan bir uzman ajanın tam tanımı.
+/// Çalışma zamanında (arayüzden veya diskteki bir YAML dosyasından) tanımlanan bir uzman ajanın tam
+/// tanımı.
 /// <para>
-/// Derlenmiş uzmanların <c>static AgentCard Card</c> özelliğiyle sağladığı her şeyi taşır;
-/// ikisi de aynı <see cref="AgentCard"/>'a dönüşür, alt katman aradaki farkı görmez.
+/// Derlenmiş uzmanların statik <c>AgentCard Card</c> özelliğiyle sağladığı her bilgiyi taşır; her iki
+/// kaynak da aynı <see cref="AgentCard"/> tipine dönüşür ve alt katmanlar aradaki farkı görmez.
 /// </para>
 /// </summary>
 public sealed class SpecialistDefinition
 {
-    /// <summary>YAML'daki "kind" alanı — tanımın türü; uzman tanımlarında "Specialist" olur.</summary>
+    /// <summary>Tanımın türü (<c>kind</c>). Uzman tanımlarında <c>Specialist</c> değerini alır.</summary>
     public string Kind { get; set; } = "Specialist";
 
-    /// <summary>YAML'daki "name" alanı — uzmanın sistemdeki benzersiz kimliği.</summary>
+    /// <summary>Uzmanın sistemdeki benzersiz kimliği (<c>name</c>).</summary>
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>YAML'daki "displayName" alanı — izleme ekranında görünen kısa ad.</summary>
+    /// <summary>İzleme çıktılarında görünen kısa ad (<c>displayName</c>).</summary>
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// YAML'daki "description" alanı — uzmanın ne yaptığı. Bu metin aynı zamanda köprü aracının
-    /// açıklaması olur; orkestratörün ve akış ajanlarının "kime sorayım" kararı buna dayanır.
+    /// Uzmanın ne yaptığının açıklaması (<c>description</c>).
+    /// <para>
+    /// <b>Bu metin aynı zamanda köprü aracının açıklamasıdır.</b> Orkestratörün ve akış ajanlarının
+    /// hangi uzmana danışacağı kararı bu metne dayanır; zorunlu olmasının nedeni budur.
+    /// </para>
     /// </summary>
     public string Description { get; set; } = string.Empty;
 
-    /// <summary>YAML'daki "instructions" alanı — uzmanın sistem talimatı.</summary>
+    /// <summary>Uzmanın sistem talimatı (<c>instructions</c>). Ortak koruma kuralları buna eklenir.</summary>
     public string Instructions { get; set; } = string.Empty;
 
     /// <summary>
-    /// YAML'daki "a2aRoute" alanı — <c>/a2a/{route}</c> adresindeki yol. Boş bırakılırsa
-    /// <see cref="Name"/>'den türetilir.
+    /// A2A endpoint yolunun son eki (<c>a2aRoute</c>). Boş bırakılırsa <see cref="Name"/> değerinden
+    /// türetilir.
     /// </summary>
     public string? A2ARoute { get; set; }
 
     /// <summary>
-    /// YAML'daki "bridgeToolName" alanı — bu uzmana danışmak için çağrılan araç adı.
-    /// Boş bırakılırsa <see cref="Name"/>'den türetilir.
+    /// Bu uzmana danışmak için çağrılan aracın adı (<c>bridgeToolName</c>). Boş bırakılırsa
+    /// <see cref="Name"/> değerinden türetilir.
     /// </summary>
     public string? BridgeToolName { get; set; }
 
     /// <summary>
-    /// YAML'daki "tools" listesi — uzmanın kullanabileceği MCP araçlarının adları.
-    /// Boşsa <see cref="ToolGroup"/> kullanılır.
+    /// Uzmanın erişebileceği MCP araçlarının adları (<c>tools</c>). Boş bırakılırsa kapsam
+    /// <see cref="ToolGroup"/> üzerinden belirlenir.
     /// </summary>
     public List<string>? Tools { get; set; }
 
     /// <summary>
-    /// YAML'daki "toolGroup" alanı — araç adları tek tek verilmediğinde kullanılacak grup
-    /// (<c>Account</c>, <c>Card</c>, <c>Analyze</c>).
+    /// Araç adları tek tek verilmediğinde kullanılacak araç grubu (<c>toolGroup</c>). Tanınmayan bir
+    /// değer varsayılana düşmez; kayıt sırasında istisna üretir.
     /// </summary>
     public string? ToolGroup { get; set; }
 
-    /// <summary>YAML'daki "model" bloğu — sıcaklık gibi model ayarları.</summary>
+    /// <summary>Uzmana uygulanacak model ayarları (<c>model</c>).</summary>
     public SpecialistModelConfig? Model { get; set; }
 }
 
-/// <summary>Uzman tanımındaki "model" bloğunun C# karşılığı.</summary>
+/// <summary>Uzman tanımındaki <c>model</c> bloğunun karşılığı.</summary>
 public sealed class SpecialistModelConfig
 {
-    /// <summary>YAML'daki "model.options" bloğu.</summary>
+    /// <summary>Uzmanın ajanına uygulanacak model ayarları (<c>model.options</c>).</summary>
     public SpecialistModelOptionsConfig? Options { get; set; }
 }
 
 /// <summary>
-/// Uzman tanımındaki "model.options" bloğunun C# karşılığı. Yazılmayan alan dayatılmaz;
-/// yapılandırmadaki <c>Agents:Temperature</c> geçerli olur.
+/// Uzman tanımındaki <c>model.options</c> bloğunun karşılığı.
+/// <para>
+/// <b>Yazılmayan alan uzmana dayatılmaz;</b> yapılandırmadaki değer ya da modelin kendi varsayılanı
+/// geçerli olur.
+/// </para>
 /// </summary>
 public sealed class SpecialistModelOptionsConfig
 {
-    /// <summary>Modelin ne kadar yaratıcı cevap vereceği.</summary>
+    /// <summary>Örnekleme sıcaklığı. Yüksek değer yanıt çeşitliliğini artırır.</summary>
     public float? Temperature { get; set; }
 
-    /// <summary>İnce model ayarı.</summary>
+    /// <summary>Çekirdek örnekleme eşiği.</summary>
     public float? TopP { get; set; }
 }

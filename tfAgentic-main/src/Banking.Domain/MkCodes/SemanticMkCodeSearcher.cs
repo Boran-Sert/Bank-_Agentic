@@ -2,14 +2,15 @@ using System.Diagnostics.Eventing.Reader;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using SmartComponents.LocalEmbeddings;
-/// <summary>
-/// Sistemde tanımlı ekran kodlarını (mkCode) semantik (anlamsal) olarak aramak için kullanılan, 
-/// uygulama içinde (in-process) çalışan yerel ONNX embedding altyapısını sağlayan sınıf.
-/// Dış ağlara bağımlılığı yoktur, kapalı (air-gapped) Fintech standartlarına uygundur.
-/// </summary>
-
 namespace Banking.Domain.MkCodes
 {
+    /// <summary>
+    /// Sistemde tanımlı ekran kodlarını (mkCode) anlamsal olarak arayan bileşen. Süreç içinde çalışan
+    /// yerel bir ONNX gömme (embedding) modeli kullanır.
+    /// <para>
+    /// <b>Dış ağa bağımlılığı yoktur;</b> arama, internet erişimi bulunmayan ortamlarda da çalışır.
+    /// </para>
+    /// </summary>
     public class SemanticMkCodeSearcher
     {
         private readonly LocalEmbedder _embedder;
@@ -22,8 +23,8 @@ namespace Banking.Domain.MkCodes
             _logger = logger;
         }
         /// <summary>
-        /// Sistemdeki tüm mkCode'ları uygulama başlangıcında vektörize edip hafızaya alır.
-        /// İlk sorgudaki olası gecikmeyi (cold-start) önler.
+        /// Kayıtlı tüm ekran kodlarını vektörleştirip bellek içi indekse alır. Uygulama başlangıcında
+        /// çağrılarak ilk sorgudaki soğuk başlangıç gecikmesini önler; ikinci çağrı etkisizdir.
         /// </summary>
         public void Initialize()
         {
@@ -40,12 +41,12 @@ namespace Banking.Domain.MkCodes
             _logger.LogInformation("SemanticMkCodeSearcher başlatıldı. Toplam {Count} adet mkCode vektörize edildi.", _cache.Count);
         }
         /// <summary>
-        /// Kullanıcının niyetine göre en yakın eşleşen mkCode'ları semantik olarak arar.
-        /// Bulunan top 3 sonucu skorlarıyla birlikte döndürür ve loglar.
+        /// Kullanıcı niyetine anlamsal olarak en yakın ekran kodlarını arar ve sonuçları benzerlik
+        /// skorlarıyla birlikte döner.
         /// </summary>
-        /// <param name="intent">Kullanıcının ekran arama niyeti (örn: "kredi kartı borcunu öde")</param>
-        /// <param name="topK">Dönecek maksimum sonuç sayısı (varsayılan: 3)</param>
-        /// <returns>En iyi eşleşen kodlar ve skorları</returns>
+        /// <param name="intent">Kullanıcının ekran arama niyeti.</param>
+        /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
+        /// <returns>Skoru en yüksek eşleşmeler, azalan sırada.</returns>
         public IReadOnlyList<(MkCodeDefinition Code, float Score)> Search(string intent, int topK = 5)
         {
             _logger.LogInformation("Semantic Search input: '{Intent}'", intent);

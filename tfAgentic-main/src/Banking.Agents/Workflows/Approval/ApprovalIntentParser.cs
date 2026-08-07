@@ -3,36 +3,40 @@ using System.Text.RegularExpressions;
 
 namespace Banking.Agents.Workflows.Approval;
 
-/// <summary>Kullanıcının onay ekranına verdiği cevabın yorumu.</summary>
+/// <summary>Kullanıcının onay ekranına verdiği yanıtın yorumlanmış hâli.</summary>
 public enum ApprovalIntent
 {
-    /// <summary>Cevap net biçimde olumlu — eylem çalıştırılabilir.</summary>
+    /// <summary>Yanıt net biçimde olumlu; eylem çalıştırılabilir.</summary>
     Approved,
 
-    /// <summary>Cevap net biçimde olumsuz — eylem iptal edilir.</summary>
+    /// <summary>Yanıt net biçimde olumsuz; eylem iptal edilir.</summary>
     Rejected,
 
-    /// <summary>Cevap anlaşılamadı — <b>onay sayılmaz</b>, kullanıcıya tekrar sorulur.</summary>
+    /// <summary>Yanıt anlaşılamadı. <b>Onay sayılmaz;</b> soru kullanıcıya tekrarlanır.</summary>
     Unclear
 }
 
 /// <summary>
-/// Onay cevabını yorumlar. Para hareketi tetiklediği için tasarım ilkesi nettir:
+/// Onay yanıtını <see cref="ApprovalIntent"/> değerine çeviren deterministik ayrıştırıcı.
+/// <para>
+/// Sonucu para hareketi tetiklediğinden değerlendirme sırası bağlayıcıdır:
 /// <list type="number">
-///   <item>Önce <b>olumsuzluk</b> aranır. Türkçede olumsuzluk eki fiilin içindedir
-///         ("onaylamıyorum", "kabul etmiyorum") — bu yüzden alt dize eşleştirmesi
-///         ("onayl" içeriyor mu?) tek başına <b>tehlikelidir</b>.</item>
+///   <item>Önce <b>olumsuzluk</b> aranır. Türkçede olumsuzluk eki fiilin içinde yer aldığından
+///         ("onaylamıyorum", "kabul etmiyorum"), alt dize eşleştirmesi olumsuz bir yanıtı olumlu
+///         okur.</item>
 ///   <item>Sonra <b>olumluluk</b> aranır ve yalnızca tam kelime eşleşmesi kabul edilir.</item>
-///   <item>İkisi de yoksa sonuç <see cref="ApprovalIntent.Unclear"/>'dır; sessizce onaya düşülmez.</item>
+///   <item>İkisi de eşleşmezse sonuç <see cref="ApprovalIntent.Unclear"/> olur; belirsiz yanıt
+///         hiçbir koşulda onaya düşmez.</item>
 /// </list>
+/// </para>
 /// </summary>
 public static partial class ApprovalIntentParser
 {
     private static readonly CultureInfo TurkishCulture = CultureInfo.GetCultureInfo("tr-TR");
 
     /// <summary>
-    /// Olumsuzluk kalıpları. Fiil + olumsuzluk eki ("-ma/-me", "-mıyor/-miyor", "-mam/-mem")
-    /// ve doğrudan ret kelimeleri. Olumluluktan ÖNCE değerlendirilir.
+    /// Olumsuzluk kalıpları: fiil ve olumsuzluk eki birleşimleri ("-ma/-me", "-mıyor/-miyor",
+    /// "-mam/-mem") ile doğrudan ret sözcükleri. <b>Olumluluk kalıplarından önce değerlendirilir.</b>
     /// </summary>
     [GeneratedRegex(
         """
@@ -48,8 +52,8 @@ public static partial class ApprovalIntentParser
     private static partial Regex RejectionPattern();
 
     /// <summary>
-    /// Olumluluk kalıpları. Tam kelime sınırlarıyla eşleşir; "onaylamıyorum" gibi
-    /// olumsuz çekimler zaten yukarıda yakalandığı için buraya ulaşmaz.
+    /// Olumluluk kalıpları. Yalnızca tam kelime sınırlarıyla eşleşir; olumsuz çekimler önceki adımda
+    /// yakalandığından bu kalıplara ulaşmaz.
     /// </summary>
     [GeneratedRegex(
         """
@@ -61,10 +65,14 @@ public static partial class ApprovalIntentParser
         RegexOptions.IgnoreCase | RegexOptions.IgnorePatternWhitespace | RegexOptions.CultureInvariant)]
     private static partial Regex ApprovalPattern();
 
-    /// <summary>Tek harflik kısayollar — UI dışında elle yazan kullanıcılar için.</summary>
+    /// <summary>Onayın tek harflik kısayolu; arayüz dışından elle yazan kullanıcılar içindir.</summary>
     private const string ShortcutApprove = "e";
+
+    /// <summary>Reddin tek harflik kısayolu; arayüz dışından elle yazan kullanıcılar içindir.</summary>
     private const string ShortcutReject = "h";
 
+    /// <summary>Onay yanıtını yorumlar. Boş veya tanınmayan yanıt <see cref="ApprovalIntent.Unclear"/> döner.</summary>
+    /// <param name="answer">Kullanıcının onay ekranına verdiği ham yanıt.</param>
     public static ApprovalIntent Parse(string? answer)
     {
         if (string.IsNullOrWhiteSpace(answer))

@@ -8,12 +8,13 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace Banking.Agents.Workflows.Declarative;
 
 /// <summary>
-/// MAF deklaratif YAML/JSON şemalarını çalışma zamanında ayrıştırır ve ajan talimatını üretir.
-/// <b>C# derlemesi gerektirmez</b>: yeni bir akış eklemek bir metin dosyası yazmaktan ibarettir.
+/// MAF deklaratif YAML ve JSON tanımlarını çalışma zamanında ayrıştırır ve ajan talimatını üretir.
+/// <b>Yeniden derleme gerektirmez:</b> yeni bir akış eklemek bir metin dosyası yazmaktan ibarettir.
 /// </summary>
 public static class DeclarativeWorkflowBuilder
 {
-    /// <summary>YAML metnini tanıma dönüştürür.</summary>
+    /// <summary>YAML metnini deklaratif tanıma dönüştürür. Tanınmayan alanlar yok sayılır.</summary>
+    /// <exception cref="InvalidOperationException">Metin geçerli bir tanıma çözümlenemediğinde fırlatılır.</exception>
     public static MicrosoftAgentDeclarativeDefinition ParseFromYaml(string yamlContent)
     {
         var deserializer = new DeserializerBuilder()
@@ -25,20 +26,23 @@ public static class DeclarativeWorkflowBuilder
                ?? throw new InvalidOperationException("Geçersiz Microsoft Agent Framework YAML şeması.");
     }
 
-    /// <summary>JSON metnini tanıma dönüştürür.</summary>
+    /// <summary>JSON metnini deklaratif tanıma dönüştürür. Alan adları büyük/küçük harf duyarsızdır.</summary>
+    /// <exception cref="InvalidOperationException">Metin geçerli bir tanıma çözümlenemediğinde fırlatılır.</exception>
     public static MicrosoftAgentDeclarativeDefinition ParseFromJson(string jsonContent) =>
         JsonSerializer.Deserialize<MicrosoftAgentDeclarativeDefinition>(
             jsonContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
         ?? throw new InvalidOperationException("Geçersiz Microsoft Agent Framework JSON şeması.");
 
     /// <summary>
-    /// Deklaratif tanımdan LLM talimatını üretir.
+    /// Deklaratif tanımdan ajanın sistem talimatını üretir.
     /// <para>
-    /// Araç adları <paramref name="agentDefinition"/>'dan <b>okunur</b>, burada yeniden
-    /// türetilmez; aynı kuralın iki yerde yazılması, biri değiştiğinde akışın hata vermeden
-    /// durması demekti.
+    /// <b>Araç adları <paramref name="agentDefinition"/>'dan okunur, burada yeniden türetilmez.</b>
+    /// Aynı türetme kuralının iki yerde bulunması, biri değiştiğinde talimattaki adla kayıtlı adın
+    /// ayrışmasına ve akışın hata üretmeden durmasına yol açar.
     /// </para>
     /// </summary>
+    /// <param name="definition">Ayrıştırılmış YAML/JSON tanımı.</param>
+    /// <param name="agentDefinition">Ajanın kimliği ve araç adları.</param>
     public static string BuildInstructions(
         MicrosoftAgentDeclarativeDefinition definition, WorkflowAgentDefinition agentDefinition)
     {

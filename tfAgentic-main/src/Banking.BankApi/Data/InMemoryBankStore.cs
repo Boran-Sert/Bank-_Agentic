@@ -11,8 +11,8 @@ namespace Banking.Domain.Data;
 /// <b>Burada iş mantığı yoktur.</b> Sorgulama (kime ait, hangi tarih aralığı) ve mutasyon
 /// (tahsilat, transfer) ilgili servisin dosyasındadır: <c>AccountService</c>, <c>CardService</c>,
 /// <c>CollectionService</c>, <c>TransferService</c>, <c>CampaignCatalogService</c>,
-/// <c>FinancingCatalogService</c>. Aynı kuralın hem burada hem serviste yazılması, birinin
-/// diğerinden habersiz değişmesi demekti.
+/// <c>FinancingCatalogService</c>. Aynı kuralın hem burada hem serviste bulunması, birinin
+/// diğerinden habersiz değişmesine ve iki yolun farklı sonuç üretmesine yol açar.
 /// </para>
 /// </summary>
 public sealed class InMemoryBankStore
@@ -25,9 +25,9 @@ public sealed class InMemoryBankStore
     }
 
     /// <summary>
-    /// Para hareketi kilidi. Birden fazla kaydı (hesap + kart + hareket satırı) tek atomik
-    /// adımda değiştiren her servis <b>bu</b> kilidi alır; <see cref="Transactions"/> düz bir
-    /// liste olduğu için okuma da kilit altında yapılmalıdır.
+    /// Para hareketi kilidi. Birden fazla kaydı (hesap, kart ve hareket satırı) tek atomik adımda
+    /// değiştiren her servis bu kilidi alır. <see cref="Transactions"/> eşzamanlı olmayan düz bir
+    /// liste olduğundan <b>okuma da kilit altında yapılmalıdır</b>.
     /// </summary>
     public object MoneyGate { get; } = new();
 
@@ -37,7 +37,7 @@ public sealed class InMemoryBankStore
     public ConcurrentDictionary<string, Campaign> Campaigns { get; } = new();
     public ConcurrentDictionary<string, FinancingOption> FinancingOptions { get; } = new();
 
-    /// <summary>Hesap hareketleri. <b>Her erişim <see cref="MoneyGate"/> altında olmalıdır.</b></summary>
+    /// <summary>Hesap hareketleri. <b>Okuma dâhil her erişim <see cref="MoneyGate"/> altında yapılmalıdır.</b></summary>
     public List<Transaction> Transactions { get; } = new();
 
     private void Seed()

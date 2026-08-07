@@ -3,8 +3,8 @@ using System.Text.Json;
 namespace Banking.Domain.MkCodes;
 
 /// <summary>
-/// Desteklenen mkCode'ları barındıran registry.
-/// xmlviewer (1).xml veya mkcodes.json dosyasından otomatik yüklenir.
+/// Desteklenen ekran kodlarının (mkCode) kayıt defteri. Tanımlar uygulama başlangıcında diskteki
+/// tanım dosyasından yüklenir.
 /// </summary>
 public static class MkCodesRegistry
 {
@@ -16,11 +16,11 @@ public static class MkCodesRegistry
         LoadFromFileSystem();
     }
 
-    /// <summary>Belirli bir mkCode tanımını döner. Bulunamazsa null.</summary>
+    /// <summary>Verilen ekran kodunun tanımını döner; kayıtlı değilse <c>null</c>.</summary>
     public static MkCodeDefinition? Get(string value) =>
         Codes.GetValueOrDefault(value);
 
-    /// <summary>Tüm kayıtlı mkCode tanımlarını döner.</summary>
+    /// <summary>Kayıtlı tüm ekran kodu tanımlarını döner.</summary>
     public static IReadOnlyList<MkCodeDefinition> GetAll() =>
         Codes.Values.ToList().AsReadOnly();
 

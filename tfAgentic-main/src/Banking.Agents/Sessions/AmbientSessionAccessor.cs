@@ -3,16 +3,17 @@ using Banking.Agents.Tracing;
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// <see cref="ISessionAccessor"/>'ın <see cref="AsyncLocal{T}"/> tabanlı uygulaması.
+/// <see cref="ISessionAccessor"/> arayüzünün <see cref="AsyncLocal{T}"/> tabanlı uygulaması.
 /// <para>
-/// Üç garantiyi birlikte verir:
+/// Üç garantiyi birlikte sağlar:
 /// <list type="number">
-/// <item><b>İzolasyon</b> — aktif oturum asenkron akışta taşınır, farklı bir oturumla iç içe
-/// scope açmak hata verir; bir isteğin verisi başka bir isteğe sızamaz.</item>
-/// <item><b>Tek okuma / tek yazma</b> — durum scope başında yüklenir, sonunda yazılır. Aradaki
-/// tüm katmanlar aynı nesne üzerinde çalışır; kimse depoya dokunmaz.</item>
-/// <item><b>Oturum başına serileştirme</b> — aynı oturuma gelen eşzamanlı istekler (kullanıcının
-/// "Onayla"ya çift tıklaması) sıraya girer; ikisi birden yükleyip birbirinin yazdığını ezemez.</item>
+/// <item><b>İzolasyon</b> — aktif oturum asenkron akış boyunca taşınır ve farklı bir oturumla iç içe
+/// scope açmak istisna üretir. Bir isteğin verisi başka bir isteğe sızamaz.</item>
+/// <item><b>Tek okuma / tek yazma</b> — durum scope başında yüklenir, scope sonunda yazılır. Aradaki
+/// katmanların tamamı aynı nesne üzerinde çalışır ve hiçbiri depoya erişmez.</item>
+/// <item><b>Oturum başına serileştirme</b> — aynı oturuma gelen eşzamanlı istekler sıraya girer.
+/// Onay düğmesine çift tıklamanın iki paralel yükleme ve karşılıklı üzerine yazma üretmesi bu
+/// kilitle engellenir.</item>
 /// </list>
 /// </para>
 /// </summary>
@@ -78,8 +79,8 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
     }
 
     /// <summary>
-    /// Oturuma ait kilidi alır ve bekleyen sayacını artırır. Sayaç sıfırlanınca kilit sözlükten
-    /// silinir; aksi hâlde sözlük her yeni oturumla sınırsız büyürdü.
+    /// Oturuma ait kilidi alır ve bekleyen sayacını artırır. Sayaç sıfıra düştüğünde kilit sözlükten
+    /// silinir; sözlüğün her yeni oturumla sınırsız büyümesi böyle önlenir.
     /// </summary>
     private SessionLock AcquireLockHandle(string sessionId)
     {

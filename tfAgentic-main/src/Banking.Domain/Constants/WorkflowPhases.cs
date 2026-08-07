@@ -1,14 +1,14 @@
 namespace Banking.Domain.Constants;
 
 /// <summary>
-/// İş akışı dahili evrelerinin (<c>SessionState.Phase</c>) sabit tanımları.
+/// İş akışı evrelerinin sabit tanımları. Motorun hangi adımı çalıştıracağı bu değerlere göre belirlenir.
 /// </summary>
 public static class WorkflowPhases
 {
-    /// <summary>Oturumda aktif bir iş akışı yok.</summary>
+    /// <summary>Oturumda aktif bir iş akışı bulunmuyor.</summary>
     public const string Idle = "idle";
 
-    /// <summary>Parametreler toplanıyor; mesajlar iş akışı ajanına gidiyor.</summary>
+    /// <summary>Slotlar toplanıyor; mesajlar iş akışı ajanına yönlendiriliyor.</summary>
     public const string SlotFilling = "slot_filling";
 
     /// <summary>Onay ekranı gösterildi; kullanıcının kararı bekleniyor.</summary>

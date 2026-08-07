@@ -3,10 +3,11 @@ using Banking.Domain.Data;
 namespace Banking.Domain.Services;
 
 /// <summary>
-/// O an "oturum açmış" müşteriyi temsil eder. Demo'da tek müşteriye sabitlenir,
-/// ancak gerçek bir kimlik doğrulama katmanına kolayca bağlanabilir.
+/// İsteği yapan müşterinin kimliğini taşır. Yürürlükteki uygulamada tek müşteriye sabitlenmiştir ve
+/// bir kimlik doğrulama katmanıyla değiştirilebilecek biçimde yalıtılmıştır.
 /// </summary>
 public sealed class CustomerContext
 {
+    /// <summary>İsteği yapan müşterinin kimliği.</summary>
     public string CurrentCustomerId { get; set; } = InMemoryBankStore.DemoCustomerId;
 }

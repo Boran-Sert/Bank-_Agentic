@@ -5,8 +5,8 @@ using System.Text.Json.Serialization;
 namespace Banking.Gateway.Models;
 
 /// <summary>
-/// .NET'ten Java MW'ye dönen response. Java MW'nin beklediği flat JSON yapısına birebir uygundur.
-/// Top-level sabit alanlar haricindeki tüm Record parametreleri düz (flat) JSON alanları olarak serileştirilir.
+/// İstemciye dönen yanıtın kablo üzerindeki gösterimi. Tüketicinin beklediği düz (flat) JSON
+/// yapısına birebir uyar: aşağıdaki dört sabit alan dışındaki her değer kök seviyeye yazılır.
 /// </summary>
 public sealed record GatewayResponse
 {
@@ -27,24 +27,31 @@ public sealed record GatewayResponse
     public string? SessionToken { get; init; }
 
     /// <summary>
-    /// Sabit 4 alan dışındaki tüm Record parametreleri (amount, cardNumber, accountNo, receiverIban vb.)
-    /// JSON'ın KÖK (root) seviyesine düz (flat) property olarak yazılır.
+    /// Sabit alanların dışında kalan akışa özgü değerler. Serileştirmede JSON kök seviyesine düz
+    /// property olarak yazılır; iç içe bir nesne üretilmez.
     /// </summary>
     [JsonExtensionData]
     public Dictionary<string, object?> AdditionalProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Düz metin yanıt üretir.</summary>
     public static GatewayResponse AsText(string text) => new()
     {
         Type = GatewayResponseType.TEXT,
         Text = text
     };
 
+    /// <summary>İstemciyi verilen ekran koduna yönlendiren yanıt üretir.</summary>
     public static GatewayResponse AsOpenScreen(string mkCodeValue) => new()
     {
         Type = GatewayResponseType.OPEN_SCREEN,
         MkCodeValue = mkCodeValue
     };
 
+    /// <summary>
+    /// Onay ekranı yanıtı üretir. Slot adları camelCase'e çevrilerek kök seviyeye yazılır.
+    /// </summary>
+    /// <param name="mkCodeValue">Ekranı render edecek UI kodu; çözülemediyse <c>null</c>.</param>
+    /// <param name="parameters">Onaya sunulan slot kümesi.</param>
     public static GatewayResponse AsGenericConfirmation(string? mkCodeValue, IReadOnlyDictionary<string, object?> parameters)
     {
         var response = new GatewayResponse

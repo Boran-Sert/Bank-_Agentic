@@ -8,12 +8,20 @@ using Microsoft.Extensions.Logging;
 
 namespace Banking.Gateway;
 
+/// <summary>Bir isteğin hangi yürütme hattına gittiğini belirtir.</summary>
 public enum FlowExecutionType
 {
+    /// <summary>İstek aktif iş akışı motorunda bir adım olarak işlendi.</summary>
     WorkflowStep,
+
+    /// <summary>İstek LLM orkestratörü tarafından yanıtlandı.</summary>
     OrchestratorReply
 }
 
+/// <summary>Yönlendirmenin sonucu. <see cref="ExecutionType"/> hangi alanın dolu olduğunu belirler.</summary>
+/// <param name="ExecutionType">İsteğin işlendiği yürütme hattı.</param>
+/// <param name="WorkflowResult">İş akışı adımının sonucu; orkestratör hattında <c>null</c>.</param>
+/// <param name="OrchestratorReply">Orkestratörün yanıtı; iş akışı hattında <c>null</c>.</param>
 public sealed record FlowExecutionResult(
     FlowExecutionType ExecutionType,
     WorkflowStepResult? WorkflowResult = null,
@@ -23,8 +31,8 @@ public sealed record FlowExecutionResult(
 /// Deterministik yönlendirici: isteğin aktif bir iş akışına mı yoksa LLM orkestratörüne mi
 /// gideceğine karar verir.
 /// <para>
-/// Aktif akış varsa mesaj <b>hiçbir koşulda</b> orkestratöre uğramaz — kullanıcı ödeme
-/// ortasındayken LLM akıl yürütmesiyle akıştan çıkarılamaz.
+/// <b>Aktif bir akış varken mesaj hiçbir koşulda orkestratöre uğramaz.</b> Bu kural, ödeme
+/// ortasındaki bir kullanıcının LLM akıl yürütmesiyle akıştan çıkarılmasını engeller.
 /// </para>
 /// </summary>
 public sealed class FlowRouter(
@@ -34,6 +42,10 @@ public sealed class FlowRouter(
     TraceHub hub,
     ILogger<FlowRouter> logger)
 {
+    /// <summary>
+    /// Mesajı uygun yürütme hattına yönlendirir: oturumda kullanıcı etkileşimi bekleyen bir akış
+    /// varsa iş akışı motoruna, aksi hâlde orkestratöre.
+    /// </summary>
     public async Task<FlowExecutionResult> RouteUserRequestAsync(string userMessage, CancellationToken cancellationToken = default)
     {
         var sessionId = sessionAccessor.Current.SessionId;

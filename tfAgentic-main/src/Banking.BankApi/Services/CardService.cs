@@ -12,8 +12,9 @@ public interface ICardService
 }
 
 /// <summary>
-/// Kart okuma yolu. Kart borcu tahsilatı <b>burada değildir</b>: <see cref="ICollectionService.Charge"/>
-/// içindedir — ön-doğrulama ile tahsilatın aynı kod yolunu kullanması için.
+/// Kart verisinin okuma yolu. <b>Kart borcu tahsilatı bu sınıfta değildir;</b> tahsilat
+/// <see cref="ICollectionService.Charge"/> içindedir. Ön doğrulama ile tahsilatın aynı kod yolunu
+/// paylaşması bu ayrımla sağlanır.
 /// </summary>
 public sealed class CardService(InMemoryBankStore store) : ICardService
 {

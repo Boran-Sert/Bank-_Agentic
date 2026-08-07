@@ -8,17 +8,16 @@ using Banking.Domain.Constants;
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// Bir isteğin oturumuna açılan <b>tek kapı</b>. Oturum verisine erişen her katman —
-/// orkestratör, iş akışı motoru, slot yazıcı — buradan geçer.
+/// Bir isteğin oturum durumuna açılan tek erişim noktası. Oturum verisine erişen her katman —
+/// orkestratör, iş akışı motoru, slot yazıcı — bu tip üzerinden geçer.
 /// <para>
-/// <b>Neden tek kapı:</b> önceden oturum durumu yedi ayrı dosyadan otuz dört kez okunup
-/// yazılıyordu. Depo RAM olduğu için hepsi aynı nesneye denk geliyor ve sistem çalışıyordu;
-/// Redis'e geçildiğinde her okuma ayrı bir kopya döneceği için bir katmanın yazdığını
-/// diğerinin ezmesi kaçınılmazdı. Artık durum istek başına <b>bir kez</b> yüklenir
-/// (<see cref="ISessionAccessor.BeginScopeAsync"/>) ve <b>bir kez</b> yazılır (scope kapanışı).
+/// <b>Değişmez:</b> oturum durumu istek başına bir kez yüklenir ve bir kez yazılır
+/// (<see cref="ISessionAccessor.RunInSessionScopeAsync{TResult}"/>). Ara okuma veya ara yazma
+/// yapılmaz; dağıtık bir depoda her okuma ayrı bir kopya döndüreceğinden, çok noktalı erişim bir
+/// katmanın yazdığını diğerinin sessizce ezmesine yol açar.
 /// </para>
 /// <para>
-/// Bu yüzden buradaki metotlar <b>senkrondur</b>: veri zaten bellektedir, I/O yoktur.
+/// Bu nedenle buradaki metotlar senkrondur: veri bellektedir, I/O yapılmaz.
 /// </para>
 /// </summary>
 public sealed class SessionContext
@@ -31,7 +30,7 @@ public sealed class SessionContext
         _hub = hub;
     }
 
-    /// <summary>Ham durum. Yalnızca kalıcılık katmanı (<see cref="ISessionStore"/>) içindir.</summary>
+    /// <summary>Ham oturum durumu. Yalnızca kalıcılık katmanının (<see cref="ISessionStore"/>) kullanımı içindir.</summary>
     internal SessionState State { get; }
 
     public string SessionId => State.SessionId;
@@ -43,14 +42,14 @@ public sealed class SessionContext
     /// <summary>Aktif iş akışının adı; akış yoksa <c>null</c>.</summary>
     public string? ActiveWorkflowName => State.ActiveWorkflowName;
 
-    /// <summary>Akışın hangi evrede olduğu (<see cref="WorkflowPhases"/>).</summary>
+    /// <summary>Akışın içinde bulunduğu evre. Geçerli değerler <see cref="WorkflowPhases"/> içinde tanımlıdır.</summary>
     public string Phase
     {
         get => State.Phase;
         set => State.Phase = value;
     }
 
-    /// <summary>Akış hâlâ kullanıcı etkileşimi bekliyor mu?</summary>
+    /// <summary>Oturumda kullanıcı etkileşimi bekleyen bir akış bulunduğunu belirtir.</summary>
     public bool HasActiveWorkflow =>
         State.ActiveWorkflowName is not null &&
         State.Phase is WorkflowPhases.SlotFilling or WorkflowPhases.AwaitingApproval;
@@ -62,7 +61,8 @@ public sealed class SessionContext
         set => State.LastUserMessage = value;
     }
 
-    /// <summary>Yeni bir akışı bu oturuma bağlar ve parametre toplamaya hazırlar.</summary>
+    /// <summary>Verilen iş akışını oturuma bağlar ve slot doldurmaya hazır duruma getirir.</summary>
+    /// <param name="workflowName">Akışın kanonik adı; boş olamaz.</param>
     public void BeginWorkflow(string workflowName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workflowName);
@@ -76,25 +76,27 @@ public sealed class SessionContext
     public void CompleteWorkflow() =>
         ResetWorkflow(WorkflowPhases.Completed, "StateBag Tamamlandı & Temizlendi");
 
-    /// <summary>Akışı iptal eder ve oturumu bir sonraki iş için temizler.</summary>
+    /// <summary>Akışı iptal eder ve oturumu bir sonraki iş için temizler. Hiçbir eylem çalıştırılmaz.</summary>
     public void CancelWorkflow() =>
         ResetWorkflow(WorkflowPhases.Cancelled, "StateBag İptal Edildi & Temizlendi");
 
     /// <summary>
-    /// İş akışı ajanının araç çağrısıyla bıraktığı sinyali kaydeder (iptal / devretme).
+    /// İş akışı ajanının bir araç çağrısıyla bıraktığı denetim sinyalini (iptal veya devretme) kaydeder.
     /// <para>
-    /// Sinyal ajanın <b>yanıt metninden okunamaz</b>: model araç sonucunu kullanıcıya olduğu gibi
-    /// aktarmaz, kendi cümlesini kurar. Bu yüzden araç, kararı doğrudan oturuma yazar — teklif
-    /// aracının slotları oturuma yazması gibi.
+    /// <b>Sinyal ajanın yanıt metninden okunmaz.</b> Model araç sonucunu olduğu gibi aktarmaz, kendi
+    /// cümlesini kurar; dolayısıyla serbest metinde sinyal aramak güvenilir değildir. Araç kararı
+    /// doğrudan oturuma yazar — teklif aracının slotları oturuma yazması gibi.
     /// </para>
     /// </summary>
+    /// <param name="signal">Sinyal sabiti; geçerli değerler <see cref="Workflows.Engine.WorkflowAgentSignals"/> içindedir.</param>
     public void RaiseAgentSignal(string signal)
     {
         State.PendingAgentSignal = signal;
         _hub.Publish(TraceCategories.Workflow, $"Ajan sinyali alındı → {signal}");
     }
 
-    /// <summary>Bekleyen ajan sinyalini döner ve siler; sinyal yalnızca üretildiği tura aittir.</summary>
+    /// <summary>Bekleyen ajan sinyalini okur ve siler. Sinyal yalnızca üretildiği tur boyunca geçerlidir.</summary>
+    /// <returns>Bekleyen sinyal; yoksa <c>null</c>.</returns>
     public string? ConsumeAgentSignal()
     {
         var signal = State.PendingAgentSignal;
@@ -106,7 +108,9 @@ public sealed class SessionContext
     // 2. SLOTLAR
     // =================================================================================
 
-    /// <summary>Tek bir parametreyi kaydeder.</summary>
+    /// <summary>Tek bir slot değerini oturuma yazar. Aynı ada ikinci yazma önceki değeri değiştirir.</summary>
+    /// <param name="slotName">Slot adı; büyük/küçük harf duyarsızdır ve boş olamaz.</param>
+    /// <param name="slotValue">Yazılacak ham değer.</param>
     public void SetSlot(string slotName, object? slotValue)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(slotName);
@@ -115,7 +119,7 @@ public sealed class SessionContext
         _hub.Publish(TraceCategories.Workflow, $"StateBag Parametre Eklendi → [{slotName} = {slotValue}] (Session: {SessionId})");
     }
 
-    /// <summary>Dolu, eksik ve opsiyonel parametreleri döner (akışın YAML şemasına göre).</summary>
+    /// <summary>Akışın YAML şemasına göre dolu, eksik ve opsiyonel slotları hesaplar.</summary>
     public SlotStatus GetSlotStatus()
     {
         var status = SlotBinder.GetStatus(State.SlotValues, State.ExpectedSlots);
@@ -125,14 +129,16 @@ public sealed class SessionContext
         return status;
     }
 
-    /// <summary>Toplanan değerlerden onaya sunulacak parametre kümesini kurar.</summary>
+    /// <summary>Toplanan değerlerden onaya sunulacak slot kümesini kurar.</summary>
     public SlotConstructionResult ConstructSlots() =>
         SlotBinder.Construct(State.SlotValues, State.ExpectedSlots);
 
     /// <summary>
-    /// Kurulmuş parametre kümesini onaya hazır olarak saklar ve alanlarını tekrar StateBag'e
-    /// yazar (böylece bir sonraki turda özet aynı değerleri görür).
+    /// Kurulmuş slot kümesini teklif olarak saklar ve <c>null</c> olmayan değerlerini toplanan
+    /// değerlere geri yazar; böylece bir sonraki turda durum özeti aynı değerleri raporlar.
     /// </summary>
+    /// <param name="workflowName">Teklifin ait olduğu akışın kanonik adı.</param>
+    /// <param name="slots">Onaya sunulacak slot kümesi.</param>
     public void StoreProposedSlots(string workflowName, Dictionary<string, object?> slots)
     {
         ArgumentNullException.ThrowIfNull(slots);
@@ -154,10 +160,14 @@ public sealed class SessionContext
     }
 
     /// <summary>
-    /// Akışın YAML şemasını oturuma tanıtır: hangi alanlar beklenir, tipleri ne, hangileri zorunlu.
-    /// Akış her başladığında yeniden yazılır — düzenlenmiş bir YAML'ın eski şemayla çalışması,
-    /// hata vermeden yanlış alan toplamak demekti.
+    /// Akışın YAML şemasını oturuma tanıtır: hangi slotlar beklenir, tipleri nedir, hangileri zorunludur.
+    /// <para>
+    /// Şema akış her başladığında yeniden yazılır. Böylece güncellenmiş bir YAML tanımı her zaman
+    /// yürürlükteki şemayla çalışır; eski şemanın kalması, hata üretmeden yanlış slot toplanmasına
+    /// yol açar.
+    /// </para>
     /// </summary>
+    /// <param name="expectedSlots">Slot adı → tip ve zorunluluk. Boş veya <c>null</c> ise şema kaldırılır.</param>
     public void DeclareExpectedSlots(IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
     {
         State.ExpectedSlots = expectedSlots is { Count: > 0 }
@@ -165,10 +175,10 @@ public sealed class SessionContext
             : null;
     }
 
-    /// <summary>Aktif akışın beklenen alan şeması; akış yoksa <c>null</c>.</summary>
+    /// <summary>Aktif akışın beklenen slot şeması; akış yoksa <c>null</c>.</summary>
     public IReadOnlyDictionary<string, DeclarativePropertyConfig>? ExpectedSlots => State.ExpectedSlots;
 
-    /// <summary>Onaya sunulmuş parametre kümesi; teklif yoksa <c>null</c>.</summary>
+    /// <summary>Onaya sunulmuş slot kümesini döner; teklif yoksa <c>null</c>.</summary>
     public Dictionary<string, object?>? ReadProposedSlots() => State.ProposedSlots;
 
     // =================================================================================
@@ -187,7 +197,7 @@ public sealed class SessionContext
         set => State.IdempotencyToken = value;
     }
 
-    /// <summary>Bu onay için zaten üretilmiş sonuç; doluysa eylem tekrar çalıştırılmaz.</summary>
+    /// <summary>Bu onay için üretilmiş sonuç. Dolu olduğunda eylem yeniden çalıştırılmaz, bu sonuç döner.</summary>
     public WorkflowOutcome? CompletedOutcome
     {
         get => State.CompletedOutcome;

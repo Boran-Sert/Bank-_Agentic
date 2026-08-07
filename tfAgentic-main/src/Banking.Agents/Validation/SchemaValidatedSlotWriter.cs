@@ -6,17 +6,17 @@ using Banking.Domain.Constants;
 namespace Banking.Agents.Validation;
 
 /// <summary>
-/// <c>update_slot</c> aracının arkasındaki <b>tek geçiş noktası (choke point)</b>.
+/// <c>update_slot</c> aracının arkasındaki tek geçiş noktası. Oturuma yazılan her slot değeri bu
+/// sınıftan geçer.
 /// <para>
-/// Buradaki tek kural <b>şema uyumu</b>dur: değer, akışın YAML tanımındaki <c>type:</c> ile
-/// uyuşuyor mu? Uyuşmuyorsa oturuma <b>hiç yazılmaz</b> ve gerekçe araç sonucu olarak LLM'e
-/// döner; LLM aynı turda doğru tipi tekrar sorar, hatalı değer onay ekranına ulaşamaz.
+/// Uygulanan tek kural <b>şema uyumudur:</b> değer, akışın YAML tanımındaki tiple uyuşmuyorsa
+/// oturuma yazılmaz ve gerekçe araç sonucu olarak ajana döner. Ajan aynı turda doğru tipi yeniden
+/// sorar ve uyumsuz değer onay ekranına ulaşamaz.
 /// </para>
 /// <para>
-/// <b>Bankacılık kuralı burada yoktur.</b> Yetersiz bakiye, borçtan büyük tutar, hatalı IBAN —
-/// bunların hepsi bankanın kendi backend'inin bileceği iştir ve orada zaten uygulanır. Bu
-/// katmanda ikinci bir kopya tutmak, iki kuralın birbirinden habersiz sapması demekti; üstelik
-/// bu sistem bankanın kurallarını bilmek zorunda da değil.
+/// <b>Bankacılık kuralı içermez.</b> Yetersiz bakiye, borcu aşan tutar ve geçersiz IBAN denetimleri
+/// bankanın kendi uçlarına aittir. Aynı kuralın burada da tutulması, iki kopyanın birbirinden
+/// habersiz sapmasına yol açar.
 /// </para>
 /// </summary>
 public sealed class SchemaValidatedSlotWriter(
@@ -25,9 +25,11 @@ public sealed class SchemaValidatedSlotWriter(
     IReadOnlyDictionary<string, DeclarativePropertyConfig>? slotSchema = null)
 {
     /// <summary>
-    /// Adayı YAML şemasına sorar; uyuyorsa oturuma yazar.
+    /// Aday değeri YAML şemasıyla karşılaştırır ve yalnızca uyuyorsa oturuma yazar.
     /// </summary>
-    /// <returns>LLM'e döndürülecek araç sonucu metni.</returns>
+    /// <param name="slotName">Yazılacak slotun adı.</param>
+    /// <param name="candidateSlotValue">Ajanın gönderdiği ham değer.</param>
+    /// <returns>Ajana döndürülecek araç sonucu metni; reddedilen değerlerde gerekçeyi taşır.</returns>
     public string WriteSlotIfSchemaAccepts(string slotName, object? candidateSlotValue)
     {
         // YAML'daki type: hiçbir araç şemasına girmiyor — update_slot'un value şeması Ollama
@@ -47,9 +49,9 @@ public sealed class SchemaValidatedSlotWriter(
     }
 
     /// <summary>
-    /// Slotun YAML'da bildirilen tipini döner; şema yoksa veya slot şemada tanımlı değilse
-    /// <c>null</c> (kısıt uygulanmaz). Arama büyük/küçük harf duyarsızdır — model alan adını
-    /// farklı yazımla gönderebilir.
+    /// Slotun YAML'da bildirilen tipini döner. Şema tanımlı değilse veya slot şemada yoksa <c>null</c>
+    /// döner ve tip kısıtı uygulanmaz. Arama büyük/küçük harf duyarsızdır; model slot adını farklı
+    /// yazımla gönderebilir.
     /// </summary>
     private string? FindDeclaredType(string slotName)
     {
@@ -68,9 +70,12 @@ public sealed class SchemaValidatedSlotWriter(
         $"Slot '{slotName}' başarıyla güncellendi: '{slotValue}'";
 
     /// <summary>
-    /// Tip uyuşmazlığını LLM'e taşır. Değer <b>dönüştürülmez</b>: massage edilmiş bir değer,
-    /// kullanıcının söylemediği bir şeyi onay ekranına taşıma riski demektir. Bunun yerine
-    /// modelden doğru tipte yeniden göndermesi istenir.
+    /// Tip uyuşmazlığını ajana bildiren araç sonucu metnini üretir.
+    /// <para>
+    /// <b>Değer dönüştürülmez.</b> Uymayan bir değerin biçimlendirilerek kabul edilmesi, kullanıcının
+    /// söylemediği bir değerin onay ekranına taşınması riskini doğurur; bunun yerine modelden doğru
+    /// tipte yeniden göndermesi istenir.
+    /// </para>
     /// </summary>
     private static string BuildRejectedMessage(string slotName, string expectedType) =>
         $"REJECTED: '{slotName}' değeri kaydedilmedi. Bu alan '{expectedType}' tipinde olmalıdır. " +

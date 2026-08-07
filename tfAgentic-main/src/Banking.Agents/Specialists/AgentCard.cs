@@ -3,24 +3,27 @@ using Banking.Mcp.Registry;
 namespace Banking.Agents.Specialists;
 
 /// <summary>
-/// Bir uzman ajanın kimlik kartı. <b>Uzman hakkındaki tek doğruluk kaynağıdır</b>:
-/// keşif, MCP araç grubu, orkestratörün göreceği köprü aracı ve A2A adresi buradan türetilir.
+/// Bir uzman ajanın kimlik kartı ve <b>uzman hakkındaki tek doğruluk kaynağı</b>: keşif, MCP araç
+/// kapsamı, orkestratörün göreceği köprü aracı ve A2A adresi bu kayıttan türetilir.
 /// <para>
-/// Yeni bir uzman eklemek için tek yapılması gereken, static <c>Card</c> ve <c>Build</c> üyeleri
-/// olan bir sınıf yazmaktır — yönlendirme kodunda hiçbir değişiklik gerekmez.
+/// Yeni bir uzman eklemek için statik <c>Card</c> ve <c>Build</c> üyeleri taşıyan bir sınıf yazmak
+/// yeterlidir; yönlendirme kodunda değişiklik gerekmez.
 /// </para>
 /// </summary>
 /// <param name="Name">Uzmanın benzersiz adı (örn. <c>HesapUzmani</c>).</param>
-/// <param name="Description">Ne yaptığı; A2A kartında ve trace'lerde görünür.</param>
-/// <param name="Instructions">Uzmanın sistem prompt'u.</param>
-/// <param name="ToolGroup">Yalnızca bu gruptaki MCP araçlarını alır (blast radius sınırlaması).</param>
-/// <param name="BridgeToolName">Orkestratörün bu uzmana danışmak için çağırdığı araç adı.</param>
-/// <param name="A2ARoute">A2A endpoint yolu son eki (örn. <c>hesap</c> → <c>/a2a/hesap</c>).</param>
-/// <param name="DisplayName">Trace çıktılarında gösterilen kısa ad.</param>
+/// <param name="Description">Uzmanın ne yaptığı. A2A kartında ve izleme çıktılarında görünür.</param>
+/// <param name="Instructions">Uzmanın sistem talimatı.</param>
+/// <param name="ToolGroup">
+/// Uzmanın erişebileceği MCP araç grubu. Erişimin bu grupla sınırlanması, bir uzmanın hatasının
+/// etki alanını kendi alanıyla sınırlı tutar.
+/// </param>
+/// <param name="BridgeToolName">Orkestratörün bu uzmana danışmak için çağırdığı aracın adı.</param>
+/// <param name="A2ARoute">A2A endpoint yolunun son eki; <c>hesap</c> değeri <c>/a2a/hesap</c> yolunu üretir.</param>
+/// <param name="DisplayName">İzleme çıktılarında gösterilen kısa ad.</param>
 /// <param name="ToolNames">
-/// Uzmanın alacağı MCP araçlarının <b>tek tek</b> adları. Arayüzden tanımlanan uzmanlar araçlarını
-/// isim isim seçer; <c>null</c> ise <paramref name="ToolGroup"/>'un tamamı verilir. İkisi birden
-/// kullanılmaz — kapsamın tek bir kaynağı olsun diye isim listesi varsa grup yok sayılır.
+/// Uzmanın alacağı MCP araçlarının adları. <c>null</c> bırakıldığında <paramref name="ToolGroup"/>
+/// grubunun tamamı verilir. <b>İkisi birlikte uygulanmaz:</b> kapsamın tek kaynağı olması için ad
+/// listesi verildiğinde grup yok sayılır.
 /// </param>
 public record AgentCard(
     string Name,

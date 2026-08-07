@@ -16,15 +16,14 @@ public enum WorkflowOutcomeStatus
 }
 
 /// <summary>
-/// Tüm deterministik iş akışlarının <b>ortak</b> sonuç sözleşmesi.
+/// Tüm deterministik iş akışlarının ortak sonuç sözleşmesi.
 /// <para>
-/// Konuşma ve gateway katmanları sonucu yorumlarken artık akışa özel tiplere
-/// (<c>PaymentOutcome</c> vb.) bakmaz; yalnızca bu sözleşmeye bakar. Böylece yeni bir
-/// iş akışı eklendiğinde üst katmanlarda tek satır değişiklik gerekmez.
+/// <b>Üst katmanlar akışa özel sonuç tipi tanımaz;</b> konuşma ve gateway katmanları yalnızca bu
+/// sözleşmeyi okur. Yeni bir iş akışı eklenmesi üst katmanlarda değişiklik gerektirmez.
 /// </para>
 /// <para>
-/// <b>Kullanıcıya gösterilecek metni akışın kendisi üretir</b> (<see cref="UserMessage"/>).
-/// Gateway bankacılık metni biçimlendirmez; yalnızca taşır.
+/// Kullanıcıya gösterilecek metni akışın kendisi üretir (<see cref="UserMessage"/>); gateway
+/// bankacılık metni biçimlendirmez, yalnızca taşır.
 /// </para>
 /// </summary>
 public sealed record WorkflowOutcome
@@ -49,25 +48,28 @@ public sealed record WorkflowOutcome
         Details = details ?? EmptyDetails;
     }
 
-    /// <summary>Akışın <c>[Workflow("...")]</c> adı (örn. <c>card-payment</c>).</summary>
+    /// <summary>Sonucu üreten akışın kanonik adı (örn. <c>card-payment</c>).</summary>
     public string WorkflowName { get; }
 
+    /// <summary>Akışın nasıl sonuçlandığı.</summary>
     public WorkflowOutcomeStatus Status { get; }
 
     /// <summary>
-    /// Kullanıcıya gösterilecek metin. Başarısızlıkta <b>gerçek sebebi</b> taşır —
-    /// hata sebebinin üst katmanda yutulması bu alan sayesinde imkânsızdır.
+    /// Kullanıcıya gösterilecek metin. <b>Başarısızlıkta gerçek gerekçeyi taşır;</b> alan zorunlu
+    /// olduğundan hata sebebinin üst katmanda yutulması mümkün değildir.
     /// </summary>
     public string UserMessage { get; }
 
-    /// <summary>Üretildiyse makbuz numarası; para hareketi olmayan akışlarda <c>null</c>.</summary>
+    /// <summary>Banka tarafından üretilen makbuz numarası; para hareketi içermeyen akışlarda <c>null</c>.</summary>
     public string? ReceiptId { get; }
 
-    /// <summary>Akışa özel yapısal alanlar (tutar, kalan bakiye, IBAN…). UI kartları için.</summary>
+    /// <summary>Bankanın döndürdüğü yapısal alanlar (tutar, kalan bakiye, IBAN vb.); UI kartları içindir.</summary>
     public IReadOnlyDictionary<string, object?> Details { get; }
 
+    /// <summary>Eylemin gerçekleştiğini belirtir.</summary>
     public bool IsSuccess => Status == WorkflowOutcomeStatus.Succeeded;
 
+    /// <summary>Eylemin gerçekleştiğini bildiren sonuç üretir.</summary>
     public static WorkflowOutcome Success(
         string workflowName,
         string userMessage,
@@ -75,12 +77,15 @@ public sealed record WorkflowOutcome
         IReadOnlyDictionary<string, object?>? details = null) =>
         new(workflowName, WorkflowOutcomeStatus.Succeeded, userMessage, receiptId, details);
 
+    /// <summary>Kullanıcının onay ekranında reddettiğini bildiren sonuç üretir. Hiçbir eylem çalıştırılmamıştır.</summary>
     public static WorkflowOutcome RejectedByUser(string workflowName, string userMessage) =>
         new(workflowName, WorkflowOutcomeStatus.RejectedByUser, userMessage, receiptId: null, details: null);
 
     /// <summary>
-    /// Eylem denendi ve başarısız oldu. <paramref name="reason"/> doğrudan kullanıcıya iletilir.
+    /// Eylemin denendiğini ve başarısız olduğunu bildiren sonuç üretir.
     /// </summary>
+    /// <param name="workflowName">Sonucu üreten akışın kanonik adı.</param>
+    /// <param name="reason">Başarısızlığın gerekçesi; doğrudan kullanıcıya iletilir.</param>
     public static WorkflowOutcome Failure(string workflowName, string reason) =>
         new(workflowName, WorkflowOutcomeStatus.Failed, reason, receiptId: null, details: null);
 }

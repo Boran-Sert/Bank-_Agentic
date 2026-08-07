@@ -7,12 +7,12 @@ namespace Banking.Domain.Services;
 public interface ITransferService
 {
     /// <summary>
-    /// <b>Ön-doğrulama (dry-run).</b> Para hareketi YAPMAZ; bankanın transferi bu bilgilerle
-    /// kabul edip etmeyeceğini söyler.
+    /// Ön doğrulama yapar. <b>Para hareketi üretmez;</b> yalnızca bankanın transferi verilen
+    /// bilgilerle kabul edip etmeyeceğini bildirir.
     /// <para>
-    /// Tüm parametreler nullable'dır: slotlar kısmen doluyken de çağrılabilsin diye. Banka
-    /// yalnızca elindeki bilgiyle ilgili kuralları uygular (örneğin IBAN verilmişse IBAN'ı,
-    /// tutar verilmişse bakiyeyi kontrol eder).
+    /// Tüm parametreler isteğe bağlıdır; böylece slotlar kısmen doluyken de çağrılabilir. Banka
+    /// yalnızca eldeki bilgiyle ilgili kuralları uygular: IBAN verilmişse biçimini, tutar verilmişse
+    /// bakiyeyi denetler.
     /// </para>
     /// </summary>
     BankValidationResult ValidateMoneyTransferBeforeExecution(
@@ -21,16 +21,17 @@ public interface ITransferService
         decimal? transferAmount);
 
     /// <summary>
-    /// GERİ ALINAMAZ işlem: Bir hesaptan belirtilen IBAN'a para transferi (Havale/EFT) gerçekleştirir.
-    /// Yalnızca kullanıcı onayından sonra, deterministik olarak çağrılmalıdır.
+    /// Kaynak hesaptan verilen IBAN'a para transferi gerçekleştirir.
+    /// <para>
+    /// <b>Geri alınamaz bir işlemdir.</b> Yalnızca kullanıcı onayı alındıktan sonra çağrılmalıdır.
+    /// </para>
     /// </summary>
     TransferReceipt Transfer(string sourceAccountId, string targetIban, decimal amount, string description);
 }
 
 /// <summary>
-/// Para transferinin <b>tek</b> sahibi: hem ön-doğrulama hem de hesap bakiyelerini ve hareket
-/// satırlarını değiştiren para hareketi burada. Veri katmanı
-/// (<see cref="InMemoryBankStore"/>) yalnızca koleksiyonları tutar.
+/// Para transferinin tek sahibi: hem ön doğrulama hem de hesap bakiyeleriyle hareket satırlarını
+/// değiştiren para hareketi bu sınıftadır. Veri katmanı yalnızca koleksiyonları tutar.
 /// </summary>
 public sealed class TransferService(InMemoryBankStore store) : ITransferService
 {

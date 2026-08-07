@@ -6,32 +6,32 @@ using Microsoft.Extensions.Logging;
 
 namespace Banking.Agents.ContextProviders;
 
-/// <summary>Bir önceki turda asistanın verdiği yanıt; zamirli takip sorularını çözmek için.</summary>
+/// <summary>Zamirli takip sorularının çözülmesi için saklanan tur bağlamı.</summary>
 public sealed class TopicState
 {
+    /// <summary>Asistanın bir önceki turda verdiği yanıt; bağlam temizlendiğinde <c>null</c> olur.</summary>
     public string? LastAssistantResponse { get; set; }
 }
 
 /// <summary>
-/// Orkestratöre "bir önceki turda ne konuşuldu" bilgisini enjekte eden bağlam sağlayıcı.
+/// Orkestratöre bir önceki turun bağlamını enjekte eden sağlayıcı. Kullanıcı zamirle konuştuğunda
+/// isteğin doğru uzmana yönlendirilebilmesini sağlar.
 /// <para>
-/// Kullanıcı "bunlardan bana uygun olanları göster" gibi zamirle konuştuğunda orkestratörün
-/// isteği doğru uzmana yönlendirebilmesi için gereklidir.
+/// <b>Bağlam, orkestratör bir eylem aracı tetiklediğinde silinir</b> (bkz.
+/// <see cref="ContextResettingTools"/>). Eylem noktasında konu değişmiştir ve önceki yanıt artık
+/// geçerli bir gönderge değildir.
 /// </para>
 /// <para>
-/// <b>Bağlam ne zaman silinir:</b> orkestratör bir <i>eylem</i> aracı tetiklediyse
-/// (<see cref="ContextResettingTools"/>). O noktada konu değişmiştir; önceki yanıt artık geçerli
-/// bir gönderge değildir. Karar <b>araç adı sabitlerinden</b> okunur — yanıt metninde kelime
-/// aramak ("tamamlandı" geçiyor mu?) kullanıcının normal bir cümlesinde de tetiklenir ve
-/// bağlamı sebepsiz siler.
+/// Karar araç adı sabitlerinden okunur, yanıt metninden değil. Metinde anahtar sözcük aramak,
+/// kullanıcının olağan bir cümlesinde de eşleşir ve bağlamı gereksiz yere siler.
 /// </para>
 /// </summary>
 public sealed class TopicContextProvider : AIContextProvider
 {
     /// <summary>
-    /// Tetiklendiğinde konuyu kapatan araçlar. İş akışı tamamlanma/iptal durumları buraya
-    /// düşmez: <c>FlowRouter</c> aktif akışta orkestratörü baypas ettiği için bu sağlayıcı
-    /// o turları hiç görmez.
+    /// Tetiklendiklerinde konuyu kapatan araçlar. İş akışının tamamlanma ve iptal durumları bu
+    /// listeye girmez: aktif akışta yönlendirici orkestratörü baypas ettiğinden bu sağlayıcı o
+    /// turları hiç görmez.
     /// </summary>
     private static readonly HashSet<string> ContextResettingTools = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -51,7 +51,7 @@ public sealed class TopicContextProvider : AIContextProvider
         _sessionState = new ProviderSessionState<TopicState>(_ => new TopicState(), nameof(TopicContextProvider));
     }
 
-    /// <summary>Saklanan önceki yanıtı sistem mesajı olarak isteme ekler.</summary>
+    /// <summary>Saklanan önceki yanıtı sistem mesajı olarak bu turun bağlamına ekler.</summary>
     protected override ValueTask<AIContext> ProvideAIContextAsync(
         InvokingContext context, CancellationToken cancellationToken = default)
     {
@@ -73,7 +73,7 @@ public sealed class TopicContextProvider : AIContextProvider
         });
     }
 
-    /// <summary>Turun sonunda yanıtı saklar; eylem aracı tetiklendiyse bağlamı temizler.</summary>
+    /// <summary>Tur sonunda yanıtı saklar. Turda bir eylem aracı tetiklendiyse bağlamı temizler.</summary>
     protected override ValueTask StoreAIContextAsync(
         InvokedContext context, CancellationToken cancellationToken = default)
     {

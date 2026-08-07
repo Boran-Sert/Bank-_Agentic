@@ -10,15 +10,15 @@ using Microsoft.Extensions.Logging;
 namespace Banking.Agents.Runtime;
 
 /// <summary>
-/// Ekran yönlendirme araçları: kullanıcı bir menüye/ekrana gitmek istediğinde önce semantik
-/// arama ile ekran kodu bulunur, sonra o kodla ekran açılır.
+/// Ekran yönlendirme araçlarını üreten bileşen. Kullanıcı bir menüye veya ekrana gitmek istediğinde
+/// önce semantik arama ile ekran kodu bulunur, ardından bulunan kodla ekran açılır.
 /// </summary>
 public sealed class NavigationTools(
     SemanticMkCodeSearcher screenCodeSearcher,
     TraceHub hub,
     ILogger<NavigationTools> logger)
 {
-    /// <summary>Orkestratöre eklenecek ekran araçlarını üretir.</summary>
+    /// <summary>Orkestratörün araç kümesine eklenecek ekran araçlarını üretir.</summary>
     public IReadOnlyList<AITool> BuildTools()
     {
         EnsureOpenScreenParameterName();
@@ -58,8 +58,8 @@ public sealed class NavigationTools(
     }
 
     /// <summary>
-    /// Hedef ekranı açar. <b>Parametre adı</b> <see cref="ToolNames.OpenScreenTargetParameter"/>
-    /// ile birebir aynı olmalıdır; gateway yanıtı bu anahtarla okur.
+    /// Hedef ekranı açar. <b>Parametre adı <see cref="ToolNames.OpenScreenTargetParameter"/> ile
+    /// birebir aynı olmalıdır;</b> gateway yönlendirme hedefini bu anahtarla okur.
     /// </summary>
     [Description("Kullanıcı belirli bir menüye veya ekrana GİTMEK/AÇMAK istediğinde çağrılır. Parametre olarak SADECE 'ekran_kodu_ara' aracından bulduğunuz en uygun targetMkCode değerini verin.")]
     private string OpenScreen(string targetMkCode)
@@ -69,9 +69,11 @@ public sealed class NavigationTools(
     }
 
     /// <summary>
-    /// Araç parametre adının gateway'in okuduğu anahtarla eşleştiğini doğrular.
-    /// Eşleşmezse ekran yönlendirmesi hiçbir hata vermeden çalışmaz; bu yüzden başlangıçta patlar.
+    /// Araç parametre adının gateway'in okuduğu anahtarla eşleştiğini doğrular ve eşleşmiyorsa
+    /// istisna fırlatır. <b>Doğrulama başlangıçta yapılır:</b> ayrışma çalışma zamanında hata
+    /// üretmez, ekran yönlendirmesi yalnızca sessizce çalışmaz.
     /// </summary>
+    /// <exception cref="InvalidOperationException">Parametre adı beklenen anahtarla eşleşmediğinde fırlatılır.</exception>
     private static void EnsureOpenScreenParameterName()
     {
         var parameterName = typeof(NavigationTools)

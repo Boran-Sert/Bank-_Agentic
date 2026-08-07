@@ -6,14 +6,14 @@ using Banking.Domain.Constants;
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// Bir kullanıcı oturumuna ait <b>tüm</b> durum — saf veri, davranış yok.
+/// Bir kullanıcı oturumunun taşıdığı durumun tamamı. Saf veri tipidir; davranış içermez.
 /// <para>
-/// Ajan nesneleri singleton ve stateless olduğu için kullanıcıya özel her şey burada,
-/// <c>sessionId</c> anahtarıyla durur. İstekler arasında bellekte canlı ajan/oturum nesnesi
-/// tutulmaz: konuşma geçmişleri serileştirilmiş olarak saklanır.
+/// Ajan nesneleri singleton ve stateless olduğundan kullanıcıya özel her değer burada, oturum
+/// kimliği anahtarıyla tutulur. İstekler arasında bellekte canlı ajan veya konuşma nesnesi
+/// bırakılmaz; konuşma geçmişleri serileştirilmiş olarak saklanır.
 /// </para>
 /// <para>
-/// Bu tipe <b>doğrudan erişilmez</b>; okuma/yazma <see cref="SessionContext"/> üzerinden yapılır.
+/// <b>Bu tipe doğrudan erişilmez.</b> Okuma ve yazma <see cref="SessionContext"/> üzerinden yapılır.
 /// </para>
 /// </summary>
 public sealed class SessionState
@@ -23,37 +23,37 @@ public sealed class SessionState
     /// <summary>Aktif iş akışının kanonik adı (örn. <c>card-payment</c>); akış yoksa <c>null</c>.</summary>
     public string? ActiveWorkflowName { get; set; }
 
-    /// <summary>idle | slot_filling | awaiting_approval | completed | cancelled</summary>
+    /// <summary>Akışın içinde bulunduğu evre: <c>idle</c>, <c>slot_filling</c>, <c>awaiting_approval</c>, <c>completed</c> veya <c>cancelled</c>.</summary>
     public string Phase { get; set; } = WorkflowPhases.Idle;
 
-    /// <summary>Toplanan ham parametre değerleri (StateBag). Slot doldurma boyunca büyür.</summary>
+    /// <summary>Toplanan ham slot değerleri. Slot doldurma ilerledikçe büyür, akış bittiğinde temizlenir.</summary>
     public Dictionary<string, object?> SlotValues { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Aktif akışın YAML şeması: alan adı → tip + zorunluluk. Motor "ne eksik" sorusunu buradan
-    /// yanıtlar, <c>update_slot</c> tip kontrolünü buradan yapar.
+    /// Aktif akışın YAML şeması: slot adı → tip ve zorunluluk. Motor eksik slotları, <c>update_slot</c>
+    /// ise tip kontrolünü bu şemadan okur.
     /// <para>
-    /// <b>Neden ayrı bir alan:</b> eskiden beklenen alanlar, değerleri <c>null</c> olan bir
-    /// şablon olarak <see cref="ProposedSlots"/>'a yazılıyordu. Model teklif aracını çağırmadan
-    /// tüm slotlar dolduğunda motor bu şablonu <i>gerçek teklif</i> sanıp onay ekranını tamamı
-    /// boş parametrelerle üretebiliyordu. Şablon ile teklif artık ayrı.
+    /// <b>Şema ile teklif ayrı alanlarda tutulur.</b> <see cref="ProposedSlots"/> yalnızca ajanın
+    /// açıkça sunduğu teklifi taşır; beklenen slotların listesi hiçbir koşulda teklif yerine geçmez.
+    /// İkisinin tek alanda birleşmesi, onay ekranının boş değerlerle üretilmesine yol açar.
     /// </para>
     /// </summary>
     public Dictionary<string, DeclarativePropertyConfig>? ExpectedSlots { get; set; }
 
-    /// <summary>Onaya sunulan parametre kümesi. Yalnızca <b>gerçek</b> teklif; şablon değil.</summary>
+    /// <summary>Onaya sunulan slot kümesi. Yalnızca ajanın açıkça ürettiği teklifi taşır.</summary>
     public Dictionary<string, object?>? ProposedSlots { get; set; }
 
-    /// <summary>Onay ekranına gönderilen görünüm; onay beklenirken doludur.</summary>
+    /// <summary>Onay ekranına gönderilen görünüm. Onay beklenirken doludur, akış kapandığında temizlenir.</summary>
     public GenericConfirmationView? PendingConfirmation { get; set; }
 
     /// <summary>
-    /// Onaya sunulan slot kümesinin parmak izi. Aynı anahtarla ikinci kez onay gelirse
-    /// eylem tekrar çalıştırılmaz, <see cref="CompletedOutcome"/> geri döner (çift tahsilat koruması).
+    /// Onaya sunulan slot kümesinin parmak izi. Aynı anahtarla gelen ikinci onay eylemi yeniden
+    /// çalıştırmaz; <see cref="CompletedOutcome"/> döner. Çift tıklamanın çift tahsilata dönüşmesini
+    /// engelleyen mekanizma budur.
     /// </summary>
     public string? IdempotencyToken { get; set; }
 
-    /// <summary>Bu idempotency anahtarı için üretilmiş sonuç; yeniden çalıştırmayı engeller.</summary>
+    /// <summary>Bu idempotency anahtarı için üretilmiş sonuç. Dolu olduğu sürece eylem yeniden çalıştırılmaz.</summary>
     public WorkflowOutcome? CompletedOutcome { get; set; }
 
     /// <summary>Orkestratör ajanının serileştirilmiş konuşma oturumu.</summary>
@@ -63,14 +63,15 @@ public sealed class SessionState
     public JsonElement? SerializedWorkflowSession { get; set; }
 
     /// <summary>
-    /// Kullanıcının bu istekteki mesajı. Orkestratörün <c>start_workflow</c> aracı akışı
-    /// başlatırken kullanır — singleton alanda tutulsaydı oturumlar karışırdı.
+    /// Kullanıcının bu istekteki mesajı. Orkestratörün <c>start_workflow</c> aracı akışı başlatırken
+    /// okur. Oturum durumunda tutulur; singleton bir alanda tutulması eşzamanlı oturumların
+    /// birbirinin mesajını görmesine yol açar.
     /// </summary>
     public string? LastUserMessage { get; set; }
 
     /// <summary>
-    /// İş akışı ajanının bu turda bir araç çağrısıyla bıraktığı sinyal (iptal / devretme).
-    /// Motor turu yorumlarken okur ve <b>hemen tüketir</b>; kalıcı bir durum değildir.
+    /// İş akışı ajanının bu turda bir araç çağrısıyla bıraktığı denetim sinyali (iptal veya devretme).
+    /// Motor turu yorumlarken okur ve aynı anda tüketir; turlar arasında taşınmaz.
     /// </summary>
     public string? PendingAgentSignal { get; set; }
 

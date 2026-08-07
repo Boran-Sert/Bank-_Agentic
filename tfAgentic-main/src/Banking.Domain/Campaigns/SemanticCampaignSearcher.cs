@@ -10,8 +10,8 @@ using SmartComponents.LocalEmbeddings;
 namespace Banking.Domain.Campaigns;
 
 /// <summary>
-/// Banka ve kart kampanyalarını yerel ONNX embedding altyapısı ile semantik (anlamsal) olarak arayan,
-/// %70 benzerlik filtresi uygulayan ve bellek içi (in-memory) vektörel indeksi yöneten arayıcı sınıf.
+/// Kampanyaları yerel ONNX gömme modeliyle anlamsal olarak arayan bileşen. Bellek içi vektör
+/// indeksini yönetir ve eşik altındaki eşleşmeleri sonuçtan eler.
 /// </summary>
 public class SemanticCampaignSearcher
 {
@@ -30,8 +30,8 @@ public class SemanticCampaignSearcher
     }
 
     /// <summary>
-    /// Sistemdeki tüm aktif kampanyaları uygulama başlangıcında vektörize edip bellek içine alır.
-    /// Cold-start gecikmelerini önler.
+    /// Aktif kampanyaların tamamını vektörleştirip bellek içi indekse alır. Uygulama başlangıcında
+    /// çağrılarak ilk sorgudaki soğuk başlangıç gecikmesini önler; ikinci çağrı etkisizdir.
     /// </summary>
     public void Initialize()
     {
@@ -51,10 +51,11 @@ public class SemanticCampaignSearcher
     }
 
     /// <summary>
-    /// Tek bir kampanyayı anında vektörize edip indekse ekler/günceller. <see cref="Initialize"/>'ın
-    /// aksine tüm önbelleği yeniden kurmaz — arama (<see cref="Search"/>) sırasında hiçbir kesinti
-    /// olmadan (zero-downtime) yeni kampanya eklenebilir. Backend senkronizasyonunun kullanacağı yol budur.
+    /// Tek bir kampanyayı vektörleştirip indekse ekler veya günceller. <see cref="Initialize"/>'dan
+    /// farklı olarak indeksin tamamını yeniden kurmaz; arama trafiği kesintiye uğramadan kampanya
+    /// eklenebilir. Kampanya senkronizasyonunun kullandığı yol budur.
     /// </summary>
+    /// <param name="campaign">İndekslenecek kampanya.</param>
     public void IndexCampaign(Campaign campaign)
     {
         if (!_isInitialized) Initialize();
@@ -70,7 +71,9 @@ public class SemanticCampaignSearcher
         _logger.LogInformation("SemanticCampaignSearcher: '{Id}' kampanyası indekse eklendi/güncellendi.", campaign.Id);
     }
 
-    /// <summary>Kampanyadaki tüm metinsel alanları (şartlar dahil) birleştirip semantik embedding üretir.</summary>
+    /// <summary>
+    /// Kampanyanın tüm metinsel alanlarını (koşullar dâhil) birleştirip gömme vektörünü üretir.
+    /// </summary>
     private EmbeddingF32 Embed(Campaign campaign)
     {
         string fullContentText = $"Kampanya: {campaign.Title}. Açıklama: {campaign.Description}. Sektör Kategori: {campaign.TargetMccGroup}. Koşullar: {campaign.TermsOfUse}. Kazanım Fayda: {campaign.Benefit}.";

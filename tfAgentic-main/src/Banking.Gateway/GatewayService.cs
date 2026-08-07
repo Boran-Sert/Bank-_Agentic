@@ -7,15 +7,15 @@ using Microsoft.Extensions.Logging;
 namespace Banking.Gateway;
 
 /// <summary>
-/// MW ↔ .NET Gateway servisi.
+/// Kullanıcı isteklerinin giriş noktası ve yanıtların tek çıkış noktası.
 /// <para>
-/// Üç iş yapar: oturum scope'unu açar, isteği <see cref="FlowRouter"/>'a devreder, dönen sonucu
-/// <see cref="GatewayResponseMapper"/> ile UI protokolüne çevirip <see cref="ResponseSanitizer"/>'dan
-/// geçirir.
+/// Üç sorumluluğu vardır: oturum scope'unu açmak, isteği <see cref="FlowRouter"/>'a devretmek ve
+/// dönen sonucu <see cref="GatewayResponseMapper"/> ile UI protokolüne çevirip
+/// <see cref="ResponseSanitizer"/>'dan geçirmek.
 /// </para>
 /// <para>
-/// Oturum scope'u burada açılır ve burada kapanır: durum <b>bir kez</b> yüklenir, istek bittiğinde
-/// <b>bir kez</b> yazılır. Aradaki hiçbir katman depoya dokunmaz.
+/// <b>Oturum scope'u burada açılır ve burada kapanır:</b> durum bir kez yüklenir, istek bittiğinde
+/// bir kez yazılır. Aradaki hiçbir katman oturum deposuna erişmez.
 /// </para>
 /// </summary>
 public sealed class GatewayService(
@@ -26,7 +26,12 @@ public sealed class GatewayService(
     GatewayResponseMapper responseMapper,
     ISessionAccessor sessionAccessor)
 {
-    /// <summary>Kullanıcı isteğini karşılar, yönlendirir ve sonucu UI formatına dönüştürüp temizler.</summary>
+    /// <summary>
+    /// Kullanıcı isteğini oturum scope'u içinde işler, yönlendirir ve sonucu UI protokolüne çevirir.
+    /// İptal ve beklenmeyen hatalar dâhil her yol kullanıcıya gösterilebilir bir yanıt döndürür.
+    /// </summary>
+    /// <param name="request">İstek gövdesi. Oturum jetonu boşsa yeni bir oturum başlatılır.</param>
+    /// <param name="cancellationToken">İptal jetonu. İptal hâlinde o ana kadarki oturum ilerlemesi yazılır.</param>
     public Task<GatewayResponse> ProcessUserRequestAsync(GatewayRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -65,7 +70,7 @@ public sealed class GatewayService(
 
     /// <summary>
     /// Yanıta oturum jetonunu ekler ve çıktı güvenlik bariyerinden geçirir.
-    /// <b>Tüm yanıtların tek çıkış noktasıdır</b> — sanitize edilmemiş yanıt dışarı çıkamaz.
+    /// <b>Tüm yanıtların tek çıkış noktasıdır:</b> temizlenmemiş hiçbir metin istemciye ulaşmaz.
     /// </summary>
     private GatewayResponse FinalizeResponse(GatewayResponse response, string sessionToken)
     {

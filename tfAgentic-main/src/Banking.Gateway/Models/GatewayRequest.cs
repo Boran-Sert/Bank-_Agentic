@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Banking.Gateway.Models;
 
 /// <summary>
-/// Java MW'den gelen istek modeli (AdcAIRequest'e karşılık gelir).
+/// İstemciden gelen kullanıcı isteğinin kablo üzerindeki gösterimi.
 /// </summary>
 public sealed record GatewayRequest
 {

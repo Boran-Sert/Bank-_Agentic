@@ -3,29 +3,28 @@ using Banking.Agents.Workflows.Declarative;
 namespace Banking.Agents.Workflows.Engine;
 
 /// <summary>
-/// Bir iş akışı ajanının kimliği ve araç adları.
+/// Bir iş akışı ajanının kimliği, araç adları ve model ayarları.
 /// <para>
-/// Adların tamamı akış adından <b>tek yerde</b> türetilir; deklaratif ve derlenmiş akışlar
-/// arasında isimlendirme sapması olamaz. Ajanın LLM'e verdiği talimatta yazan araç adı ile
-/// gerçekten kaydedilen araç adı ayrışırsa akış sessizce durur.
+/// <b>Adların tamamı akış adından tek noktada türetilir</b> (<see cref="For"/>). Ajanın talimatında
+/// geçen araç adı ile gerçekten kaydedilen araç adının ayrışması, akışın hata üretmeden sessizce
+/// durmasına yol açar; tek türetme noktası bu sapmayı yapısal olarak imkânsız kılar.
 /// </para>
 /// </summary>
 /// <param name="AgentName">Ajanın adı; aynı zamanda önbellek anahtarıdır.</param>
-/// <param name="Instructions">Sistem prompt'u; verilmezse slot şemasından üretilir.</param>
-/// <param name="SlotUpdateDescription"><c>update_slot</c> aracının LLM'e görünen açıklaması.</param>
-/// <param name="ProposeToolName">Parametreler tamamlandığında çağrılacak araç.</param>
-/// <param name="CancelToolName">Kullanıcı vazgeçtiğinde çağrılacak araç.</param>
-/// <param name="HandoffToolName">Kullanıcının mesajı akışla ilgisizse çağrılacak araç.</param>
+/// <param name="Instructions">Ajanın sistem talimatı. Verilmezse slot şemasından üretilir.</param>
+/// <param name="SlotUpdateDescription"><c>update_slot</c> aracının modele görünen açıklaması.</param>
+/// <param name="ProposeToolName">Zorunlu slotlar tamamlandığında çağrılacak aracın adı.</param>
+/// <param name="CancelToolName">Kullanıcı vazgeçtiğinde çağrılacak aracın adı.</param>
+/// <param name="HandoffToolName">Kullanıcının mesajı akışla ilgisiz olduğunda çağrılacak aracın adı.</param>
 /// <param name="SlotSchema">
-/// Deklaratif akışın YAML'daki parametre tanımları (slot adı → tip/açıklama). <c>update_slot</c>
-/// gelen değeri bu tanıma göre reddeder. Derlenmiş akışlarda <c>null</c>'dır — orada tipi slot
-/// record'unun kendisi zaten dayatır.
+/// Akışın YAML'daki slot tanımları: slot adı → tip ve açıklama. <c>update_slot</c> gelen değeri bu
+/// tanıma göre kabul veya reddeder.
 /// </param>
 /// <param name="Temperature">
 /// YAML'daki <c>model.options.temperature</c>. <c>null</c> ise ajan kendi değerini dayatmaz ve
-/// <c>TracingChatClient</c> yapılandırmadaki <c>Agents:Temperature</c>'ı doldurur.
+/// yapılandırmadaki <c>Agents:Temperature</c> geçerli olur.
 /// </param>
-/// <param name="TopP">YAML'daki <c>model.options.topP</c>; <c>null</c> ise modelin varsayılanı geçerlidir.</param>
+/// <param name="TopP">YAML'daki <c>model.options.topP</c>. <c>null</c> ise modelin varsayılanı geçerlidir.</param>
 public sealed record WorkflowAgentDefinition(
     string AgentName,
     string? Instructions,
@@ -37,7 +36,13 @@ public sealed record WorkflowAgentDefinition(
     float? Temperature = null,
     float? TopP = null)
 {
-    /// <summary>Akış adından ajan ve araç adlarını türetir.</summary>
+    /// <summary>
+    /// Akış adından ajan ve araç adlarını türetir. Bu tanım kümesinin üretildiği tek yerdir.
+    /// </summary>
+    /// <param name="workflowName">Akışın kanonik adı; tire karakterleri alt çizgiye çevrilir.</param>
+    /// <param name="instructions">Hazır sistem talimatı; verilmezse <c>null</c> bırakılır.</param>
+    /// <param name="slotSchema">Akışın YAML slot şeması.</param>
+    /// <param name="modelOptions">YAML'daki model ayarları; <c>null</c> ise varsayılanlar geçerlidir.</param>
     public static WorkflowAgentDefinition For(
         string workflowName,
         string? instructions = null,

@@ -3,13 +3,14 @@ using Microsoft.Extensions.Caching.Memory;
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// <see cref="ISessionStore"/>'un RAM uygulaması. Kayan TTL ile ~1 dakikalık kurtarma penceresi
-/// sağlar; süresi dolan oturum <see cref="IMemoryCache"/> tarafından tahliye edilir.
+/// <see cref="ISessionStore"/> arayüzünün tek süreçlik bellek içi uygulaması. Oturumlar kayan TTL
+/// ile tutulur; süresi dolan kayıt <see cref="IMemoryCache"/> tarafından tahliye edilir.
 /// </summary>
 public sealed class InMemorySessionStore(IMemoryCache cache) : ISessionStore
 {
     /// <summary>
-    /// Kopan bağlantı / sekme kapatma sonrası kurtarma penceresi. Kalıcı depolama değildir.
+    /// Kayan yaşam süresi: bağlantı kopması veya sekme kapatılması sonrası kurtarma penceresi.
+    /// Kalıcı saklama süresi değildir.
     /// </summary>
     public static readonly TimeSpan SlidingTimeToLive = TimeSpan.FromMinutes(1);
 
@@ -33,8 +34,8 @@ public sealed class InMemorySessionStore(IMemoryCache cache) : ISessionStore
     }
 
     /// <summary>
-    /// Aynı <see cref="IMemoryCache"/> örneğini başka bileşenler de kullanabileceği için
-    /// anahtarlar ön ekli tutulur.
+    /// Önbellek anahtarını üretir. Aynı <see cref="IMemoryCache"/> örneği başka bileşenlerle
+    /// paylaşıldığından anahtarlar ön ekle ayrıştırılır.
     /// </summary>
     private static string BuildCacheKey(string sessionId) => $"banking-session:{sessionId}";
 }

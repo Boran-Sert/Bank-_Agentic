@@ -1,29 +1,29 @@
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// Oturum durumunun kalıcılık soyutlaması. <b>Yalnızca <see cref="SessionContext"/> kullanır.</b>
+/// Oturum durumunun kalıcılık soyutlaması. Bu arayüzün tek çağıranı <see cref="AmbientSessionAccessor"/>'dır.
 /// <para>
-/// Uygulama kodunun hiçbir yerinden doğrudan çağrılmaz: bir istek boyunca durum tam olarak
-/// <b>bir kez okunur</b> (scope açılışında) ve <b>bir kez yazılır</b> (scope kapanışında).
-/// Bu kural sayesinde aynı isteğin farklı katmanları farklı kopyalar üzerinde çalışıp
-/// birbirinin yazdığını ezemez.
+/// <b>Uygulama kodundan doğrudan çağrılmaz.</b> Bir istek boyunca durum tam olarak bir kez okunur
+/// (scope açılışında) ve bir kez yazılır (scope kapanışında). Bu kural, aynı isteğin farklı
+/// katmanlarının ayrı kopyalar üzerinde çalışıp birbirinin yazdığını ezmesini engeller.
 /// </para>
 /// <para>
-/// Bugünkü uygulama RAM'dedir (<see cref="InMemorySessionStore"/>). Prod öncesinde Redis
-/// uygulaması <b>tek DI satırıyla</b> takılır; çağıran kod değişmez — imzaların
-/// <see cref="ValueTask"/> döndürmesinin sebebi budur.
+/// Yürürlükteki uygulama bellek içidir (<see cref="InMemorySessionStore"/>). Redis gibi dağıtık bir
+/// uygulama tek DI kaydıyla devreye alınır ve çağıran kod değişmez; imzaların <see cref="ValueTask"/>
+/// döndürmesinin nedeni bu ileride gelecek asenkron uygulamadır.
 /// </para>
 /// <para>
-/// Bu bir <b>kalıcı depo değildir</b>: kayan TTL ile ~1 dakikalık kurtarma penceresi sunar.
-/// Kullanıcının interneti giderse veya sekmesini kapatıp dönerse akış kaldığı yerden devam
-/// eder; süre dolarsa oturum silinir ve kullanıcıya dürüst bir zaman aşımı mesajı verilir.
+/// Bu bir <b>kalıcı depo değildir</b>. Kayan TTL ile yaklaşık bir dakikalık kurtarma penceresi sunar:
+/// bağlantı koptuğunda veya sekme kapatılıp dönüldüğünde akış kaldığı yerden devam eder. Süre
+/// dolduğunda oturum silinir ve kullanıcıya zaman aşımı bildirilir.
 /// </para>
 /// </summary>
 public interface ISessionStore
 {
-    /// <summary>Oturumu döner; yoksa <c>null</c>. Bulursa TTL'i tazeler.</summary>
+    /// <summary>Oturum durumunu okur ve TTL'i tazeler.</summary>
+    /// <returns>Bulunan oturum durumu; kayıt yoksa veya süresi dolmuşsa <c>null</c>.</returns>
     ValueTask<SessionState?> TryGetAsync(string sessionId, CancellationToken cancellationToken = default);
 
-    /// <summary>Değiştirilmiş oturumu yazar ve TTL'i tazeler.</summary>
+    /// <summary>Oturum durumunu yazar ve TTL'i tazeler.</summary>
     ValueTask SaveAsync(SessionState state, CancellationToken cancellationToken = default);
 }

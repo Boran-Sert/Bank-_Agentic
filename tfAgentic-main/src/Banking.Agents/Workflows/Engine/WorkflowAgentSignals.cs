@@ -1,28 +1,28 @@
 namespace Banking.Agents.Workflows.Engine;
 
 /// <summary>
-/// İş akışı ajanının araç sonuçlarıyla motora verdiği sinyaller.
+/// İş akışı ajanının araç sonuçlarıyla motora ilettiği denetim sinyalleri. Akış ajanının motoru
+/// yönlendirebildiği yollar bunlarla sınırlıdır.
 /// <para>
-/// Sinyalleri <b>üreten</b> (<see cref="WorkflowAgentFactory"/>) ve <b>okuyan</b>
-/// (<see cref="WorkflowEngine"/>) taraflar aynı sabitleri kullanır; metinler iki yerde
-/// ayrı ayrı yazılsaydı biri değiştiğinde akış sessizce durur, hata da vermezdi.
+/// Sinyalleri üreten (<see cref="WorkflowAgentFactory"/>) ve okuyan (<see cref="WorkflowEngine"/>)
+/// taraflar <b>aynı sabitleri</b> kullanır. Metinlerin iki yerde ayrı yazılması, biri değiştiğinde
+/// akışın hata üretmeden sessizce durmasına yol açar.
 /// </para>
 /// </summary>
 internal static class WorkflowAgentSignals
 {
-    /// <summary>Tüm parametreler toplandı; ardından teklif JSON'ı gelir.</summary>
+    /// <summary>Tüm zorunlu slotlar toplandı; sinyalin ardından teklif JSON'ı gelir.</summary>
     public const string ProposalReady = "PROPOSAL_READY:";
 
-    /// <summary>Kullanıcı işlemden vazgeçti.</summary>
+    /// <summary>Kullanıcı işlemden vazgeçti; akış eylem çalıştırılmadan kapatılır.</summary>
     public const string Cancelled = "CANCELLED";
 
     /// <summary>
-    /// Kullanıcının mesajı aktif akışla ilgili değil; soru orkestratöre devredilmeli.
+    /// Kullanıcının mesajı aktif akışla ilgili değil; soru orkestratöre devredilir ve akış korunur.
     /// <para>
-    /// Bu bir <b>araç sinyalidir</b>, yanıt metninde kelime araması değil. Önceden ajanın
-    /// serbest metninde "yardımcı olamıyorum" gibi ifadeler aranıyordu; ajana bu cümleleri
-    /// kurması hiçbir yerde söylenmediği için devretme yolu hiç çalışmadı ve ajan konu dışı
-    /// mesajı eksik parametrenin cevabı sanıp <b>değer uydurdu</b>.
+    /// <b>Bu bir araç sinyalidir, yanıt metninde kelime araması değil.</b> Ajanın serbest metninde
+    /// kalıp aramak güvenilmezdir: ajana o cümleleri kurması söylenmediği sürece devretme yolu hiç
+    /// tetiklenmez ve ajan, konu dışı mesajı eksik slotun yanıtı sayarak değer uydurur.
     /// </para>
     /// </summary>
     public const string Handoff = "HANDOFF_TO_ORCHESTRATOR";

@@ -7,31 +7,28 @@ using Microsoft.Extensions.Logging;
 namespace Banking.Gateway;
 
 /// <summary>
-/// Fintech-düzey deterministik çıktı güvenlik bariyeri (Output Guard).
+/// Deterministik çıktı güvenlik bariyeri (output guard). Kullanıcıya gönderilecek her yanıt metnini
+/// altı kategoride tarar ve tespit ettiği iç bilgi sızıntılarını temizler.
 /// <para>
-/// AI ajanlarının ürettiği kullanıcı yanıtlarını son kullanıcıya iletmeden önce
-/// 6 farklı güvenlik kategorisinde tarar ve tespit edilen iç bilgi sızıntılarını temizler.
+/// <b>Katmanlı savunmanın üçüncü katmanıdır ve modelin talimatlara uyup uymamasından bağımsız çalışır.</b>
+/// Tek uygulama noktası <see cref="GatewayService"/> içindeki yanıt sonlandırma adımıdır; her yanıt
+/// tipi bu adımdan geçer.
 /// </para>
 /// <para>
-/// <b>Mimari konum:</b> GatewayService.ProcessAsync çıkışında, tüm response tiplerinde uygulanır.
-/// Bu sınıf LLM'in prompt'u takip edip etmediğinden bağımsız olarak çalışan, deterministik
-/// son savunma hattıdır (Defense-in-Depth — Katman 3).
-/// </para>
-/// <para>
-/// <b>Tarama kategorileri:</b>
+/// Tarama kategorileri:
 /// <list type="number">
-///   <item>Dahili araç/fonksiyon adı sızıntısı (tool names)</item>
-///   <item>Düşünce süreci ve planlama ifadesi sızıntısı (chain-of-thought)</item>
-///   <item>Dahili XML tag ve yapı sızıntısı (system prompt fragments)</item>
-///   <item>Sistem prompt içerik parçası sızıntısı (orchestrator instructions)</item>
-///   <item>Dahili endpoint ve URL sızıntısı (localhost, MCP, A2A)</item>
-///   <item>Session token format sızıntısı (gw-xxx, cs-xxx)</item>
+///   <item>Dahili araç ve fonksiyon adları</item>
+///   <item>Düşünce süreci ve planlama ifadeleri (chain-of-thought)</item>
+///   <item>Dahili XML prompt etiketleri ve blokları</item>
+///   <item>Sistem talimatlarından kopyalanmış metin parçaları</item>
+///   <item>Dahili endpoint ve URL'ler (localhost, MCP, A2A)</item>
+///   <item>Oturum jetonu biçimleri</item>
 /// </list>
 /// </para>
 /// <para>
-/// Her tespit edilen sızıntı için <c>ILogger.LogWarning</c> ve <c>TraceHub.Publish("SECURITY", ...)</c>
-/// ile güvenlik olayı yayınlanır. Sızıntı içeren cümleler yanıttan çıkarılır; kalan temiz metin iletilir.
-/// Eğer temizleme sonrası metin tamamen boşalırsa, generic bir fallback mesajı döner.
+/// Sızıntı içeren cümleler metinden çıkarılır, oturum jetonları maskelenir ve her tespit için
+/// bir uyarı logu ile güvenlik izi yayınlanır. Temizlik sonrası metin tamamen boşalırsa
+/// <see cref="FallbackMessage"/> döner.
 /// </para>
 /// </summary>
 public sealed class ResponseSanitizer
@@ -41,7 +38,7 @@ public sealed class ResponseSanitizer
     private readonly IToolRegistry _registry;
     private readonly Regex _toolNamePattern;
 
-    /// <summary>Temizleme sonrası metin tamamen boşaldığında kullanıcıya döndürülen güvenli fallback mesajı.</summary>
+    /// <summary>Temizlik sonrası metin tamamen boşaldığında kullanıcıya döndürülen güvenli varsayılan yanıt.</summary>
     private const string FallbackMessage = "Talebiniz işleniyor. Lütfen sorunuzu tekrar yazınız.";
 
     public ResponseSanitizer(ILogger<ResponseSanitizer> logger, TraceHub hub, IToolRegistry? registry = null)
@@ -57,8 +54,8 @@ public sealed class ResponseSanitizer
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// LLM'in iç düşünce sürecini, araç çağırma kararını veya planlama adımlarını
-    /// doğal dilde ifade ettiği kalıpları yakalayan regex pattern'ları.
+    /// Modelin iç düşünce sürecini, araç çağırma kararını veya planlama adımlarını doğal dilde ifade
+    /// ettiği kalıpları yakalar.
     /// </summary>
     private static readonly Regex ThinkingPattern = new(
         @"(" +
@@ -97,8 +94,8 @@ public sealed class ResponseSanitizer
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Sistem prompt'larında kullanılan dahili XML taglarını ve içeriklerini yakalayan regex.
-    /// Hem açılış hem kapanış taglarını, hem de tag içindeki tüm içeriği temizler.
+    /// Sistem talimatlarında kullanılan dahili XML etiketlerini yakalar; açılış ve kapanış
+    /// etiketlerinin ikisini de kapsar.
     /// </summary>
     private static readonly Regex XmlTagPattern = new(
         @"<\s*/?\s*(?:" +
@@ -111,7 +108,7 @@ public sealed class ResponseSanitizer
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant
     );
 
-    /// <summary>Açılış ve kapanış XML tagları arasındaki tüm içeriği temizleyen regex (çok satırlı).</summary>
+    /// <summary>Eşleşen açılış ve kapanış etiketleri arasındaki tüm içeriği yakalar; çok satırlı çalışır.</summary>
     private static readonly Regex XmlBlockPattern = new(
         @"<\s*(?<tag>context_state|active_workflow_rules|system_prompt|identity" +
         @"|routing_rules|security_guardrails|guardrails|available_tools|slot_filling_goal" +
@@ -126,8 +123,7 @@ public sealed class ResponseSanitizer
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Orkestratör veya uzman system prompt'larından sızan tam ifade kalıpları.
-    /// Bu ifadeler doğrudan prompt metninden kopyalanmış parçalardır.
+    /// Orkestratör veya uzman talimatlarından birebir kopyalanmış ifade kalıplarını yakalar.
     /// </summary>
     private static readonly Regex SystemPromptLeakPattern = new(
         @"(" +
@@ -148,7 +144,7 @@ public sealed class ResponseSanitizer
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Dahili servis URL'lerini, MCP/A2A endpoint'lerini ve localhost adreslerini yakalayan regex.
+    /// Dahili servis URL'lerini, MCP ve A2A endpoint yollarını ve loopback adreslerini yakalar.
     /// </summary>
     private static readonly Regex EndpointPattern = new(
         @"(" +
@@ -167,8 +163,8 @@ public sealed class ResponseSanitizer
     // ════════════════════════════════════════════════════════════════════
 
     /// <summary>
-    /// Dahili session token formatlarını (gw-xxxx, cs-xxxx) yanıt metni içinde yakalayan regex.
-    /// Tokenlar <c>[GİZLİ]</c> ile maskelenir.
+    /// Dahili oturum jetonu biçimlerini (<c>gw-…</c>, <c>cs-…</c>) yanıt metni içinde yakalar.
+    /// Eşleşmeler silinmez, <c>[GİZLİ]</c> ile maskelenir.
     /// </summary>
     private static readonly Regex SessionTokenPattern = new(
         @"\b(?:gw|cs)-[a-f0-9]{6,32}\b",
@@ -176,17 +172,17 @@ public sealed class ResponseSanitizer
     );
 
     /// <summary>
-    /// Verilen yanıt metnini tüm güvenlik kategorilerinde tarar ve tespit edilen
-    /// iç bilgi sızıntılarını temizler.
+    /// Yanıt metnini altı güvenlik kategorisinde tarar ve tespit edilen iç bilgi sızıntılarını temizler.
     /// <para>
-    /// Temizleme sırası: XML bloklar → XML taglar → Tool adları → Düşünce kalıpları →
-    /// Sistem prompt parçaları → Endpoint'ler → Session tokenlar → Boş satır temizliği.
+    /// Sıra bağlayıcıdır: XML blokları → XML etiketleri → araç adları → düşünce kalıpları →
+    /// sistem talimatı parçaları → endpoint'ler → oturum jetonları → boşluk normalizasyonu.
+    /// Blok yapıları satır bazlı kalıplardan önce temizlenmezse blok içeriği metinde kalır.
     /// </para>
     /// </summary>
-    /// <param name="text">Taranacak ham yanıt metni. <c>null</c> veya boş ise fallback mesajı döner.</param>
+    /// <param name="text">Taranacak ham yanıt metni.</param>
     /// <returns>
-    /// Sızıntılardan arındırılmış güvenli yanıt metni.
-    /// Tüm metin temizlendiyse <see cref="FallbackMessage"/> döner.
+    /// Sızıntılardan arındırılmış yanıt metni. Girdi boşsa veya temizlik sonrası metin tamamen
+    /// boşalırsa <see cref="FallbackMessage"/> döner.
     /// </returns>
     public string Sanitize(string? text)
     {
@@ -224,43 +220,43 @@ public sealed class ResponseSanitizer
     //  Kategori işlemleri
     // ────────────────────────────────────────────────────────────────
 
-    /// <summary>Açılış-kapanış XML tag çiftlerini ve aralarındaki tüm içeriği temizler.</summary>
+    /// <summary>Açılış-kapanış etiket çiftlerini ve aralarındaki içeriği kaldırır.</summary>
     private string StripXmlBlocks(string text, ref int violations)
     {
         return ApplyRegex(text, XmlBlockPattern, "XML_BLOCK", ref violations);
     }
 
-    /// <summary>Tek başına kalan dahili XML taglarını temizler.</summary>
+    /// <summary>Eşi olmayan dahili XML etiketlerini kaldırır.</summary>
     private string StripXmlTags(string text, ref int violations)
     {
         return ApplyRegex(text, XmlTagPattern, "XML_TAG", ref violations);
     }
 
-    /// <summary>Dahili araç adlarını içeren cümleleri tamamen kaldırır.</summary>
+    /// <summary>Dahili araç adı geçen cümleleri bütünüyle kaldırır.</summary>
     private string StripToolNames(string text, ref int violations)
     {
         return StripSentencesContaining(text, _toolNamePattern, "TOOL_NAME", ref violations);
     }
 
-    /// <summary>Düşünce süreci ve planlama ifadelerini içeren cümleleri kaldırır.</summary>
+    /// <summary>Düşünce süreci veya planlama ifadesi geçen cümleleri kaldırır.</summary>
     private string StripThinkingPatterns(string text, ref int violations)
     {
         return StripSentencesContaining(text, ThinkingPattern, "THINKING", ref violations);
     }
 
-    /// <summary>Sistem prompt'tan sızan içerik parçalarını içeren cümleleri kaldırır.</summary>
+    /// <summary>Sistem talimatlarından sızmış metin parçası geçen cümleleri kaldırır.</summary>
     private string StripSystemPromptLeaks(string text, ref int violations)
     {
         return StripSentencesContaining(text, SystemPromptLeakPattern, "SYSTEM_PROMPT", ref violations);
     }
 
-    /// <summary>Dahili endpoint URL'lerini içeren cümleleri kaldırır.</summary>
+    /// <summary>Dahili endpoint veya URL geçen cümleleri kaldırır.</summary>
     private string StripEndpoints(string text, ref int violations)
     {
         return StripSentencesContaining(text, EndpointPattern, "ENDPOINT", ref violations);
     }
 
-    /// <summary>Session token'ları <c>[GİZLİ]</c> maskesiyle değiştirir (cümleyi silmez).</summary>
+    /// <summary>Oturum jetonlarını <c>[GİZLİ]</c> ile maskeler. Cümlenin kalanı korunur.</summary>
     private string MaskSessionTokens(string text, ref int violations)
     {
         var matches = SessionTokenPattern.Matches(text);
@@ -280,8 +276,8 @@ public sealed class ResponseSanitizer
     // ────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Regex eşleşmelerini doğrudan metinden çıkarır (XML blokları ve taglar için).
-    /// Her eşleşme bir güvenlik ihlali olarak loglanır.
+    /// Eşleşmeleri metinden çıkarır ve her birini güvenlik ihlali olarak raporlar. Cümle bütünlüğü
+    /// gözetilmez; yalnızca eşleşen bölüm silinir.
     /// </summary>
     private string ApplyRegex(string text, Regex pattern, string category, ref int violations)
     {
@@ -301,9 +297,8 @@ public sealed class ResponseSanitizer
     }
 
     /// <summary>
-    /// Belirtilen pattern'ı içeren <b>tüm cümleyi</b> (veya satırı) metinden çıkarır.
-    /// Cümle ayıracı olarak satır sonu, nokta veya noktalı virgül kullanılır.
-    /// Bu, sızıntı içeren bağlamın tamamen temizlenmesini sağlar.
+    /// Kalıbın eşleştiği satırı bütünüyle metinden çıkarır. <b>Yalnızca eşleşen parça değil, satırın
+    /// tamamı silinir:</b> sızdıran ifadenin çevresindeki bağlam da genellikle iç bilgi taşır.
     /// </summary>
     private string StripSentencesContaining(string text, Regex pattern, string category, ref int violations)
     {
@@ -332,11 +327,11 @@ public sealed class ResponseSanitizer
     }
 
     /// <summary>
-    /// Güvenlik ihlalini hem <see cref="ILogger"/> konsoluna (WARNING seviyesinde)
-    /// hem de <see cref="TraceHub"/> canlı izleme kanalına (SECURITY katmanıyla) yayınlar.
+    /// Güvenlik ihlalini uyarı seviyesinde loglar ve <see cref="TraceHub"/> üzerinden canlı izleme
+    /// kanalına yayınlar.
     /// </summary>
-    /// <param name="category">İhlal kategorisi (TOOL_NAME, THINKING, XML_TAG vb.).</param>
-    /// <param name="snippet">Tespit edilen tehlikeli içeriğin kısaltılmış örneği.</param>
+    /// <param name="category">İhlal kategorisi; örneğin <c>TOOL_NAME</c>, <c>THINKING</c>, <c>XML_TAG</c>.</param>
+    /// <param name="snippet">Tespit edilen içeriğin kısaltılmış örneği.</param>
     private void LogViolation(string category, string snippet)
     {
         _logger.LogWarning(
@@ -349,8 +344,8 @@ public sealed class ResponseSanitizer
     }
 
     /// <summary>
-    /// Temizleme sonrası oluşan ardışık boş satırları ve baştaki/sondaki boşlukları normalleştirir.
-    /// En fazla bir boş satır bırakır.
+    /// Silinen satırların geride bıraktığı boşlukları toparlar: ardışık boş satırlar tek boş satıra
+    /// indirilir, baştaki ve sondaki boşluklar kırpılır.
     /// </summary>
     private static string NormalizeWhitespace(string text)
     {
@@ -360,10 +355,10 @@ public sealed class ResponseSanitizer
     }
 
     /// <summary>
-    /// Tüm dahili araç adlarını büyük/küçük harf duyarsız, kelime sınırlı olarak
-    /// yakalayan derlenmiş regex oluşturur. Araç adları <c>'</c>, <c>"</c>, <c>`</c>
-    /// gibi tırnak işaretleriyle sarılmış olsa bile yakalanır.
+    /// Verilen araç adlarını büyük/küçük harf duyarsız ve kelime sınırlı olarak yakalayan derlenmiş
+    /// bir regex üretir. Tırnak veya ters tırnak içine alınmış adlar da eşleşir.
     /// </summary>
+    /// <param name="internalToolNames">Maskelenecek dahili araç adları; <see cref="IToolRegistry"/>'den gelir.</param>
     private static Regex BuildToolNameRegex(IEnumerable<string> internalToolNames)
     {
         // Araç adlarını escape edip alternation (|) ile birleştir.

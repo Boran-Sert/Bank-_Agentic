@@ -8,7 +8,11 @@ using Banking.Mcp.Constants;
 namespace Banking.Mcp.Registry;
 
 /// <summary>
-/// Sistemdeki araçların otomatik keşfini ve grup bazlı erişimini sağlayan merkezi kayıt yöneticisi.
+/// Sistemdeki araçların otomatik keşfini ve grup bazlı erişimini sağlayan merkezi kayıt defteri.
+/// <para>
+/// Araçlar derlemenin taranmasıyla bulunur; kayıt listesi elle tutulmaz. Kayıt defteri ile canlı MCP
+/// araç listesinin uyumu <see cref="ValidateDiscoveredMcpTools"/> ile başlangıçta doğrulanır.
+/// </para>
 /// </summary>
 public sealed class ToolRegistry : IToolRegistry
 {
@@ -21,15 +25,17 @@ public sealed class ToolRegistry : IToolRegistry
     });
 
     /// <summary>
-    /// Araç kayıt yöneticisinin tekil (Singleton) örneğini döner.
+    /// Kayıt defterinin tekil örneği. İlk erişimde derleme taranır ve araçlar keşfedilir.
     /// </summary>
     public static IToolRegistry Instance => InstanceLazy.Value;
 
     private readonly ConcurrentDictionary<string, ToolDefinition> _definitions = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Verilen assembly içerisindeki tüm MCP araçlarını otomatik keşfederek kaydeder.
+    /// Verilen derlemedeki MCP araçlarını keşfeder ve kaydeder. Araç tipi olarak
+    /// <c>[McpServerToolType]</c> taşıyan veya adı <c>Tools</c> ile biten sınıflar taranır.
     /// </summary>
+    /// <param name="assembly">Taranacak derleme.</param>
     public void ScanAssembly(Assembly assembly)
     {
         // MCP ve Tool sonekli sınıfları filtreler
@@ -56,9 +62,8 @@ public sealed class ToolRegistry : IToolRegistry
         }
     }
 
-    /// <summary>
-    /// Tekil bir araç tanımını registry koleksiyonuna ekler.
-    /// </summary>
+    /// <summary>Tek bir araç tanımını kayıt defterine ekler. Aynı ad zaten kayıtlıysa işlem etkisizdir.</summary>
+    /// <exception cref="ArgumentException">Araç adı boş olduğunda fırlatılır.</exception>
     public void Register(ToolDefinition definition)
     {
         if (string.IsNullOrWhiteSpace(definition.Name))
@@ -67,9 +72,7 @@ public sealed class ToolRegistry : IToolRegistry
         _definitions.TryAdd(definition.Name, definition);
     }
 
-    /// <summary>
-    /// Belirtilen isme sahip araç tanımını registry'den getirir.
-    /// </summary>
+    /// <summary>Adı verilen aracın tanımını döner.</summary>
     public ToolDefinition Get(string name)
     {
         return _definitions.TryGetValue(name, out var def)
@@ -77,25 +80,22 @@ public sealed class ToolRegistry : IToolRegistry
             : throw new KeyNotFoundException($"Tool registry'de bulunamadı: {name}");
     }
 
-    /// <summary>
-    /// Keşfedilen tüm araç tanımlarını döner (uzman tanımlama ekranındaki araç seçimi için).
-    /// </summary>
+    /// <summary>Keşfedilen tüm araç tanımlarını döner.</summary>
     public IReadOnlyList<ToolDefinition> GetAllTools()
     {
         return _definitions.Values.ToList();
     }
 
-    /// <summary>
-    /// Belirli bir araç grubuna ait tüm araç isimlerini liste olarak döner.
-    /// </summary>
+    /// <summary>Verilen gruba ait araç adlarını döner.</summary>
     public IReadOnlyList<string> GetNamesByGroup(ToolGroup group)
     {
         return _definitions.Values.Where(t => t.Group == group).Select(t => t.Name).ToList();
     }
 
     /// <summary>
-    /// Temizlenmesi (sanitize) gereken dahili araç isimlerini döner.
-    /// Sistemdeki her araç dahilidir; hiçbiri kullanıcı yanıtında görünmemelidir.
+    /// Çıktı güvenlik bariyerinin maskeleyeceği araç adlarını döner. <b>Sistemdeki her araç dahilidir;</b>
+    /// hiçbir araç adının kullanıcı yanıtında görünmemesi gerekir, bu nedenle liste kayıt defterinin
+    /// tamamını kapsar.
     /// </summary>
     public IReadOnlyList<string> GetAllSanitizableToolNames()
     {
@@ -103,8 +103,15 @@ public sealed class ToolRegistry : IToolRegistry
     }
 
     /// <summary>
-    /// Keşfedilen MCP araçlarının registry ile uyumluluğunu doğrular.
+    /// Kayıt defterindeki MCP araçlarının canlı sunucuda da tanımlı olduğunu doğrular ve uyuşmazlıkta
+    /// istisna fırlatır.
+    /// <para>
+    /// <b>Uyuşmazlık sessizce geçilmez.</b> Kayıtlı ama sunucuda bulunmayan bir araç, çağrıldığı anda
+    /// açıklanamayan bir çalışma zamanı hatasına dönüşür; bu kontrol hatayı bağlantı kurulumuna çeker.
+    /// </para>
     /// </summary>
+    /// <param name="discoveredToolNames">MCP sunucusundan bildirilen canlı araç adları.</param>
+    /// <exception cref="InvalidOperationException">Kayıtlı bir araç sunucuda bulunamadığında fırlatılır.</exception>
     public void ValidateDiscoveredMcpTools(IEnumerable<string> discoveredToolNames)
     {
         // Eksik araç tespiti
@@ -120,7 +127,8 @@ public sealed class ToolRegistry : IToolRegistry
     }
 
     /// <summary>
-    /// Sistem çekirdeğinde yer alan varsayılan köprü ve iş akışı araçlarını kaydeder.
+    /// MCP üzerinden gelmeyen çekirdek araçları kaydeder: uzman köprüleri, akış başlatma ve ekran
+    /// yönlendirme araçları.
     /// </summary>
     private void RegisterNonMcpCoreTools()
     {
@@ -134,7 +142,8 @@ public sealed class ToolRegistry : IToolRegistry
     }
 
     /// <summary>
-    /// Sınıf adından araç grubunu tahmin eder.
+    /// <c>[ToolGroup]</c> özniteliği bulunmayan sınıfların grubunu adından çıkarır. Ad hiçbir grupla
+    /// eşleşmezse hesap grubuna düşülür.
     /// </summary>
     private static ToolGroup InferGroupFromTypeName(string typeName)
     {

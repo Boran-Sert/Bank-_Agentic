@@ -48,16 +48,16 @@ builder.Services.AddSingleton(agentOptions);
 // Kestrel'i tüm ağ arayüzlerinde dinlet (hem localhost Web UI hem de dış 10.x IP'leri API erişimi sağlayabilsin)
 builder.WebHost.UseUrls("http://*:5080");
 
-// --- Domain (in-memory bankacılık simülasyonu) ---
+// --- Semantik indekslerin beslendiği katalog (kampanya/finansman) ---
+// Vektör indeksi bu süreçte tutulduğu için katalog da burada okunur. Hesap, kart ve ekstre verisi
+// buradan GELMEZ: o yolun tamamı bankanın REST uçlarına gider (bkz. AddBankApiClient).
 builder.Services.AddSingleton<InMemoryBankStore>();
 builder.Services.AddSingleton<ICampaignSyncService, CampaignSyncService>();
 builder.Services.AddSingleton<ICampaignCatalogService, CampaignCatalogService>();
 builder.Services.AddSingleton<IFinancingCatalogService, FinancingCatalogService>();
 
-// MCP araçlarının (AccountsTools/CardsTools) okuma yolu. Para hareketi buradan GEÇMEZ:
-// o yol RestWorkflowExecutor üzerinden bankanın kendi servisine gider.
-builder.Services.AddSingleton<IAccountService, AccountService>();
-builder.Services.AddSingleton<ICardService, CardService>();
+// İsteği yapan müşterinin kimliği. MCP araçları bunu bankaya gönderdikleri gövdeye yazar;
+// hesabın/kartın o müşteriye ait olup olmadığına banka karar verir.
 builder.Services.AddSingleton<CustomerContext>();
 
 // --- Semantik Arama & Embedding ---
@@ -66,7 +66,6 @@ builder.Services.AddSingleton<SemanticMkCodeSearcher>();
 builder.Services.AddSingleton<SemanticCampaignSearcher>();
 builder.Services.AddSingleton<SemanticFinancingSearcher>();
 builder.Services.AddSingleton<SemanticWorkflowSearcher>();
-builder.Services.AddSingleton<IAnalyzeService, AnalyzeService>();
 
 
 // --- Tool Registry (Merkezi araç haritası & otomatik keşif) ---
@@ -110,8 +109,10 @@ builder.Services.AddSingleton<OrchestratorFallback>(sp => async (userMessage, ca
     (await sp.GetRequiredService<AgentRuntime>().AskOrchestratorAsync(userMessage, cancellationToken)).Reply ?? string.Empty);
 
 // --- Banka istemcisi: bu sistemin bankaya açılan tek kapısı ---
-// Akışa özel eksekütör YOKTUR; tek jenerik RestWorkflowExecutor onay sonrası buraya tek istek atar.
-// Yeni bir akış eklemek = bir YAML (veya [Workflow] etiketli bir record); C# eksekütör yazılmaz.
+// İki yol da buradan geçer: okuma yolunda MCP araçları (hesap/kart/ekstre/kampanya/finansman),
+// yazma yolunda onay sonrası RestWorkflowExecutor. Akışa özel eksekütör YOKTUR; yeni bir akış
+// eklemek = bir YAML (veya [Workflow] etiketli bir record); C# eksekütör yazılmaz.
+// Taban adres ve erişim anahtarı yapılandırmanın "BankApi" bölümünden gelir.
 builder.Services.AddBankApiClient(builder.Configuration);
 
 // Onay sonrası bankaya giden TEK bileşen. Durumsuz olduğu için singleton; akışın kimliği ve

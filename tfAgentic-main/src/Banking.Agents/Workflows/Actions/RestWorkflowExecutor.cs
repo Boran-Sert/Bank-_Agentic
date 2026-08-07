@@ -6,18 +6,16 @@ using Banking.Domain.Constants;
 namespace Banking.Agents.Workflows.Actions;
 
 /// <summary>
-/// <b>Sistemdeki tek eksekütör.</b> Durumsuzdur ve <b>singleton</b> olarak kaydedilir: akışın
-/// kimliği, ekran kodu ve gideceği yol her çağrıda <see cref="WorkflowActionDefinition"/> ile
-/// parametre olarak gelir. Yeni bir akış eklemek bu sınıfa dokunmaz.
+/// <b>Sistemdeki tek executor.</b> Durumsuzdur ve singleton olarak kaydedilir: akışın kimliği,
+/// ekran kodu ve hedef yolu her çağrıda <see cref="WorkflowActionDefinition"/> ile parametre olarak
+/// gelir. Yeni bir akış eklemek bu sınıfta değişiklik gerektirmez.
 /// <para>
-/// Yaptığı iş üçtür: YAML'da tanımlı parametrelerden onay ekranını kur, kullanıcı onaylarsa
-/// bankaya <b>tek</b> istek at, bankanın yanıtını olduğu gibi taşı. Bankacılık kuralı, tutar
-/// karşılaştırması, IBAN kontrolü — hiçbiri burada değildir.
+/// Üç iş yapar: YAML'da tanımlı slotlardan onay ekranını kurar, kullanıcı onaylarsa bankaya tek bir
+/// istek gönderir ve bankanın yanıtını olduğu gibi taşır.
 /// </para>
 /// <para>
-/// Eskiden aynı iş <c>PaymentActionExecutor</c>, <c>TransferActionExecutor</c> ve
-/// <c>DeclarativeActionExecutor</c> arasında üç kez yazılıydı; her yeni akış dördüncü bir kopya
-/// gerektiriyordu.
+/// <b>Bankacılık kuralı içermez.</b> Tutar karşılaştırması, limit denetimi ve IBAN doğrulaması
+/// bankanın kendi uçlarına aittir; buraya taşınmaları kuralın iki yerde tutulması anlamına gelir.
 /// </para>
 /// </summary>
 public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub) : IDeterministicActionExecutor
@@ -80,15 +78,15 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub) : ID
     }
 
     /// <summary>
-    /// Bankanın ham yanıtından <b>tek</b> jenerik makbuz üretir.
+    /// Bankanın ham yanıtından akıştan bağımsız tek bir makbuz sonucu üretir.
     /// <para>
-    /// Akışa özel makbuz tipi (<c>PaymentReceipt</c>, <c>TransferReceipt</c>) ve akışa özel
-    /// başarı metni burada <b>yoktur</b>: banka ne döndüyse o taşınır, kullanıcıya gösterilecek
-    /// cümle akışın YAML'daki adından kurulur. Yeni bir akış eklemek bu metodu değiştirmez.
+    /// Akışa özel makbuz tipi veya başarı metni yoktur: banka ne döndürdüyse o taşınır ve kullanıcıya
+    /// gösterilecek cümle akışın YAML'daki görünen adından kurulur. Yeni bir akış eklemek bu metodu
+    /// değiştirmez.
     /// </para>
     /// <para>
-    /// Makbuz numarası bankadan gelir; bu katman <b>numara uydurmaz</b> — banka bir numara
-    /// döndürmediyse ortada makbuz yoktur.
+    /// <b>Makbuz numarası yalnızca bankadan gelir.</b> Banka numara döndürmediyse makbuz üretilmez;
+    /// bu katman numara türetmez.
     /// </para>
     /// </summary>
     private static WorkflowOutcome BuildReceipt(WorkflowActionDefinition action, JsonElement bankResponse)
@@ -110,8 +108,8 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub) : ID
             : null;
 
     /// <summary>
-    /// Bankanın döndüğü tüm alanları UI kartları için taşır. İçerik <b>yorumlanmaz</b> — hangi
-    /// alanların geldiğini banka belirler, bu katman yalnızca aktarır.
+    /// Bankanın döndürdüğü tüm alanları sonuç detayına aktarır. <b>İçerik yorumlanmaz:</b> hangi
+    /// alanların geleceğini banka belirler, bu katman yalnızca taşır.
     /// </summary>
     private static IReadOnlyDictionary<string, object?> ReadAllFields(JsonElement response)
     {

@@ -3,28 +3,33 @@ using System.Text.Json;
 namespace Banking.Agents.Validation;
 
 /// <summary>
-/// YAML'da bildirilen slot tipinin, ajanın gönderdiği değerle uyup uymadığını söyleyen
-/// <b>saf</b> kontrol. Bağımlılığı, durumu ve yan etkisi yoktur.
+/// YAML'da bildirilen slot tipinin, ajanın gönderdiği değerle uyuşup uyuşmadığını belirleyen saf
+/// kontrol. Bağımlılığı, durumu ve yan etkisi yoktur.
 /// <para>
-/// <b>Neden gerekli:</b> YAML'daki <c>type:</c> hiçbir araç şemasına girmiyor —
-/// <c>DeclarativeWorkflowBuilder.BuildInstructions</c> onu yalnızca prompt metnine yazıyor, ve
-/// <c>update_slot</c>'un <c>value</c> parametresinin şeması Ollama uyumluluğu için <c>{}</c>'a
-/// indirgeniyor. Model tipi bir cümle olarak görüyor, kısıt olarak değil; yani <c>"5.000 TL"</c>
-/// gibi bir değerin gelmesi mümkün ve bugün kimse engellemiyor.
+/// <b>Bu kontrol araç şemasının yerini tutar.</b> YAML'daki tip bildirimi üretilen araç şemasına
+/// girmez: <c>update_slot</c>'un değer parametresi, sağlayıcı uyumluluğu için tip kısıtı taşımayan
+/// boş bir nesneye indirgenir ve tip bilgisi modele yalnızca açıklama metniyle ulaşır. Model bunu
+/// bir kısıt olarak değil, öneri olarak görür; tip zorlaması bu nedenle burada yapılır.
 /// </para>
 /// <para>
-/// <b>Dönüşüm bilerek yok:</b> değeri massage etmiyoruz, uymayanı reddediyoruz. Reddedilen değer
-/// oturuma hiç yazılmaz, ajan aynı turda doğru tipi tekrar sorar ve hatalı değer onay ekranına
-/// ulaşamaz.
+/// <b>Değer dönüştürülmez, reddedilir.</b> Uymayan bir değerin biçimlendirilerek kabul edilmesi,
+/// kullanıcının söylemediği bir değerin onay ekranına taşınması anlamına gelir. Reddedilen değer
+/// oturuma hiç yazılmaz; ajan aynı turda doğru tipi yeniden sorar.
 /// </para>
 /// </summary>
 public static class SlotSchemaValidator
 {
     /// <summary>
-    /// Değer, YAML'da bildirilen tiple uyuşuyor mu?
+    /// Değerin, bildirilen tiple uyuştuğunu belirler.
     /// </summary>
-    /// <param name="declaredType">YAML'daki <c>type:</c> alanı. Boş veya tanınmayan bir değerse kısıt uygulanmaz.</param>
-    /// <param name="value">Ajanın <c>update_slot</c> ile gönderdiği ham değer.</param>
+    /// <param name="declaredType">
+    /// YAML'daki tip bildirimi. Boş veya tanınmayan bir değer verildiğinde kısıt uygulanmaz ve
+    /// sonuç <c>true</c> olur.
+    /// </param>
+    /// <param name="value">
+    /// Ajanın <c>update_slot</c> ile gönderdiği ham değer. <c>null</c> bir tip hatası sayılmaz;
+    /// eksiklik ayrı bir konudur.
+    /// </param>
     /// <param name="expectedTypeDescription">Reddedilen değer için ajana bildirilecek beklenen tip.</param>
     public static bool Matches(string? declaredType, object? value, out string expectedTypeDescription)
     {

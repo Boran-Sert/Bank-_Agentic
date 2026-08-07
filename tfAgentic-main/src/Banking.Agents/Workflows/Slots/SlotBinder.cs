@@ -2,19 +2,19 @@ using Banking.Agents.Workflows.Declarative;
 
 namespace Banking.Agents.Workflows.Slots;
 
-/// <summary>Bir akışın parametre kümesinin anlık durumu.</summary>
-/// <param name="FilledSlots">Değeri girilmiş ve anlamlı olan parametreler.</param>
-/// <param name="MissingSlots">Henüz sorulmamış veya boş bırakılmış <b>zorunlu</b> parametreler.</param>
-/// <param name="OptionalSlots">Doldurulmamış ama zorunlu da olmayan parametreler.</param>
+/// <summary>Bir akışın slot kümesinin anlık durumu.</summary>
+/// <param name="FilledSlots">Değeri girilmiş ve anlamlı olan slotlar.</param>
+/// <param name="MissingSlots">Henüz sorulmamış veya boş bırakılmış <b>zorunlu</b> slotlar.</param>
+/// <param name="OptionalSlots">Doldurulmamış, ancak zorunlu da olmayan slotlar.</param>
 public sealed record SlotStatus(
     IReadOnlyDictionary<string, object> FilledSlots,
     IReadOnlyList<string> MissingSlots,
     IReadOnlyList<string> OptionalSlots)
 {
-    /// <summary>Zorunlu alanların tamamı dolu mu? Opsiyoneller tamlığı engellemez.</summary>
+    /// <summary>Zorunlu slotların tamamının dolu olduğunu belirtir. Opsiyonel slotlar tamlığı etkilemez.</summary>
     public bool IsComplete => MissingSlots.Count == 0;
 
-    /// <summary>LLM'e verilecek tek satırlık durum özeti.</summary>
+    /// <summary>Durumu, ajanın turuna eklenecek tek satırlık özete çevirir.</summary>
     public string Describe()
     {
         if (FilledSlots.Count == 0 && MissingSlots.Count == 0 && OptionalSlots.Count == 0)
@@ -39,25 +39,19 @@ public sealed record SlotStatus(
 /// <summary>
 /// Toplanan ham değerler ile YAML şeması arasındaki <b>saf</b> karşılaştırma katmanı.
 /// <para>
-/// Hiçbir bağımlılığı, durumu veya yan etkisi yoktur: verilen sözlüğü ve şemayı okur, sonucu
-/// döner. Oturum yönetimi, kalıcılık ve izleme <see cref="Sessions.SessionContext"/>'e aittir.
-/// </para>
-/// <para>
-/// Eskiden burada bir de <i>record kurma</i> dalı vardı: akış başına yazılan slot record'unun
-/// birincil yapıcısı reflection'la bulunur, her parametre tipe dönüştürülmeye çalışılırdı.
-/// Slot record'ları kalktığı için o dalın tamamı silindi — akışın alanları artık yalnızca
-/// YAML'da tanımlı.
+/// Bağımlılığı, durumu ve yan etkisi yoktur: verilen değer sözlüğünü ve şemayı okur, sonucu döner.
+/// Oturum yönetimi, kalıcılık ve izleme <see cref="Sessions.SessionContext"/>'e aittir.
 /// </para>
 /// </summary>
 internal static class SlotBinder
 {
     /// <summary>
-    /// Dolu, eksik ve opsiyonel parametreleri tespit eder.
+    /// Dolu, eksik ve opsiyonel slotları tespit eder.
     /// </summary>
-    /// <param name="slotValues">Toplanan ham değerler (StateBag).</param>
+    /// <param name="slotValues">Oturumda toplanmış ham slot değerleri.</param>
     /// <param name="expectedSlots">
-    /// Akışın YAML şeması. <c>null</c> veya boşsa beklenen alan bilinmiyordur; bu durumda
-    /// yalnızca toplanmış olanlar dolu sayılır ve eksik yoktur.
+    /// Akışın YAML şeması. <c>null</c> veya boş olduğunda beklenen slot kümesi bilinmiyor demektir;
+    /// bu durumda yalnızca toplanmış değerler dolu sayılır ve eksik slot raporlanmaz.
     /// </param>
     public static SlotStatus GetStatus(
         IReadOnlyDictionary<string, object?> slotValues,
@@ -84,8 +78,8 @@ internal static class SlotBinder
     }
 
     /// <summary>
-    /// Onaya sunulacak parametre sözlüğünü kurar. Zorunlu bir alan eksikse kurulmaz —
-    /// hangi alanların sorulacağı çağırana bildirilir.
+    /// Onaya sunulacak slot kümesini kurar. Zorunlu bir slot eksikse küme kurulmaz ve hangi
+    /// slotların sorulması gerektiği çağırana bildirilir.
     /// </summary>
     public static SlotConstructionResult Construct(
         IReadOnlyDictionary<string, object?> slotValues,
@@ -104,9 +98,9 @@ internal static class SlotBinder
     }
 
     /// <summary>
-    /// Beklenen slot adlarını çözer: hem toplanan anahtarlar hem de şemadaki alanlar.
-    /// Şemada olmayan ama model tarafından yazılmış bir anahtar da görünür kalır —
-    /// sessizce kaybolması, hata ayıklamayı imkânsız kılardı.
+    /// Değerlendirmeye alınacak slot adlarının birleşimini çözer: toplanan anahtarlar ve şemadaki
+    /// slotlar. <b>Şemada olmayan ancak model tarafından yazılmış anahtarlar da görünür kalır;</b>
+    /// sessizce düşürülmeleri, modelin yanlış slot adı ürettiği durumları teşhis edilemez kılar.
     /// </summary>
     private static IEnumerable<string> ResolveSlotNames(
         IReadOnlyDictionary<string, object?> slotValues,
@@ -124,8 +118,8 @@ internal static class SlotBinder
     }
 
     /// <summary>
-    /// Alan zorunlu mu? Şemada tanımlı değilse zorunlu <b>sayılmaz</b>: modelin fazladan yazdığı
-    /// bir anahtar yüzünden akış sonsuza kadar "eksik parametre" durumunda kalamaz.
+    /// Slotun zorunlu olup olmadığını belirler. <b>Şemada tanımlı olmayan slot zorunlu sayılmaz:</b>
+    /// modelin fazladan yazdığı bir anahtar, akışı kalıcı olarak "eksik slot" durumunda bırakamaz.
     /// </summary>
     private static bool IsRequired(
         string slotName, IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
@@ -141,7 +135,9 @@ internal static class SlotBinder
         return false;
     }
 
-    /// <summary>Değer var ama anlamsız mı? (boş metin, sıfır/negatif tutar)</summary>
+    /// <summary>
+    /// Değerin var olduğu hâlde anlamsız olduğunu belirler: boş metin ya da sıfır veya negatif tutar.
+    /// </summary>
     private static bool IsBlank(object value) => value switch
     {
         string text => string.IsNullOrWhiteSpace(text),

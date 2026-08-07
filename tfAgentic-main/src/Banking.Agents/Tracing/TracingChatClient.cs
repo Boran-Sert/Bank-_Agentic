@@ -6,9 +6,12 @@ using Banking.Domain.Constants;
 namespace Banking.Agents.Tracing;
 
 /// <summary>
-/// Bir ajanın IChatClient'ını sarar ve her model (LLM) çağrısını, isteme giden prompt verilerini
-/// ve modelden dönen yanıt metnini (veya Araç Çağrısı kararlarını) merkezi TraceHub sistemine yayınlar.
-/// Etiket, hangi ajanın düşündüğünü gösterir (Orkestratör, Hesap Uzmanı, Finansal Analiz Uzmanı vb.).
+/// Bir ajanın sohbet istemcisini saran dekoratör. Her model çağrısını, isteme giden mesajları ve
+/// modelden dönen yanıtı veya araç çağrısı kararını <see cref="TraceHub"/> üzerinden yayınlar.
+/// <para>
+/// Etiket, izlerde hangi ajanın çalıştığını gösterir. Yapılandırılmış sıcaklık, istek kendi değerini
+/// belirtmediğinde varsayılan olarak uygulanır.
+/// </para>
 /// </summary>
 public sealed class TracingChatClient(IChatClient inner, TraceHub hub, string label, float temperature = 0.1f) : DelegatingChatClient(inner)
 {

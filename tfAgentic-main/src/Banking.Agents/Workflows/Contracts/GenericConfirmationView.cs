@@ -4,15 +4,15 @@ using System.Text;
 namespace Banking.Agents.Workflows;
 
 /// <summary>
-/// StateBag'deki parametrelerden türetilen <b>tek</b> onay ekranı görünümü. Akışa özel bir
-/// görünüm tipi yoktur ve olmamalıdır: alanlar YAML'da tanımlıdır, burada yalnızca taşınır.
+/// Toplanan slotlardan türetilen onay ekranı görünümü. Akışa özel görünüm tipi yoktur: gösterilecek
+/// alanlar YAML'da tanımlanır, bu tip yalnızca taşır.
 /// </summary>
-/// <param name="WorkflowName">Akışın adı (örn. <c>card-payment</c>).</param>
-/// <param name="Parameters">Onay ekranında gösterilecek alanlar — YAML'daki adlarla birebir.</param>
+/// <param name="WorkflowName">Akışın kanonik adı (örn. <c>card-payment</c>).</param>
+/// <param name="Parameters">Onay ekranında gösterilecek slotlar; adlar YAML'dakiyle birebir aynıdır.</param>
 /// <param name="ScreenMkCode">
-/// Onay ekranının hangi UI ekranıyla render edileceğini belirten mkCode; YAML'ın <c>mkCode</c>
-/// alanından gelir, bilinmiyorsa <c>null</c>. Gateway burada <b>tahmin yapmaz</b> — yanlış ekran
-/// render etmektense kod çözülemez olarak raporlanır.
+/// Onay ekranını üretecek UI ekran kodu. YAML'ın <c>mkCode</c> alanından gelir, bilinmiyorsa
+/// <c>null</c>'dır. <b>Gateway bu kodu tahmin etmez:</b> yanlış ekran göstermek yerine kod
+/// çözülemez olarak raporlanır.
 /// </param>
 public sealed record GenericConfirmationView(
     string WorkflowName,
@@ -20,11 +20,12 @@ public sealed record GenericConfirmationView(
     string? ScreenMkCode = null)
 {
     /// <summary>
-    /// Onaya sunulan parametre kümesinin parmak izi.
+    /// Onaya sunulan slot kümesinin parmak izini hesaplar. Akış adı ve slotlar sıralı bir kanonik
+    /// biçime çevrilip özetlenir; aynı teklif her zaman aynı değeri üretir.
     /// <para>
-    /// İki yerden çağrılır ve <b>aynı</b> sonucu vermek zorundadır: motor bunu oturuma yazıp
-    /// ikinci onay isteğini tanır, eksekütör de aynı değeri bankaya <c>Idempotency-Key</c> olarak
-    /// gönderir. Ayrı ayrı hesaplanırlarsa çift tıklama koruması sessizce delinirdi.
+    /// <b>Hesaplamanın tek yerde tutulması zorunludur.</b> Motor bu değeri oturuma yazarak ikinci
+    /// onay isteğini tanır, executor ise aynı değeri bankaya <c>Idempotency-Key</c> olarak gönderir.
+    /// İki tarafın ayrı hesaplaması, çift tıklama korumasını sessizce devre dışı bırakır.
     /// </para>
     /// </summary>
     public static string ComputeIdempotencyToken(GenericConfirmationView confirmationView)

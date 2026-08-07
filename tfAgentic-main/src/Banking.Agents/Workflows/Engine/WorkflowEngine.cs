@@ -10,30 +10,29 @@ using Microsoft.Agents.AI.Workflows;
 namespace Banking.Agents.Workflows.Engine;
 
 /// <summary>
-/// Akış içinden cevaplanamayan bir soruyu orkestratöre devreden geri dönüş kanalı.
-/// Motorun orkestratörü tanımasına gerek kalmaz; yalnızca bu imzayı bilir.
+/// Akış içinden yanıtlanamayan bir soruyu orkestratöre devreden geri dönüş kanalı. Motorun
+/// orkestratörü tanımasına gerek kalmaz; yalnızca bu imzaya bağımlıdır.
 /// </summary>
 public delegate Task<string> OrchestratorFallback(string userMessage, CancellationToken cancellationToken);
 
 /// <summary>
-/// <b>Tüm iş akışlarının tek motoru.</b> Akışa özgü hiçbir kod ve hiçbir tip içermez; farklı
-/// olan sadece YAML'dan gelen <see cref="WorkflowActionDefinition"/>'dır.
+/// <b>Tüm iş akışlarının tek motoru.</b> Akışa özgü kod veya tip içermez; akıştan akışa değişen
+/// tek girdi YAML'dan gelen <see cref="WorkflowActionDefinition"/>'dır.
 /// <para>
-/// Akış üç evreden ibarettir ve motorun tek genel metodu <see cref="AdvanceWorkflowStepAsync"/> bu evreleri
+/// Akış üç evreden oluşur ve tek genel metot olan <see cref="AdvanceWorkflowStepAsync"/> bu evreleri
 /// açık bir <c>switch</c> ile ayırır:
 /// <list type="number">
-/// <item><b>Başlatma</b> — akış oturuma bağlanır, ilk soru sorulur.</item>
-/// <item><b>Parametre toplama</b> — LLM turu; slotlar dolarken banka ön-doğrulaması çalışır.</item>
+/// <item><b>Başlatma</b> — akış oturuma bağlanır ve ilk soru sorulur.</item>
+/// <item><b>Slot doldurma</b> — LLM turu; slotlar doldukça banka ön doğrulaması çalışır.</item>
 /// <item><b>Onay</b> — MAF <c>RequestPort</c> kapısı; eylem yalnızca kullanıcı onaylarsa çalışır.</item>
 /// </list>
-/// Hata ayıklarken sıra tersine işler: <i>hangi evrede?</i> sorusunun cevabı doğrudan ilgili
-/// metoda götürür. Önceden aynı iş üç sınıfa (konuşma / slot turu / onay kapısı) dağılmıştı ve
-/// tek bir mesaj on bir sınıf dolaşıyordu.
+/// Hata ayıklarken sorulacak soru <i>hangi evrede</i> olduğudur; cevabı doğrudan ilgili özel metoda
+/// götürür.
 /// </para>
 /// <para>
-/// <b>Durum tutmaz.</b> Her HTTP isteğinde yeniden yaratılır; evre ve tüm veri
-/// <see cref="SessionContext"/>'tedir. Böylece herhangi bir sunucu örneği herhangi bir isteği
-/// karşılayabilir ve bellekte asılı kalan konuşma nesnesi olmaz.
+/// <b>Durum tutmaz.</b> Her HTTP isteğinde yeniden yaratılır; evre ve verinin tamamı
+/// <see cref="SessionContext"/>'tedir. Bu sayede herhangi bir sunucu örneği herhangi bir isteği
+/// karşılayabilir ve bellekte asılı kalan konuşma nesnesi oluşmaz.
 /// </para>
 /// </summary>
 public sealed class WorkflowEngine(
@@ -45,9 +44,11 @@ public sealed class WorkflowEngine(
     TraceHub hub) : IWorkflowEngine
 {
     /// <summary>
-    /// Akışı bir adım ilerletir. Hangi evrede olunduğu oturumdan okunur; çağıranın bilmesine
-    /// gerek yoktur.
+    /// Akışı bir adım ilerletir. İçinde bulunulan evre oturumdan okunur; çağıranın evreyi bilmesi
+    /// veya taşıması gerekmez.
     /// </summary>
+    /// <param name="userMessage">Kullanıcının bu turdaki mesajı; akışın ilk adımında <c>null</c> olabilir.</param>
+    /// <param name="cancellationToken">İptal jetonu.</param>
     public Task<WorkflowStepResult> AdvanceWorkflowStepAsync(string? userMessage, CancellationToken cancellationToken = default) =>
         session.Phase switch
         {
@@ -61,8 +62,8 @@ public sealed class WorkflowEngine(
     // =================================================================================
 
     /// <summary>
-    /// Akışı başlatır. Kullanıcının ilk cümlesi varsa ajana verilir; böylece "5000 TL kart borcumu
-    /// öde" gibi bir mesajda zaten söylenmiş bilgiler tekrar sorulmaz.
+    /// Akışı başlatır ve slot doldurma evresine geçirir. Kullanıcının akışı tetikleyen ilk cümlesi
+    /// varsa ajana aktarılır; böylece o cümlede zaten verilmiş değerler tekrar sorulmaz.
     /// </summary>
     private async Task<WorkflowStepResult> StartAsync(string? initialMessage, CancellationToken cancellationToken)
     {
@@ -83,8 +84,8 @@ public sealed class WorkflowEngine(
     // =================================================================================
 
     /// <summary>
-    /// Kullanıcının cevabını ajana iletir. Toplanan parametrelerin özeti her turda mesaja
-    /// eklenir; ajan neyin eksik olduğunu hatırlamak zorunda kalmaz.
+    /// Kullanıcının yanıtını ajana iletir. Toplanan slotların özeti her tura eklenir; eksik slot
+    /// bilgisi ajanın hafızasına değil, oturum durumuna dayanır.
     /// </summary>
     private async Task<WorkflowStepResult> CollectSlotsAsync(string? userMessage, CancellationToken cancellationToken)
     {
@@ -96,11 +97,12 @@ public sealed class WorkflowEngine(
     }
 
     /// <summary>
-    /// Ajanın turunu yorumlar ve akışın nereye gideceğine karar verir. Sıralama önemlidir:
-    /// iptal her şeyden önce gelir, teklif sorudan önce gelir.
+    /// Ajanın turunu yorumlar ve akışın bir sonraki adımına karar verir. Kontrol sırası bağlayıcıdır:
+    /// iptal her şeyden, devretme teklif kontrollerinden, teklif de soru üretmekten önce gelir.
     /// <para>
-    /// Karar <b>ajanın araç çağrılarından</b> okunur (oturuma yazılan sinyal + slot durumu),
-    /// yanıt metninden değil: model araç sonucunu metnine kopyalamaz, kendi cümlesini kurar.
+    /// <b>Karar ajanın araç çağrılarından okunur</b> — oturuma yazılan sinyal ve slot durumundan,
+    /// yanıt metninden değil. Model araç sonucunu metnine kopyalamaz, kendi cümlesini kurar;
+    /// serbest metinde sinyal aramak bu nedenle güvenilir değildir.
     /// </para>
     /// </summary>
     private async Task<WorkflowStepResult> InterpretAgentOutputAsync(
@@ -150,8 +152,9 @@ public sealed class WorkflowEngine(
     // =================================================================================
 
     /// <summary>
-    /// Onay ekranını hazırlar ve oturumu onay bekler duruma alır. <b>MAF workflow'u burada
-    /// başlatılmaz</b>: onay gelene kadar sunucuda asılı bir çalıştırma bulunmaz.
+    /// Onay ekranını hazırlar ve oturumu onay bekler duruma alır. <b>MAF grafiği burada
+    /// başlatılmaz:</b> onay gelene kadar sunucuda askıda bir çalıştırma tutulmaz, bu yüzden
+    /// yapışkan oturum (sticky session) gerekmez.
     /// </summary>
     private WorkflowStepResult PresentConfirmation(Dictionary<string, object?> slots)
     {
@@ -168,11 +171,11 @@ public sealed class WorkflowEngine(
     }
 
     /// <summary>
-    /// Kullanıcının onay cevabını uygular.
+    /// Kullanıcının onay yanıtını uygular.
     /// <para>
-    /// Anlaşılmayan cevap <b>onay sayılmaz</b>: akış onay evresinde bekletilir ve soru
-    /// tekrarlanır. Aynı teklif için ikinci kez onay gelirse eylem <b>yeniden çalıştırılmaz</b>
-    /// (çift tıklama → çift tahsilat koruması).
+    /// <b>Anlaşılmayan yanıt onay sayılmaz;</b> akış onay evresinde bekletilir ve soru tekrarlanır.
+    /// Aynı teklif için ikinci kez onay geldiğinde eylem yeniden çalıştırılmaz, saklanan sonuç
+    /// döner: çift tıklamanın çift tahsilata dönüşmesini engelleyen idempotency kontrolü budur.
     /// </para>
     /// </summary>
     private async Task<WorkflowStepResult> ApplyApprovalDecisionAsync(string? userMessage, CancellationToken cancellationToken)
@@ -207,13 +210,15 @@ public sealed class WorkflowEngine(
     }
 
     /// <summary>
-    /// MAF grafiğini kurar, onayı porta anında verir ve çıktı/hata event'lerinin tamamını işler.
+    /// MAF grafiğini kurar, onay kararını porta aynı istek içinde iletir ve çıktı ile hata
+    /// event'lerinin tamamını işler.
     /// <para>
-    /// Eksekütör içindeki exception'lar yukarı fırlamaz, event akışına düşer — bu yüzden
-    /// <see cref="ExecutorFailedEvent"/> ve <see cref="WorkflowErrorEvent"/> açıkça ele alınır.
-    /// Sebebi yutmak, kullanıcıya "işlem yapılamadı" deyip nedenini gizlemek olurdu.
+    /// Executor içinde oluşan istisnalar çağırana fırlamaz, event akışına düşer. Bu nedenle
+    /// <see cref="ExecutorFailedEvent"/> ve <see cref="WorkflowErrorEvent"/> açıkça ele alınır ve
+    /// hatanın gerekçesi kullanıcıya iletilen mesaja taşınır.
     /// </para>
     /// </summary>
+    /// <returns>Başarılı sonuç, kullanıcı reddi veya gerekçesi taşınmış bir hata sonucu.</returns>
     private async Task<WorkflowOutcome> RunApprovalGraphAsync(
         Dictionary<string, object?> slots, GenericConfirmationView confirmationView, bool isApproved, CancellationToken cancellationToken)
     {
@@ -257,7 +262,7 @@ public sealed class WorkflowEngine(
         return WorkflowOutcome.Failure(confirmationView.WorkflowName, $"İşleminiz gerçekleştirilemedi: {reason}");
     }
 
-    /// <summary>Sonucu UI'a çevirir ve oturumu bir sonraki iş için temizler.</summary>
+    /// <summary>Sonucu adım sonucuna çevirir ve oturumu bir sonraki iş için temizler.</summary>
     private WorkflowStepResult FinishWorkflow(WorkflowOutcome outcome)
     {
         if (outcome.IsSuccess)
@@ -277,8 +282,8 @@ public sealed class WorkflowEngine(
     // =================================================================================
 
     /// <summary>
-    /// Konuşma geçmişini oturumdan geri yükler, ajanı çalıştırır ve geçmişi tekrar oturuma yazar.
-    /// Ajan singleton ve stateless olduğu için istekler arasında canlı
+    /// Konuşma geçmişini oturumdan geri yükler, ajanı bir tur çalıştırır ve geçmişi tekrar oturuma
+    /// yazar. Ajan singleton ve stateless olduğundan istekler arasında canlı bir
     /// <see cref="AgentSession"/> tutulmaz.
     /// </summary>
     private async Task<string?> RunAgentTurnAsync(string message, CancellationToken cancellationToken)
@@ -330,9 +335,9 @@ public sealed class WorkflowEngine(
     }
 
     /// <summary>
-    /// Onaya sunulan parametre kümesinin parmak izi. Aynı ekran için gelen ikinci onay isteği
-    /// bu anahtarla tanınır; farklı bir teklif ise yeni anahtar üretilir. Hesap
-    /// <see cref="GenericConfirmationView"/>'dadır — eksekütör bankaya aynı anahtarı gönderir.
+    /// Onaya sunulan slot kümesinin parmak izini üretir. Aynı ekran için gelen ikinci onay isteği
+    /// bu anahtarla tanınır; farklı bir teklif farklı anahtar üretir. Hesaplama
+    /// <see cref="GenericConfirmationView"/> içindedir ve executor bankaya aynı anahtarı iletir.
     /// </summary>
     private static string ComputeIdempotencyToken(GenericConfirmationView confirmationView) =>
         GenericConfirmationView.ComputeIdempotencyToken(confirmationView);

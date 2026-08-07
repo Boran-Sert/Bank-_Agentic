@@ -11,13 +11,8 @@ namespace Banking.Agents.Workflows.Engine;
 /// <summary>
 /// Sistemdeki iş akışlarının kataloğu ve motor fabrikası.
 /// <para>
-/// <b>Tek kayıt yolu vardır:</b> MAF deklaratif YAML/JSON tanımı. Akış eklemek bir metin dosyası
-/// yazmaktan ibarettir — C# record'u, C# eksekütörü, attribute ya da DI satırı yoktur.
-/// </para>
-/// <para>
-/// Eskiden ikinci bir yol daha vardı: <c>[Workflow]</c> etiketli bir slot record'u + akışa özel
-/// bir eksekütör sınıfı. İkisi de aynı motoru üretiyordu, yani ikinci yol yeni bir yetenek
-/// getirmiyor, yalnızca her akışı iki kez tanımlatıyordu.
+/// <b>Tek kayıt yolu MAF deklaratif YAML/JSON tanımıdır.</b> Yeni bir akış eklemek bir metin dosyası
+/// yazmaktan ibarettir: C# record'u, akışa özel executor, attribute veya DI kaydı gerekmez.
 /// </para>
 /// </summary>
 public sealed class WorkflowRegistry(
@@ -27,18 +22,18 @@ public sealed class WorkflowRegistry(
     IDeterministicActionExecutor actionExecutor,
     TraceHub hub)
 {
-    /// <summary>Akış adı → motor fabrikası. Akışlar çalışma zamanında eklenebilir.</summary>
+    /// <summary>Akış adı → motor fabrikası. Kayıtlar çalışma zamanında eklenebilir.</summary>
     private readonly ConcurrentDictionary<string, Func<Task<IWorkflowEngine>>> _engineFactories =
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Akış adına göre tekilleştirilmiş metadata. RAG yönlendirici bu listeyi okurken akışlar
-    /// HTTP isteğiyle eklenebildiği için eşzamanlı koleksiyon.
+    /// Akış adına göre tekilleştirilmiş metadata. Semantik yönlendirici bu listeyi okurken aynı anda
+    /// HTTP isteğiyle yeni akış kaydedilebildiğinden eşzamanlı koleksiyon kullanılır.
     /// </summary>
     private readonly ConcurrentDictionary<string, WorkflowMetadata> _discoveredWorkflows =
         new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Keşfedilen tüm iş akışı metadatalarını döner.</summary>
+    /// <summary>Kayıtlı tüm iş akışlarının metadatasını döner.</summary>
     public IReadOnlyList<WorkflowMetadata> DiscoveredWorkflows => _discoveredWorkflows.Values.ToList();
 
     // =================================================================================
@@ -46,8 +41,8 @@ public sealed class WorkflowRegistry(
     // =================================================================================
 
     /// <summary>
-    /// MAF deklaratif YAML/JSON tanımını çalışma zamanında kaydeder. Aynı ad tekrar gönderilirse
-    /// üzerine yazılır; RAG indeksine çift kayıt girmez.
+    /// MAF deklaratif YAML/JSON tanımını çalışma zamanında kaydeder. Aynı ad ikinci kez
+    /// gönderildiğinde kayıt üzerine yazılır; semantik indekste çift kayıt oluşmaz.
     /// </summary>
     public void RegisterDeclarativeWorkflow(MicrosoftAgentDeclarativeDefinition definition)
     {
@@ -92,7 +87,7 @@ public sealed class WorkflowRegistry(
     // =================================================================================
 
     /// <summary>Adı verilen akış için bu isteğe ait motoru üretir.</summary>
-    /// <exception cref="KeyNotFoundException">Akış kayıtlı değilse.</exception>
+    /// <exception cref="KeyNotFoundException">Verilen ad kayıtlı bir akışa karşılık gelmediğinde fırlatılır.</exception>
     public async Task<IWorkflowEngine> CreateEngineAsync(string workflowName)
     {
         if (_engineFactories.TryGetValue(workflowName, out var engineFactory))
@@ -104,8 +99,8 @@ public sealed class WorkflowRegistry(
     }
 
     /// <summary>
-    /// Orkestratöre devretme kanalı <b>geç çözülür</b>: orkestratör de akış başlatabildiği için
-    /// yapıcıda çözülseydi döngüsel bağımlılık oluşurdu.
+    /// Orkestratöre devretme kanalını DI'dan çözer. <b>Çözüm bilerek geciktirilir:</b> orkestratör de
+    /// akış başlatabildiğinden, kanalın yapıcıda çözülmesi döngüsel bağımlılık oluşturur.
     /// </summary>
     private OrchestratorFallback ResolveOrchestratorFallback() =>
         serviceProvider.GetRequiredService<OrchestratorFallback>();

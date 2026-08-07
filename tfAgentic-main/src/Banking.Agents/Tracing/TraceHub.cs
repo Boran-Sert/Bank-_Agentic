@@ -8,16 +8,21 @@ using Microsoft.Extensions.Logging;
 namespace Banking.Agents.Tracing;
 
 /// <summary>
-/// Ajan boru hattının tüm katmanlarından (GATEWAY, ORCHESTRATOR, SPECIALIST, LLM, A2A, MCP, SERVICE, WORKFLOW, SYSTEM)
-/// gelen tüm iz ve log olaylarını hem ILogger konsoluna yazar hem de bağlı SSE abonelerine canlı yayınlar.
-/// Dahili UTF-8 JsonSerializerOptions sayesinde tüm Türkçe karakterler kaçışsız doğal biçimde loglanır.
+/// Ajan boru hattının tüm katmanlarından gelen iz olaylarının merkezi yayın noktası. Her olay hem
+/// yapılandırılmış loga yazılır hem de bağlı canlı izleme abonelerine gönderilir.
+/// <para>
+/// Geçerli katman adları <see cref="Banking.Domain.Constants.TraceCategories"/> içinde tanımlıdır.
+/// </para>
 /// </summary>
 public sealed class TraceHub
 {
     private readonly ConcurrentDictionary<Guid, Channel<string>> _subscribers = new();
     private readonly ILogger<TraceHub> _logger;
 
-    /// <summary>Türkçe karakterleri (\uXXXX yerine) doğal UTF-8 olarak gösteren dahili JSON ayarı.</summary>
+    /// <summary>
+    /// İz yükünün serileştirme ayarları. Türkçe karakterler <c>\uXXXX</c> kaçışına çevrilmeden UTF-8
+    /// olarak yazılır; aksi hâlde izler okunamaz hâle gelir.
+    /// </summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
@@ -48,7 +53,10 @@ public sealed class TraceHub
             channel.Writer.TryComplete();
     }
 
-    /// <summary>Merkezi iz olayı ve log yayınlar. Katmanlar: GATEWAY | ORCHESTRATOR | SPECIALIST | LLM | A2A | MCP | SERVICE | WORKFLOW | SYSTEM.</summary>
+    /// <summary>Bir iz olayını loga yazar ve canlı abonelere yayınlar.</summary>
+    /// <param name="layer">Olayın katmanı; geçerli değerler <see cref="Banking.Domain.Constants.TraceCategories"/> içindedir.</param>
+    /// <param name="text">Olayın tek satırlık özeti.</param>
+    /// <param name="detail">İsteğe bağlı ek yük. Serileştirilir ve uzunsa kırpılır.</param>
     public void Publish(string layer, string text, object? detail = null)
     {
         string? detailStr = null;

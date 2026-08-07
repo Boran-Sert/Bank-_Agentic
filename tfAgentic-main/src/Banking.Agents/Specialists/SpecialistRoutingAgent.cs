@@ -10,11 +10,10 @@ namespace Banking.Agents.Specialists;
 /// Tek bir <c>/a2a/{route}</c> endpoint'inin arkasında duran dağıtıcı ajan: her isteği,
 /// yoldaki <c>route</c> değerine karşılık gelen gerçek uzmana devreder.
 /// <para>
-/// <b>Neden tek endpoint:</b> A2A endpoint'leri normalde uygulama başlarken sabitlenir
-/// (<c>MapA2AJsonRpc</c> her uzman için ayrı yol açar). Uzmanlar artık çalışma zamanında
-/// arayüzden yaratılabildiği için, uzman başına endpoint açmak "yeni uzman ancak yeniden
-/// başlatınca konuşabilir" demekti. Yol parametreli tek endpoint, uzman listesini
-/// endpoint tablosundan tamamen bağımsız kılar.
+/// <b>Tek endpoint kullanılmasının nedeni:</b> A2A endpoint tablosu uygulama başlatılırken sabitlenir
+/// ve uzman başına ayrı yol açmak, çalışma zamanında eklenen bir uzmanın ancak yeniden başlatmadan
+/// sonra erişilebilir olması anlamına gelir. Yol parametreli tek endpoint, uzman kataloğunu endpoint
+/// tablosundan bağımsız kılar.
 /// </para>
 /// <para>
 /// Yol değeri istek anında <see cref="IHttpContextAccessor"/> üzerinden okunur; bu ajan
@@ -26,13 +25,20 @@ namespace Banking.Agents.Specialists;
 public sealed class SpecialistRoutingAgent(
     IHttpContextAccessor httpContextAccessor, SpecialistCatalog catalog) : AIAgent
 {
-    /// <summary>A2A yolundaki değişken bölümün adı — <c>Program.cs</c>'deki yol şablonuyla eşleşmelidir.</summary>
+    /// <summary>
+    /// A2A yolundaki değişken bölümün adı. Endpoint kaydındaki yol şablonuyla birebir eşleşmelidir;
+    /// ayrışması hâlinde hedef uzman çözülemez.
+    /// </summary>
     public const string RouteValueName = "route";
 
+    /// <summary>Dağıtıcı ajanın adı.</summary>
     public override string Name => "uzman-dagitici";
+
+    /// <summary>Dağıtıcı ajanın A2A kartında görünen açıklaması.</summary>
     public override string Description => "Gelen A2A isteğini yoldaki uzmana devreder.";
 
-    /// <summary>İstek yolundaki <c>route</c> değerinden hedef uzmanı bulur.</summary>
+    /// <summary>İstek yolundaki <c>route</c> değerinden hedef uzmanı çözer.</summary>
+    /// <exception cref="InvalidOperationException">HTTP bağlamı olmadan çağrıldığında fırlatılır.</exception>
     private AIAgent ResolveTarget()
     {
         var httpContext = httpContextAccessor.HttpContext

@@ -11,8 +11,9 @@ public interface IAccountService
 }
 
 /// <summary>
-/// Hesap okuma yolu. Para hareketi <b>burada değildir</b>: transfer <see cref="ITransferService"/>,
-/// kart tahsilatı <see cref="ICollectionService"/> içindedir — para taşıyan tek bir kod yolu olsun diye.
+/// Hesap verisinin okuma yolu. <b>Para hareketi bu sınıfta değildir;</b> transfer
+/// <see cref="ITransferService"/>, kart tahsilatı <see cref="ICollectionService"/> içindedir. Para
+/// taşıyan kod yolunun tek olması bu ayrımla sağlanır.
 /// </summary>
 public sealed class AccountService(InMemoryBankStore store) : IAccountService
 {

@@ -16,9 +16,9 @@ namespace Banking.Agents.Workflows.Engine;
 /// <summary>
 /// İş akışı ajanlarını kurar ve ada göre önbellekler.
 /// <para>
-/// Üretilen ajanlar <b>stateless</b>'tır: oturuma özel hiçbir veri taşımazlar, oturum araç
-/// çağrısı anında ambient scope'tan okunur. Bu yüzden ajan başına tek örnek yeterlidir —
-/// eskiden her oturum için ~30 MCP araç sarmalayıcısıyla yeni bir ajan kuruluyordu.
+/// Üretilen ajanlar <b>stateless</b>'tır: oturuma özel veri taşımazlar, oturuma araç çağrısı anında
+/// ambient scope üzerinden erişirler. Bu nedenle ajan adı başına tek örnek yeterlidir ve her istek
+/// için yeniden ajan kurma maliyeti oluşmaz.
 /// </para>
 /// </summary>
 public sealed class WorkflowAgentFactory(
@@ -30,11 +30,14 @@ public sealed class WorkflowAgentFactory(
     private const string UpdateSlotToolName = "update_slot";
 
     /// <summary>
-    /// <c>update_slot</c>'un <c>value</c> parametresi <c>object</c> tipinde olduğu için üretilen şema
-    /// "her JSON değeri kabul edilir" anlamına gelen çıplak <c>true</c> düğümüdür (bkz. AIFunctionFactory
-    /// dokümantasyonu). OpenAI bunu tolere eder; Ollama'nın Go tarafındaki tool-calling ayrıştırıcısı
-    /// <c>properties</c> altında obje bekler ve bool görünce "cannot unmarshal bool into ... ToolProperty"
-    /// hatasıyla 400 döner. Anlamca eşdeğer ama sözdizimsel olarak obje olan <c>{}</c> ile değiştirilir.
+    /// Şema üretiminde boolean düğümleri boş nesneye (<c>{}</c>) dönüştüren seçenekler.
+    /// <para>
+    /// <c>update_slot</c> aracının <c>value</c> parametresi <c>object</c> tipinde olduğundan üretilen
+    /// şema, "her JSON değeri kabul edilir" anlamına gelen çıplak <c>true</c> düğümüdür. OpenAI bu
+    /// biçimi kabul eder; Ollama'nın araç çağrısı ayrıştırıcısı ise <c>properties</c> altında nesne
+    /// bekler ve boolean gördüğünde HTTP 400 döner. Boş nesne anlamca eşdeğerdir ve her iki tarafça
+    /// da kabul edilir.
+    /// </para>
     /// </summary>
     private static readonly AIJsonSchemaCreateOptions OllamaCompatibleSchemaOptions = new()
     {
@@ -45,16 +48,23 @@ public sealed class WorkflowAgentFactory(
     private readonly ConcurrentDictionary<string, CachedWorkflowAgent> _agentsByName = new(StringComparer.Ordinal);
 
     /// <summary>
-    /// Önbellekteki ajan ve kurulduğu andaki girdiler.
+    /// Önbellekteki ajan ve kurulduğu andaki girdilerin parmak izi.
     /// <para>
-    /// Yalnızca ada göre önbelleklemek yetmiyordu: aynı adlı bir akış YAML'ı güncellendiğinde
-    /// (talimat/sıcaklık değişir) ya da yeni bir uzman eklendiğinde (araç listesi değişir)
-    /// eski ajan dönüyor ve değişiklik ancak süreç yeniden başlayınca görünüyordu.
+    /// <b>Önbellek anahtarı ada ek olarak girdileri de kapsar.</b> Yalnızca ada bakmak, aynı adlı bir
+    /// YAML tanımı güncellendiğinde (talimat veya sıcaklık değişir) ya da uzman listesi
+    /// değiştiğinde (araç kümesi değişir) eski ajanın dönmesine ve değişikliğin ancak süreç yeniden
+    /// başlatılınca görünmesine yol açar.
     /// </para>
     /// </summary>
+    /// <param name="Agent">Önbelleklenmiş ajan örneği.</param>
+    /// <param name="InstructionsFingerprint">Ajanın kurulduğu andaki talimat metni.</param>
+    /// <param name="SpecialistVersion">Ajanın kurulduğu andaki uzman kataloğu sürümü.</param>
     private sealed record CachedWorkflowAgent(AIAgent Agent, string InstructionsFingerprint, int SpecialistVersion);
 
-    /// <summary>Akış tanımına göre iş akışı ajanını döner; girdiler değişmediyse önbellekten verir.</summary>
+    /// <summary>
+    /// Akış tanımına karşılık gelen ajanı döner. Talimat ve uzman kataloğu sürümü değişmediyse
+    /// önbellekteki örnek verilir, aksi hâlde ajan yeniden kurulur.
+    /// </summary>
     public Task<AIAgent> GetOrCreateAsync(
         WorkflowAgentDefinition definition, CancellationToken cancellationToken = default)
     {
@@ -87,17 +97,17 @@ public sealed class WorkflowAgentFactory(
     }
 
     /// <summary>
-    /// Akış ajanının araç kümesi: <b>uzman köprüleri + motorun kontrol araçları</b>.
+    /// Akış ajanının araç kümesini kurar: uzman köprüleri ve motorun denetim araçları.
     /// <para>
-    /// Akış ajanı artık banka verisine doğrudan (MCP ile) erişmez; ihtiyacı olan her bilgiyi
-    /// A2A üzerinden uzmanlara sorar. Böylece bir akış tanımı yazmak, o akışa banka
-    /// araçlarının tamamını açmak anlamına gelmez: kapsam, uzmanın kendi araç listesiyle
-    /// sınırlıdır ve akış tarafında hiç genişletilemez.
+    /// <b>Akış ajanı banka verisine doğrudan erişmez;</b> ihtiyaç duyduğu her bilgiyi A2A üzerinden
+    /// uzmanlara sorar. Bu sayede bir akış tanımı yazmak, o akışa banka araçlarının tamamını açmak
+    /// anlamına gelmez: erişim kapsamı ilgili uzmanın araç listesiyle sınırlıdır ve akış tarafından
+    /// genişletilemez.
     /// </para>
     /// <para>
-    /// <c>update_slot</c>, <c>propose_*</c>, <c>cancel_*</c> ve <c>handoff_*</c> bu kısıtın
-    /// dışındadır: bunlar banka aracı değil, motorun <see cref="WorkflowEngine"/> ile
-    /// haberleştiği tek kanaldır — kaldırılırsa akış hiçbir sinyal üretemez ve durur.
+    /// <c>update_slot</c>, <c>propose_*</c>, <c>cancel_*</c> ve <c>handoff_*</c> bu kısıtın dışındadır.
+    /// Bunlar banka aracı değil, ajanın <see cref="WorkflowEngine"/> ile haberleştiği tek kanaldır;
+    /// kaldırıldıklarında ajan hiçbir sinyal üretemez ve akış ilerleyemez.
     /// </para>
     /// </summary>
     private List<AITool> BuildTools(WorkflowAgentDefinition definition)
@@ -114,9 +124,12 @@ public sealed class WorkflowAgentFactory(
     }
 
     /// <summary>
-    /// Her parametreyi oturuma yazmadan önce YAML'daki tip tanımından geçirir; uymayan değer
-    /// kaydedilmez ve onay ekranına ulaşamaz. Bankacılık kuralı burada uygulanmaz — o bankanın
-    /// kendi backend'inin işidir.
+    /// <c>update_slot</c> aracını kurar. Her değer oturuma yazılmadan önce YAML'daki tip tanımından
+    /// geçer; uymayan değer kaydedilmez ve onay ekranına ulaşamaz.
+    /// <para>
+    /// <b>Burada bankacılık kuralı uygulanmaz</b> — tutar, limit ve bakiye denetimi bankanın kendi
+    /// uçlarına aittir. Bu kapı yalnızca şema uyumunu denetler.
+    /// </para>
     /// </summary>
     private AITool BuildUpdateSlotTool(WorkflowAgentDefinition definition)
     {
@@ -135,13 +148,16 @@ public sealed class WorkflowAgentFactory(
     }
 
     /// <summary>
-    /// Beklenen tipleri aracın <b>açıklamasına</b> yazar.
+    /// Beklenen slot tiplerini araç açıklamasına ekler.
     /// <para>
-    /// Şemaya yazılamıyor: <c>value</c> parametresi <c>object</c> olduğu için üretilen düğüm
-    /// <see cref="OllamaCompatibleSchemaOptions"/> tarafından <c>{}</c>'a indirgeniyor ve tip
-    /// bilgisi kayboluyor. Açıklama ise modele olduğu gibi ulaşır — tipin modele ulaştığı tek
-    /// kanal budur. Kural yine de burada dayatılmaz; dayatma <c>update_slot</c>'un arkasındaki
-    /// şema kapısındadır. Bu metin yalnızca modelin baştan doğru göndermesini sağlar.
+    /// Tip bilgisi şemaya yazılamaz: <c>value</c> parametresi <c>object</c> olduğundan üretilen düğüm
+    /// <see cref="OllamaCompatibleSchemaOptions"/> tarafından boş nesneye indirgenir. Açıklama metni
+    /// ise modele olduğu gibi ulaşır ve tipin modele iletildiği tek kanaldır.
+    /// </para>
+    /// <para>
+    /// <b>Bu metin bir kısıt değil, yönlendirmedir.</b> Tip zorlaması <c>update_slot</c>'un arkasındaki
+    /// şema kapısında yapılır; buradaki açıklama yalnızca modelin baştan doğru biçimde göndermesini
+    /// olasılaştırır.
     /// </para>
     /// </summary>
     private static string DescribeExpectedTypes(IReadOnlyDictionary<string, DeclarativePropertyConfig>? slotSchema)
@@ -155,8 +171,8 @@ public sealed class WorkflowAgentFactory(
     }
 
     /// <summary>
-    /// Toplanan parametrelerden slot nesnesini kurar. Eksik veya dönüştürülemeyen alan varsa
-    /// teklif üretilmez; LLM'e hangi alanın sorulacağı açıkça bildirilir.
+    /// Teklif aracını kurar. Toplanan değerlerden onaya sunulacak slot kümesini oluşturur; eksik veya
+    /// dönüştürülemeyen slot varsa teklif üretilmez ve ajana hangi slotun sorulacağı bildirilir.
     /// </summary>
     private AITool BuildProposeTool(WorkflowAgentDefinition definition)
     {
@@ -202,11 +218,12 @@ public sealed class WorkflowAgentFactory(
     }
 
     /// <summary>
-    /// Kullanıcının mesajı akışla ilgisizse akışı bozmadan soruyu orkestratöre devretme kanalı.
+    /// Devretme aracını kurar: kullanıcının mesajı akışla ilgisizse soru, akış bozulmadan
+    /// orkestratöre iletilir.
     /// <para>
-    /// Bu araç olmadan ajanın tek çıkışı yoktu: konu dışı bir mesaja da "eksik parametrenin
-    /// cevabı" muamelesi yapıp <b>değer uyduruyordu</b>. Devretme artık ajanın serbest metninden
-    /// tahmin edilmez, açık bir araç çağrısıyla bildirilir.
+    /// <b>Ajanın konu dışı bir mesaj karşısındaki tek meşru çıkışı budur</b> ve devretme yalnızca bu
+    /// açık araç çağrısıyla bildirilir. Böyle bir çıkış tanımlanmadığında ajan konu dışı mesajı
+    /// eksik slotun yanıtı sayar ve değer uydurur.
     /// </para>
     /// </summary>
     private AITool BuildHandoffTool(string handoffToolName)
@@ -224,11 +241,11 @@ public sealed class WorkflowAgentFactory(
     }
 
     /// <summary>
-    /// Kararı oturuma yazar ve araç sonucu olarak da döner.
+    /// Denetim sinyalini oturuma yazar ve aynı değeri araç sonucu olarak döner.
     /// <para>
-    /// Motorun kararı oturumdan okuması şarttır: model araç sonucunu yanıt metnine
-    /// <b>kopyalamaz</b>, kendi cümlesini kurar — sinyali ajanın metninde aramak, iptal ve
-    /// devretme yollarının hiç çalışmaması demekti.
+    /// <b>Motorun sinyali oturumdan okuması zorunludur.</b> Model araç sonucunu yanıt metnine
+    /// kopyalamaz, kendi cümlesini kurar; sinyali ajanın metninde aramak iptal ve devretme
+    /// yollarının hiç tetiklenmemesine yol açar.
     /// </para>
     /// </summary>
     private string RaiseSignal(string signal)

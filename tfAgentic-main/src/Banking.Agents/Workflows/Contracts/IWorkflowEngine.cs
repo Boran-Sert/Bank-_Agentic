@@ -1,8 +1,8 @@
 namespace Banking.Agents.Workflows;
 
 /// <summary>
-/// Bir iş akışını bir adım ilerleten motor. Tipten bağımsız tek giriş noktasıdır; çağıranlar
-/// akışın hangi evrede olduğunu bilmek zorunda değildir — evre oturumdan okunur.
+/// Bir iş akışını adım adım ilerleten motorun sözleşmesi. Akıştan bağımsız tek giriş noktasıdır;
+/// çağıranın akışın hangi evrede olduğunu bilmesi gerekmez, evre oturumdan okunur.
 /// </summary>
 public interface IWorkflowEngine
 {
@@ -10,7 +10,8 @@ public interface IWorkflowEngine
     /// Akışı bir adım ilerletir.
     /// </summary>
     /// <param name="userMessage">
-    /// Kullanıcının mesajı. Akış yeni başlatılıyorsa niyet cümlesi olabilir ya da <c>null</c>.
+    /// Kullanıcının bu turdaki mesajı. Akış yeni başlatılıyorsa niyet cümlesi olabilir veya <c>null</c>.
     /// </param>
+    /// <param name="cancellationToken">İptal jetonu.</param>
     Task<WorkflowStepResult> AdvanceWorkflowStepAsync(string? userMessage, CancellationToken cancellationToken = default);
 }

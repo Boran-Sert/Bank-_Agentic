@@ -1,24 +1,24 @@
 namespace Banking.Domain.Validation;
 
 /// <summary>
-/// Bankanın ön-doğrulama (dry-run) çağrısına verdiği cevap.
+/// Bankanın ön doğrulama çağrısına verdiği yanıt.
 /// <para>
-/// <b>Bu tip bankanın sözleşmesidir, bizim değil.</b> Ajan katmanı yalnızca taşır ve
-/// <see cref="UserFacingMessage"/> alanını kullanıcıya iletir; içeriğini yorumlamaz,
-/// kendi kuralını eklemez.
+/// <b>Bu tip bankanın sözleşmesidir.</b> Ajan katmanı yanıtı yalnızca taşır ve
+/// <see cref="UserFacingMessage"/> alanını kullanıcıya iletir; içeriği yorumlamaz ve kendi kuralını
+/// eklemez.
 /// </para>
 /// </summary>
-/// <param name="IsAcceptable">Banka verilen bilgilerle işlemi kabul edilebilir buluyor mu?</param>
+/// <param name="IsAcceptable">Bankanın işlemi verilen bilgilerle kabul edilebilir bulduğunu belirtir.</param>
 /// <param name="RejectionCode">
-/// Makine tarafından okunabilir ret kodu (<see cref="BankRejectionCodes"/>); kabulde <c>null</c>.
-/// Loglama ve telemetri içindir — kullanıcıya gösterilmez.
+/// Makine tarafından okunabilir ret kodu (bkz. <see cref="BankRejectionCodes"/>); kabul hâlinde
+/// <c>null</c>. Log ve telemetri içindir, kullanıcıya gösterilmez.
 /// </param>
 /// <param name="UserFacingMessage">
-/// Bankanın ürettiği, doğrudan kullanıcıya gösterilebilir açıklama; kabulde <c>null</c>.
+/// Bankanın ürettiği ve doğrudan kullanıcıya gösterilebilir açıklama; kabul hâlinde <c>null</c>.
 /// </param>
 /// <param name="Hints">
-/// Kullanıcıya yol gösteren yapısal ipuçları (bkz. <see cref="BankValidationHintKeys"/>),
-/// örneğin kabul edilebilir azami tutar. LLM'in doğru soruyu sorabilmesi için vardır.
+/// Yapısal ipuçları (bkz. <see cref="BankValidationHintKeys"/>); örneğin kabul edilebilir azami
+/// tutar. Ajanın kullanıcıya doğru soruyu sorabilmesini sağlar.
 /// </param>
 public sealed record BankValidationResult(
     bool IsAcceptable,
@@ -29,11 +29,13 @@ public sealed record BankValidationResult(
     private static readonly IReadOnlyDictionary<string, object?> NoHints =
         new Dictionary<string, object?>(0, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Banka elindeki bilgilerle işlemi kabul edilebilir buluyor.</summary>
+    /// <summary>İşlemin eldeki bilgilerle kabul edilebilir olduğunu bildiren sonuç üretir.</summary>
     public static BankValidationResult Acceptable(IReadOnlyDictionary<string, object?>? hints = null) =>
         new(IsAcceptable: true, RejectionCode: null, UserFacingMessage: null, hints ?? NoHints);
 
-    /// <summary>Banka işlemi reddetti; sebep ve varsa kabul edilebilir aralık döner.</summary>
+    /// <summary>
+    /// İşlemin reddedildiğini bildiren sonuç üretir; gerekçeyi ve varsa kabul edilebilir aralığı taşır.
+    /// </summary>
     public static BankValidationResult Rejected(
         string rejectionCode,
         string userFacingMessage,
@@ -42,8 +44,8 @@ public sealed record BankValidationResult(
 }
 
 /// <summary>
-/// Bankanın döndürebileceği ret kodları. Kullanıcıya gösterilmez; log, telemetri ve
-/// otomatik testlerde metin karşılaştırmasından kaçınmak için vardır.
+/// Bankanın döndürebileceği ret kodları. Kullanıcıya gösterilmez; log, telemetri ve testlerde metin
+/// karşılaştırması yapmayı gereksiz kılar.
 /// </summary>
 public static class BankRejectionCodes
 {

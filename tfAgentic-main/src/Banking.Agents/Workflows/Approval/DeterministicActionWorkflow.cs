@@ -6,16 +6,26 @@ using Microsoft.Agents.AI.Workflows;
 namespace Banking.Agents.Workflows.Approval;
 
 /// <summary>
-/// İnsan onayı (HITL) gerektiren deterministik eylemin MAF grafiğini kurar.
-/// Grafik iki düğümdür: <c>RequestPort</c> (insan onayı) → eylem adımı.
+/// İnsan onayı (human-in-the-loop) gerektiren deterministik eylemin MAF grafiğini kurar. Grafik iki
+/// düğümden oluşur: <c>RequestPort</c> onay kapısı ve ardından gelen eylem adımı.
 /// <para>
-/// Para hareketi yaratan hiçbir çağrı bu kapıdan geçmeden çalışmaz; LLM eylemi doğrudan
-/// tetikleyemez.
+/// <b>Para hareketi üreten hiçbir çağrı bu kapıdan geçmeden çalışmaz.</b> Model eylemi doğrudan
+/// tetikleyemez; yalnızca onay ekranını hazırlayabilir.
 /// </para>
 /// </summary>
 public static class DeterministicActionWorkflow
 {
-    /// <summary>Verilen akış tanımı ve parametrelerle MAF <see cref="Workflow"/> grafiğini inşa eder.</summary>
+    /// <summary>
+    /// Verilen akış tanımı ve slot kümesiyle MAF <see cref="Workflow"/> grafiğini kurar.
+    /// </summary>
+    /// <param name="action">Akışın kimliği ve banka hedefi.</param>
+    /// <param name="slots">Onaya sunulmuş slot kümesi.</param>
+    /// <param name="actionExecutor">Onay sonrası çalıştırılacak executor.</param>
+    /// <param name="hub">İzleme kanalı.</param>
+    /// <param name="requiresApproval">
+    /// <c>false</c> verildiğinde onay kapısı kurulmaz ve eylem doğrudan çalışır. Para hareketi
+    /// içeren akışlarda daima <c>true</c> olmalıdır.
+    /// </param>
     public static Workflow Build(
         WorkflowActionDefinition action,
         IReadOnlyDictionary<string, object?> slots,
@@ -44,7 +54,10 @@ public static class DeterministicActionWorkflow
     }
 }
 
-/// <summary>Onay kararını alıp eylemi LLM müdahalesi olmadan çalıştıran MAF adımı.</summary>
+/// <summary>
+/// Onay kararını girdi alıp eylemi model müdahalesi olmadan çalıştıran MAF adımı. Grafikteki tek
+/// yürütme düğümüdür.
+/// </summary>
 internal sealed class DeterministicActionStep(
     string id,
     WorkflowActionDefinition action,

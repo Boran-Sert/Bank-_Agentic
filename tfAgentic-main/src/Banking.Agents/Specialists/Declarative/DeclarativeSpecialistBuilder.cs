@@ -8,15 +8,16 @@ using YamlDotNet.Serialization.NamingConventions;
 namespace Banking.Agents.Specialists.Declarative;
 
 /// <summary>
-/// Uzman ajan tanımlarını (YAML/JSON) ayrıştırır ve <see cref="AgentCard"/>'a dönüştürür.
+/// Uzman ajan tanımlarını (YAML veya JSON) ayrıştırır ve <see cref="AgentCard"/> tipine dönüştürür.
 /// <para>
-/// Derlenmiş uzmanlarla <b>tek fark tanımın nereden geldiğidir</b>: ikisi de aynı karta
-/// dönüşür, aynı katalogdan kurulur, aynı A2A yolundan konuşur.
+/// Derlenmiş uzmanlarla <b>tek fark tanımın kaynağıdır</b>: her ikisi de aynı karta dönüşür, aynı
+/// katalogdan kurulur ve aynı A2A yolu üzerinden erişilir.
 /// </para>
 /// </summary>
 public static class DeclarativeSpecialistBuilder
 {
-    /// <summary>YAML metnini tanıma dönüştürür.</summary>
+    /// <summary>YAML metnini uzman tanımına dönüştürür. Tanınmayan alanlar yok sayılır.</summary>
+    /// <exception cref="InvalidOperationException">Metin geçerli bir tanıma çözümlenemediğinde fırlatılır.</exception>
     public static SpecialistDefinition ParseFromYaml(string yamlContent)
     {
         var deserializer = new DeserializerBuilder()
@@ -28,16 +29,21 @@ public static class DeclarativeSpecialistBuilder
                ?? throw new InvalidOperationException("Geçersiz uzman ajan YAML şeması.");
     }
 
-    /// <summary>JSON metnini tanıma dönüştürür.</summary>
+    /// <summary>JSON metnini uzman tanımına dönüştürür. Alan adları büyük/küçük harf duyarsızdır.</summary>
+    /// <exception cref="InvalidOperationException">Metin geçerli bir tanıma çözümlenemediğinde fırlatılır.</exception>
     public static SpecialistDefinition ParseFromJson(string jsonContent) =>
         JsonSerializer.Deserialize<SpecialistDefinition>(
             jsonContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
         ?? throw new InvalidOperationException("Geçersiz uzman ajan JSON şeması.");
 
     /// <summary>
-    /// Tanımı karta çevirir. Yazılmayan alanlar addan türetilir; ad ile araç adı/A2A yolu
-    /// arasındaki ilişki <b>tek yerde</b> kurulur.
+    /// Uzman tanımını karta dönüştürür. Belirtilmeyen alanlar uzman adından türetilir; <b>ad ile araç
+    /// adı ve A2A yolu arasındaki ilişki yalnızca burada kurulur.</b>
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Zorunlu alanlar (<c>name</c>, <c>description</c>) eksik olduğunda veya araç grubu tanınmadığında
+    /// fırlatılır.
+    /// </exception>
     public static AgentCard ToAgentCard(SpecialistDefinition definition)
     {
         if (string.IsNullOrWhiteSpace(definition.Name))
@@ -66,9 +72,11 @@ public static class DeclarativeSpecialistBuilder
     }
 
     /// <summary>
-    /// Araç adı listesi verilmediğinde kullanılacak grubu çözer. Tanınmayan grup adı sessizce
-    /// varsayılana düşmez — uzman yanlış araç kümesiyle çalışmaya başlar ve fark edilmez.
+    /// Araç adı listesi verilmediğinde kullanılacak grubu çözer. <b>Tanınmayan grup adı varsayılana
+    /// düşmez;</b> sessiz varsayılan, uzmanın yanlış araç kümesiyle çalışmasına ve bunun fark
+    /// edilmemesine yol açar.
     /// </summary>
+    /// <exception cref="InvalidOperationException">Grup adı tanınmadığında fırlatılır.</exception>
     private static ToolGroup ResolveToolGroup(SpecialistDefinition definition)
     {
         if (definition.Tools is { Count: > 0 }) return default;
@@ -82,9 +90,9 @@ public static class DeclarativeSpecialistBuilder
     }
 
     /// <summary>
-    /// Uzmanın sistem talimatını üretir: kimlik + tanımdaki talimat + ortak güvenlik kuralları.
-    /// Güvenlik bloğu her uzmana <b>koşulsuz</b> eklenir — arayüzden tanımlanan bir uzman,
-    /// talimat alanını boş bırakarak guardrail'siz kalamaz.
+    /// Uzmanın sistem talimatını üretir: kimlik bloğu, tanımdaki talimat, sunum sözleşmesi ve ortak
+    /// koruma kuralları. <b>Koruma bloğu koşulsuz eklenir;</b> talimat alanını boş bırakarak
+    /// korumasız bir uzman tanımlamak mümkün değildir.
     /// </summary>
     private static string BuildInstructions(SpecialistDefinition definition)
     {

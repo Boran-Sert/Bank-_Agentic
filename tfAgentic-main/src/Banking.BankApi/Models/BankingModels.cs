@@ -65,7 +65,7 @@ public record Campaign(
     DateOnly EndDate,
     bool IsActive = true);
 
-/// <summary> Finansman Önerileri tanımı </summary>
+/// <summary>Müşteriye sunulabilecek finansman veya kredi ürünü tanımı.</summary>
 public record FinancingOption(
     string Id,
     string Title,

@@ -4,8 +4,8 @@ using Microsoft.Extensions.AI;
 namespace Banking.Agents.Tracing;
 
 /// <summary>
-/// Bir aracı (AIFunction) sarar ve her çağrıldığında girdi parametreleri ile dönen sonuç verisini (payload)
-/// merkezi TraceHub sistemine detaylıca raporlar.
+/// Bir aracı saran ve her çağrıda girdi argümanları ile dönen sonucu <see cref="TraceHub"/>
+/// üzerinden yayınlayan dekoratör. Aracın davranışını değiştirmez, yalnızca gözlemlenebilir kılar.
 /// </summary>
 public sealed class TracingAIFunction(AIFunction inner, TraceHub hub, string layer, string text, string? detail = null)
     : AIFunction
@@ -20,7 +20,7 @@ public sealed class TracingAIFunction(AIFunction inner, TraceHub hub, string lay
     public override JsonElement JsonSchema => inner.JsonSchema;
 
     /// <summary>
-    /// Sarmalanan aracı çalıştırır ve çalıştırma öncesi ile sonrasındaki olayları TraceHub'a yayınlar.
+    /// Sarmalanan aracı çalıştırır ve çağrı öncesi ile sonrasındaki olayları izleme kanalına yayınlar.
     /// </summary>
     protected override async ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments, CancellationToken cancellationToken)

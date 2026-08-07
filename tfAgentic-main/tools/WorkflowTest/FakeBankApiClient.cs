@@ -4,15 +4,19 @@ using Banking.BankApi.Client;
 namespace WorkflowTest;
 
 /// <summary>
-/// Bankanın yerine geçen sahte istemci. Gerçek bir sunucu çalıştırmadan onay kapısının
-/// <b>gerçekten</b> para taşıyıp taşımadığını ölçer: kaç istek gitti, hangi gövdeyle, hangi
-/// idempotency anahtarıyla.
+/// Bankanın yerine geçen sahte istemci. Gerçek bir sunucu çalıştırmadan onay kapısının davranışını
+/// ölçülebilir kılar: kaç istek gönderildiğini, hangi gövdeyle ve hangi idempotency anahtarıyla
+/// gittiğini kaydeder.
 /// </summary>
 public sealed class FakeBankApiClient : IBankApiClient
 {
+    /// <summary>Bu istemciye gönderilmiş tüm isteklerin sırayla kaydı.</summary>
     public List<(HttpMethod Method, string Path, object? Body, string? IdempotencyKey)> SentRequests { get; } = [];
 
-    /// <summary>Aynı anahtarla gelen ikinci istek yeni makbuz üretmez — bankanın davranışını taklit eder.</summary>
+    /// <summary>
+    /// Üretilmiş makbuzların idempotency anahtarına göre kaydı. Aynı anahtarla gelen ikinci isteğin
+    /// yeni makbuz üretmemesini sağlayarak bankanın davranışını taklit eder.
+    /// </summary>
     private readonly Dictionary<string, string> _receiptsByIdempotencyKey = [];
 
     public Task<JsonElement> GetAsync(string path, CancellationToken cancellationToken = default) =>

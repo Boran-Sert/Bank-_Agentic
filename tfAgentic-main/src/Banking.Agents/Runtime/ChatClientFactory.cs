@@ -4,9 +4,11 @@ using OpenAI.Chat;
 
 namespace Banking.Agents.Runtime;
 
-/// <summary>OpenAI <see cref="ChatClient"/> örneğini yapılandırmadan üretir.</summary>
+/// <summary>Yapılandırmadan OpenAI uyumlu <see cref="ChatClient"/> örneği üretir.</summary>
 public static class ChatClientFactory
 {
+    /// <summary>Sağlayıcı, model ve endpoint ayarlarına göre sohbet istemcisini kurar.</summary>
+    /// <exception cref="NotSupportedException">Yapılandırılan sağlayıcı desteklenmediğinde fırlatılır.</exception>
     public static ChatClient Create(AgentOptions options)
     {
         var isSupported = string.Equals(options.Provider, "openai", StringComparison.OrdinalIgnoreCase)

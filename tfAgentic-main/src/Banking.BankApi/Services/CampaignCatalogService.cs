@@ -6,8 +6,8 @@ namespace Banking.Domain.Services;
 /// <summary>
 /// Kampanya kataloğuna erişim sözleşmesi.
 /// <para>
-/// MCP araçları veri katmanına (<see cref="InMemoryBankStore"/>) <b>asla</b> doğrudan
-/// dokunmaz; kampanya okuma yolu tek kapıdan, bu saf C# servisinden geçer.
+/// <b>MCP araçları veri katmanına doğrudan erişmez;</b> kampanya okuma ve yazma yolu yalnızca bu
+/// servis üzerinden geçer.
 /// </para>
 /// </summary>
 public interface ICampaignCatalogService
@@ -18,7 +18,9 @@ public interface ICampaignCatalogService
     /// <summary>Kimliğe göre tek bir kampanyayı döner; yoksa <c>null</c>.</summary>
     Campaign? FindCampaignById(string campaignId);
 
-    /// <summary>Kampanyayı kataloğa ekler/günceller (backend senkronizasyonu için tek yazma noktası).</summary>
+    /// <summary>
+    /// Kampanyayı kataloğa ekler veya mevcut kaydı günceller. Kataloğun tek yazma noktasıdır.
+    /// </summary>
     void AddCampaign(Campaign campaign);
 }
 

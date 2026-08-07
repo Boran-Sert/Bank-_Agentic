@@ -7,12 +7,12 @@ namespace Banking.Domain.Services;
 public interface ICollectionService
 {
     /// <summary>
-    /// <b>Ön-doğrulama (dry-run).</b> Para hareketi YAPMAZ; bankanın işlemi bu bilgilerle
-    /// kabul edip etmeyeceğini söyler.
+    /// Ön doğrulama yapar. <b>Para hareketi üretmez;</b> yalnızca bankanın işlemi verilen bilgilerle
+    /// kabul edip etmeyeceğini bildirir.
     /// <para>
-    /// Tüm parametreler nullable'dır: kullanıcı bilgileri <b>tek tek</b> verdikçe çağrılabilsin
-    /// diye. Banka yalnızca elindeki bilgiyle ilgili kuralları uygular, eksik olanları atlar.
-    /// Böylece kullanıcı yetersiz bakiyeyi onay ekranında değil, tutarı yazdığı anda öğrenir.
+    /// Tüm parametreler isteğe bağlıdır; böylece slotlar kısmen doluyken de çağrılabilir. Banka
+    /// yalnızca eldeki bilgiyle ilgili kuralları uygular ve eksik olanları atlar. Bu sayede yetersiz
+    /// bakiye gibi engeller onay ekranında değil, kullanıcı tutarı girdiği anda bildirilir.
     /// </para>
     /// </summary>
     BankValidationResult ValidateCardPaymentBeforeExecution(
@@ -21,16 +21,17 @@ public interface ICollectionService
         string? sourceAccountId);
 
     /// <summary>
-    /// GERİ ALINAMAZ işlem: karttan borç tahsil eder, kaynak hesaptan düşer.
-    /// Yalnızca kullanıcı onayından sonra, deterministik olarak çağrılmalıdır.
+    /// Kart borcunu tahsil eder ve tutarı kaynak hesaptan düşer.
+    /// <para>
+    /// <b>Geri alınamaz bir işlemdir.</b> Yalnızca kullanıcı onayı alındıktan sonra çağrılmalıdır.
+    /// </para>
     /// </summary>
     PaymentReceipt Charge(string cardId, decimal amount, string sourceAccountId, DateOnly date);
 }
 
 /// <summary>
-/// Kart borcu tahsilatının <b>tek</b> sahibi: hem ön-doğrulama hem de kayıtları güncelleyen
-/// para hareketi burada. Veri katmanı (<see cref="InMemoryBankStore"/>) yalnızca koleksiyonları
-/// tutar; kural ve mutasyon bu dosyadadır.
+/// Kart borcu tahsilatının tek sahibi: hem ön doğrulama hem de kayıtları güncelleyen para hareketi
+/// bu sınıftadır. Veri katmanı yalnızca koleksiyonları tutar; kural ve mutasyon burada yaşar.
 /// </summary>
 public sealed class CollectionService(InMemoryBankStore store) : ICollectionService
 {

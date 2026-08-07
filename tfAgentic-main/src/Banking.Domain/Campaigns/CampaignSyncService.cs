@@ -5,13 +5,16 @@ using Microsoft.Extensions.Logging;
 namespace Banking.Domain.Campaigns;
 
 /// <summary>
-/// Backend kampanya sisteminden yeni/güncellenmiş kampanyaları çekip kataloğa yazan ve
-/// semantik indekse ekleyen senkronizasyon noktası. UI üzerindeki "Kampanyaları Senkronize Et"
-/// tetikleyicisi bu servisi çağırır.
+/// Kaynak kampanya sisteminden yeni ve güncellenmiş kampanyaları çekip kataloğa yazan, ardından
+/// semantik indekse ekleyen senkronizasyon servisi.
 /// </summary>
 public interface ICampaignSyncService
 {
-    /// <summary>Backend'den kampanyaları çeker, kataloğa yazar, anında indeksler ve eklenen/güncellenen sayıyı döner.</summary>
+    /// <summary>
+    /// Kampanyaları kaynaktan çeker, kataloğa yazar ve semantik indeksi günceller. Uygulama yeniden
+    /// başlatılmaz; yeni kampanyalar aynı anda aranabilir hâle gelir.
+    /// </summary>
+    /// <returns>Eklenen veya güncellenen kampanya sayısı.</returns>
     Task<int> SyncFromBackendAsync(CancellationToken cancellationToken = default);
 }
 

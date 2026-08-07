@@ -45,8 +45,8 @@ public sealed class BankApiClient(HttpClient http) : IBankApiClient
     }
 
     /// <summary>
-    /// Bankanın gerekçesini yanıt gövdesinden çıkarır. Banka "yetersiz bakiye" diyorsa kullanıcı
-    /// bunu görmeli; genel bir "işlem yapılamadı" metnine indirgemek sebebi gizlemek olurdu.
+    /// Hata yanıtının gövdesinden bankanın gerekçesini çıkarır. <b>Gerekçe genel bir hata metnine
+    /// indirgenmez;</b> bankanın kendi açıklaması kullanıcıya olduğu gibi taşınır.
     /// </summary>
     private static string ExtractUserFacingMessage(string payload, string? fallbackReason)
     {

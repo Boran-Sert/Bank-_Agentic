@@ -9,15 +9,16 @@ using ModelContextProtocol.Client;
 namespace Banking.Agents.Mcp;
 
 /// <summary>
-/// Süreç-içi MCP server'a (loopback HTTP) bağlanan <b>tek</b> istemci.
+/// Süreç içi MCP sunucusuna loopback HTTP üzerinden bağlanan tek istemci.
 /// <para>
-/// Bağlantı <b>tembel ve tek seferlik</b> kurulur: startup sırasında loopback'e bağlanmaya
-/// çalışıp "connection refused" almamak için bu gecikme kasıtlıdır. Bağlantı kurulduğu anda
-/// registry ile canlı araç listesi karşılaştırılır (fail-fast).
+/// <b>Bağlantı tembel ve tek seferlik kurulur.</b> Erken bağlanma denemesi, sunucu henüz
+/// dinlemediğinden bağlantı hatasıyla sonuçlanır. Bağlantı kurulduğu anda kayıt defteri ile canlı
+/// araç listesi karşılaştırılır ve uyuşmazlık hâlinde başlangıçta istisna üretilir.
 /// </para>
 /// <para>
-/// Araçlar ajanlara <b>grup grup</b> ve izleme sarmalayıcısıyla dağıtılır; bir ajan yalnızca
-/// kendi <see cref="ToolGroup"/>'undaki araçları görür (blast radius ve token sınırlaması).
+/// Araçlar ajanlara grup bazında ve izleme sarmalayıcısıyla dağıtılır; bir ajan yalnızca kendi
+/// <see cref="ToolGroup"/> grubundaki araçları görür. Bu sınırlama hem hatanın etki alanını hem de
+/// talimat maliyetini küçültür.
 /// </para>
 /// </summary>
 public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<McpToolProvider> logger)
@@ -29,13 +30,14 @@ public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<
     private McpClient? _client;
     private IList<McpClientTool>? _discoveredTools;
 
-    /// <summary>Bağlantı kurulduysa keşfedilen toplam MCP aracı sayısı (tanı ekranı için).</summary>
+    /// <summary>Keşfedilen toplam MCP aracı sayısı. Bağlantı kurulmadan önce sıfırdır; tanılamada raporlanır.</summary>
     public int DiscoveredToolCount { get; private set; }
 
     /// <summary>
-    /// Verilen araç grubundaki MCP araçlarını izleme sarmalayıcısıyla döner.
-    /// İlk çağrıda MCP bağlantısını kurar.
+    /// Verilen gruptaki MCP araçlarını izleme sarmalayıcısıyla döner. İlk çağrı MCP bağlantısını kurar.
     /// </summary>
+    /// <param name="group">Araçların alınacağı grup.</param>
+    /// <param name="cancellationToken">İptal jetonu.</param>
     public async Task<IList<AITool>> GetTracedToolsForGroupAsync(
         ToolGroup group, CancellationToken cancellationToken = default)
     {
@@ -53,13 +55,16 @@ public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<
     }
 
     /// <summary>
-    /// Adı verilen MCP araçlarını izleme sarmalayıcısıyla döner — arayüzden tanımlanan uzmanlar
-    /// kapsamlarını grup yerine tek tek araç seçerek belirler.
+    /// Adları verilen MCP araçlarını izleme sarmalayıcısıyla döner. Çalışma zamanında tanımlanan
+    /// uzmanlar kapsamlarını grup yerine tek tek araç seçerek belirler.
     /// <para>
-    /// Bilinmeyen bir ad <b>sessizce atlanmaz</b>: uzman, kendisine verildiğini sandığı araç
-    /// olmadan çalışmaya devam eder ve kullanıcıya sebebi görünmeyen bir "yapamıyorum" döner.
+    /// <b>Bilinmeyen bir araç adı sessizce atlanmaz.</b> Atlanması durumunda uzman, sahip olduğunu
+    /// varsaydığı araç olmadan çalışmaya devam eder ve kullanıcıya nedeni görünmeyen bir yetersizlik
+    /// yanıtı döner.
     /// </para>
     /// </summary>
+    /// <param name="toolNames">Alınacak araçların adları.</param>
+    /// <param name="cancellationToken">İptal jetonu.</param>
     public async Task<IList<AITool>> GetTracedToolsByNamesAsync(
         IReadOnlyCollection<string> toolNames, CancellationToken cancellationToken = default)
     {
@@ -83,7 +88,8 @@ public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<
     }
 
     /// <summary>
-    /// MCP bağlantısını (bir kez) kurar ve keşfedilen araç listesini döner.
+    /// MCP bağlantısını tek kez kurar ve keşfedilen araç listesini döner. Eşzamanlı çağrılar aynı
+    /// bağlantıyı paylaşır.
     /// </summary>
     private async Task<IList<McpClientTool>> EnsureConnectedAsync(CancellationToken cancellationToken)
     {

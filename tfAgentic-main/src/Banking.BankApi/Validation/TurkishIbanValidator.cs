@@ -14,11 +14,11 @@ public enum TurkishIbanValidationStatus
 }
 
 /// <summary>
-/// Türkiye IBAN'larının yapı ve kontrol basamağı doğrulaması (ISO 13616 / mod-97).
+/// Türkiye IBAN'larının yapı ve kontrol basamağı doğrulaması (ISO 13616 mod-97).
 /// <para>
-/// Bu <b>bankanın</b> kuralıdır ve bilinçli olarak <c>Banking.Domain</c> içinde durur;
-/// ajan katmanı IBAN hakkında hiçbir şey bilmez. Gerçek backend'e geçildiğinde bu sınıf
-/// yerini bankanın kendi doğrulama yanıtına bırakır.
+/// <b>Bu bir bankacılık kuralıdır ve banka katmanında yaşar;</b> ajan katmanı IBAN biçimi hakkında
+/// hiçbir bilgi taşımaz. Gerçek bir banka arka ucuna geçildiğinde bu sınıfın yerini bankanın kendi
+/// doğrulama yanıtı alır.
 /// </para>
 /// </summary>
 public static class TurkishIbanValidator
@@ -29,9 +29,7 @@ public static class TurkishIbanValidator
     /// <summary>ISO 13616 mod-97 hesabında geçerli bir IBAN'ın kalanı daima 1'dir.</summary>
     private const int ExpectedMod97Remainder = 1;
 
-    /// <summary>
-    /// IBAN'ı doğrular. Boşluklar ve küçük/büyük harf farkı yok sayılır.
-    /// </summary>
+    /// <summary>IBAN'ı doğrular. Boşluklar ve harf büyüklüğü farkı dikkate alınmaz.</summary>
     public static TurkishIbanValidationStatus Validate(string iban)
     {
         var normalizedIban = Normalize(iban);

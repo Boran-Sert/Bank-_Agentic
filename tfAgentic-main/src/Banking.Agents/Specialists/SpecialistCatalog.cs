@@ -12,12 +12,13 @@ using Microsoft.Extensions.Logging;
 namespace Banking.Agents.Specialists;
 
 /// <summary>
-/// Uzman ajanların keşfi, kurulumu ve çağıranlara bağlanma biçimi (A2A ↔ süreç-içi).
+/// Uzman ajanların keşfi, kurulumu ve çağıranlara bağlanma biçiminin (A2A veya süreç içi) tek
+/// yönetim noktası.
 /// <para>
-/// Uzman listesi <b>hiçbir yerde sabit yazılmaz</b> ve <b>iki kaynaktan</b> gelir: static
-/// <c>AgentCard Card</c> özelliği olan derlenmiş sınıflar (reflection) ve çalışma zamanında
-/// kaydedilen deklaratif tanımlar (arayüz/YAML). İkisi de aynı <see cref="AgentCard"/>'a
-/// dönüşür; bu sınıfın altındaki hiçbir katman aradaki farkı görmez.
+/// <b>Uzman listesi hiçbir yerde sabit yazılmaz</b> ve iki kaynaktan beslenir: statik
+/// <c>AgentCard Card</c> özelliği taşıyan derlenmiş sınıflar ve çalışma zamanında kaydedilen
+/// deklaratif tanımlar. Her ikisi de aynı <see cref="AgentCard"/> tipine dönüşür; bu sınıfın
+/// altındaki katmanlar iki kaynak arasındaki farkı görmez.
 /// </para>
 /// </summary>
 public sealed class SpecialistCatalog(
@@ -33,23 +34,24 @@ public sealed class SpecialistCatalog(
     private int _version;
 
     /// <summary>
-    /// Uzman listesinin sürümü; her kayıt/güncellemede artar.
+    /// Uzman kataloğunun sürümü; her kayıt ve güncellemede artar.
     /// <para>
-    /// Uzmanlardan köprü aracı üretip <b>önbelleğe alan</b> her bileşen (orkestratör, iş akışı
-    /// ajanları) kurulduğu sürümü saklar ve sürüm değiştiyse kendini yeniden kurar. Olay
-    /// (event) yerine sürüm tercih edildi: abone olma sırası ve ajan kurulum yarışı
-    /// gerektirmez, kontrol zaten var olan kilitlerin içinde yapılır.
+    /// Uzmanlardan köprü aracı üretip önbellekleyen her bileşen kurulduğu sürümü saklar ve sürüm
+    /// değiştiğinde kendini yeniden kurar. <b>Bildirim yerine sürüm numarası kullanılır:</b> sürüm
+    /// karşılaştırması abonelik sırasına bağlı değildir ve kontrol, zaten var olan kilitlerin içinde
+    /// yapılabilir.
     /// </para>
     /// </summary>
     public int Version => Volatile.Read(ref _version);
 
-    /// <summary>Uzmanlara hangi taşıma katmanı üzerinden erişildiği (tanı ekranı için).</summary>
+    /// <summary>Uzmanlara erişimde kullanılan taşıma katmanı. Tanılama ekranında raporlanır.</summary>
     public string Transport { get; private set; } = "(kurulmadı)";
 
     /// <summary>Derlenmiş ve deklaratif tüm uzmanların kartları.</summary>
     public IReadOnlyList<AgentCard> Cards =>
         DiscoverCompiledCards().Select(entry => entry.Card).Concat(_declarativeCards.Values).ToList();
 
+    /// <summary>Kayıtlı tüm uzmanların adları.</summary>
     public IReadOnlyCollection<string> SpecialistNames => Cards.Select(card => card.Name).ToList();
 
     // =================================================================================
@@ -57,11 +59,12 @@ public sealed class SpecialistCatalog(
     // =================================================================================
 
     /// <summary>
-    /// Deklaratif uzman tanımını çalışma zamanında kaydeder. Aynı ad tekrar gönderilirse
-    /// üzerine yazılır ve o uzmanın kurulmuş örneği düşürülür (yeni talimat/araçlar geçerli olsun diye).
+    /// Deklaratif uzman tanımını çalışma zamanında kaydeder. Aynı ad ikinci kez gönderildiğinde kayıt
+    /// üzerine yazılır ve kurulmuş örnek düşürülür; böylece yeni talimat ve araç kümesi geçerli olur.
     /// </summary>
+    /// <param name="definition">Kaydedilecek deklaratif uzman tanımı.</param>
     /// <exception cref="InvalidOperationException">
-    /// Tanım, derlenmiş bir uzmanın adını, köprü aracı adını veya A2A yolunu kullanıyorsa atılır.
+    /// Tanım, derlenmiş bir uzmanın adını, köprü aracı adını veya A2A yolunu kullandığında fırlatılır.
     /// </exception>
     public AgentCard RegisterDeclarativeSpecialist(SpecialistDefinition definition)
     {
@@ -84,12 +87,13 @@ public sealed class SpecialistCatalog(
     /// <summary>
     /// Deklaratif bir tanımın derlenmiş uzmanı gölgelemesini engeller.
     /// <para>
-    /// Bir metin dosyası, gerçek araçlara bağlı bir uzmanı araçsız bir taklidiyle sessizce
-    /// değiştirebilseydi sistem "bilemiyorum" demeye başlar ve sebebi hiçbir yerde görünmezdi.
-    /// Ad kadar köprü aracı adı ve A2A yolu da korunur: ikisi de çağrının hangi uzmana
-    /// gideceğini belirler, çakışmaları aynı sonucu doğurur.
+    /// <b>Korumanın kapsamı ad ile sınırlı değildir;</b> köprü aracı adı ve A2A yolu da denetlenir.
+    /// Üçü de çağrının hangi uzmana gideceğini belirlediğinden, herhangi birindeki çakışma aynı
+    /// sonucu doğurur: gerçek araçlara bağlı bir uzmanın yerini araçsız bir tanım alır ve sistem,
+    /// nedeni hiçbir yerde görünmeden yanıt veremez duruma gelir.
     /// </para>
     /// </summary>
+    /// <exception cref="InvalidOperationException">Çakışma tespit edildiğinde fırlatılır.</exception>
     private static void GuardAgainstCompiledCollision(AgentCard card)
     {
         foreach (var (compiled, _) in DiscoverCompiledCards())
@@ -112,7 +116,11 @@ public sealed class SpecialistCatalog(
     // ERİŞİM
     // =================================================================================
 
-    /// <summary>İstenen isimdeki (tembel kurulan) uzman ajanı döner.</summary>
+    /// <summary>
+    /// Adı verilen uzman ajanı döner. Ajan tembel kurulur; ilk çağrıya kadar MCP bağlantısı açılmaz.
+    /// Tam ad eşleşmesi bulunamazsa kısmi ad eşleşmesi denenir.
+    /// </summary>
+    /// <exception cref="ArgumentException">Ad hiçbir uzmanla eşleşmediğinde fırlatılır.</exception>
     public DeferredSpecialistAgent GetSpecialist(string specialistName)
     {
         var card = FindCard(candidate =>
@@ -127,9 +135,10 @@ public sealed class SpecialistCatalog(
     }
 
     /// <summary>
-    /// A2A yolundan (<c>/a2a/{route}</c>) uzmanı çözer — tek dağıtıcı endpoint'inin arkasında
-    /// hangi uzmanın konuşacağını bu belirler.
+    /// A2A yolundan (<c>/a2a/{route}</c>) uzmanı çözer. Tek dağıtıcı endpoint'in arkasında hangi
+    /// uzmanın yanıt vereceğini bu eşleme belirler.
     /// </summary>
+    /// <exception cref="ArgumentException">Yol hiçbir uzmanla eşleşmediğinde fırlatılır.</exception>
     public DeferredSpecialistAgent GetSpecialistByA2ARoute(string? a2aRoute)
     {
         var card = FindCard(candidate => string.Equals(candidate.A2ARoute, a2aRoute, StringComparison.OrdinalIgnoreCase))
@@ -139,8 +148,8 @@ public sealed class SpecialistCatalog(
     }
 
     /// <summary>
-    /// Her uzman için çağıranın kullanabileceği köprü aracını üretir.
-    /// A2A yapılandırılmışsa HTTP loopback, değilse süreç-içi ajana bağlanır.
+    /// Her uzman için çağıranın kullanabileceği köprü aracını üretir. A2A etkinse araçlar HTTP
+    /// loopback üzerinden, değilse doğrudan süreç içi ajana bağlanır.
     /// </summary>
     public IReadOnlyList<AITool> BuildBridgeTools()
     {
@@ -162,7 +171,7 @@ public sealed class SpecialistCatalog(
             $"→ {options.A2AUrl(card.A2ARoute)}")).ToList();
     }
 
-    /// <summary>Tüm uzmanları önceden kurarak ilk isteğin gecikmesini önler.</summary>
+    /// <summary>Tüm uzmanları önceden kurarak ilk isteğin soğuk başlangıç gecikmesini önler.</summary>
     public async Task WarmUpAsync(CancellationToken cancellationToken = default)
     {
         var cards = Cards;
@@ -202,11 +211,11 @@ public sealed class SpecialistCatalog(
             .ToList();
 
     /// <summary>
-    /// Kartı çalışan bir ajana dönüştürür.
+    /// Uzman kartını çalışan bir ajana dönüştürür.
     /// <para>
-    /// Derlenmiş uzman kendi <c>Build(IChatClient, IList&lt;AITool&gt;)</c> metoduyla kurulur;
-    /// deklaratif uzman aynı işi doğrudan yapar. Araç kapsamı tek yerde belirlenir: kart araç
-    /// adlarını sayıyorsa yalnızca onlar, saymıyorsa grubun tamamı verilir.
+    /// Derlenmiş uzman kendi <c>Build(IChatClient, IList&lt;AITool&gt;)</c> metoduyla kurulur,
+    /// deklaratif uzman doğrudan üretilir. <b>Araç kapsamı tek noktada belirlenir:</b> kart açıkça
+    /// araç adı listeliyorsa yalnızca o araçlar, listelemiyorsa kartın araç grubunun tamamı verilir.
     /// </para>
     /// </summary>
     private async Task<AIAgent> BuildFromCardAsync(AgentCard card, CancellationToken cancellationToken)

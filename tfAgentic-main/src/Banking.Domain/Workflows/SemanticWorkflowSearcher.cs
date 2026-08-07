@@ -9,8 +9,12 @@ namespace Banking.Domain.Workflows;
 
 
 /// <summary>
-/// Sistemdeki tüm workflow tanımlarını yerel ONNX embedding ile semantik indekse alan 
-/// ve kullanıcının niyetine en yakın iş akışlarını skorlayan sınıf.
+/// Kayıtlı iş akışlarını yerel ONNX gömme modeliyle semantik indekse alan ve kullanıcı niyetine en
+/// yakın akışları skorlayarak döndüren arama bileşeni.
+/// <para>
+/// İndeks bellekte tutulur ve çalışma zamanında güncellenebilir; yeni kaydedilen bir akış yeniden
+/// başlatma gerektirmeden aranabilir hâle gelir.
+/// </para>
 /// </summary>
 public sealed class SemanticWorkflowSearcher
 {
@@ -25,9 +29,8 @@ public sealed class SemanticWorkflowSearcher
         _logger = logger;
     }
 
-    /// <summary>
-    /// Keşfedilen workflow nesnelerini yerel indekse ekler ve vektörize eder.
-    /// </summary>
+    /// <summary>Verilen iş akışlarını vektörleştirip indekse ekler.</summary>
+    /// <param name="discoveredWorkflows">İndekslenecek akışların metadatası.</param>
     public void Initialize(IEnumerable<WorkflowMetadata> discoveredWorkflows)
     {
         foreach (var item in discoveredWorkflows)
@@ -37,7 +40,8 @@ public sealed class SemanticWorkflowSearcher
     }
 
     /// <summary>
-    /// Yeni eklenen (örneğin çalışma zamanında kaydolmuş deklaratif YAML) workflow'u anında vektörize edip RAG RAM belleğine ekler.
+    /// Tek bir iş akışını vektörleştirip indekse ekler veya günceller. Çalışma zamanında kaydedilen
+    /// akışların aramada anında görünmesini sağlayan yol budur.
     /// </summary>
     public void AddOrUpdate(WorkflowMetadata item)
     {
@@ -55,9 +59,9 @@ public sealed class SemanticWorkflowSearcher
             item.WorkflowName, item.Description, _cache.Count);
     }
 
-    /// <summary>
-    /// Kullanıcı cümlesine en yakın eşleşen Top-K workflow'u döner.
-    /// </summary>
+    /// <summary>Kullanıcı mesajına en yakın iş akışlarını benzerlik skorlarıyla birlikte döner.</summary>
+    /// <param name="intent">Kullanıcının mesajı veya niyet ifadesi.</param>
+    /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
     public IReadOnlyList<(WorkflowMetadata Metadata, float Score)> Search(string intent, int topK = 5)
     {
         if (!_isInitialized || _cache.Count == 0) return Array.Empty<(WorkflowMetadata, float)>();

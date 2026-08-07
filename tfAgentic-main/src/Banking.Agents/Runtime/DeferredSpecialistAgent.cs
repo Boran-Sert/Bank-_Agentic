@@ -6,12 +6,13 @@ using Microsoft.Extensions.AI;
 namespace Banking.Agents.Runtime;
 
 /// <summary>
-/// Startup'ta MCP'ye dokunmadan kurulabilen uzman ajan sarmalayıcısı. Gerçek uzman (MCP client + LLM ajanı)
-/// yalnızca ilk gerçek çağrıda — sunucu artık dinlerken — tembel kurulur. Bu, A2A endpoint'lerinin
-/// startup'ta map edilirken süreç-içi MCP server'a loopback yapmaya çalışıp "bağlantı reddedildi"
-/// hatası almasını önler. Ad/açıklama (A2A kartı için) iç ajan kurulmadan döner.
-///
-/// AIAgent soyut yüzeyi *CoreAsync metotlarıdır; bunları iç ajanın public API'sine delege ederiz.
+/// Uzman ajanı tembel kuran sarmalayıcı. Asıl ajan (MCP istemcisi ve model ajanı) yalnızca ilk gerçek
+/// çağrıda, sunucu istekleri dinlemeye başladıktan sonra kurulur.
+/// <para>
+/// <b>Kurulumun ertelenmesi zorunludur:</b> A2A endpoint'leri uygulama başlatılırken kaydedilir ve bu
+/// sırada süreç içi MCP sunucusu henüz dinlemediğinden, erken kurulum loopback bağlantı hatası
+/// üretir. Ad ve açıklama A2A kartı için iç ajan kurulmadan döner.
+/// </para>
 /// </summary>
 public sealed class DeferredSpecialistAgent : AIAgent
 {
@@ -31,7 +32,7 @@ public sealed class DeferredSpecialistAgent : AIAgent
     public override string Name => _name;
     public override string Description => _description;
 
-    /// <summary>İç ajanı (gerekirse) kurar ve döner. İlk çağrı MCP'ye bağlanır.</summary>
+    /// <summary>İç ajanı gerekiyorsa kurar ve döner. İlk çağrı MCP bağlantısını açar.</summary>
     private async ValueTask<AIAgent> InnerAsync(CancellationToken ct)
     {
         if (_inner is not null) return _inner;
@@ -40,7 +41,7 @@ public sealed class DeferredSpecialistAgent : AIAgent
         finally { _lock.Release(); }
     }
 
-    /// <summary>İç ajanı önceden kurar (tanılama/ön ısıtma için).</summary>
+    /// <summary>İç ajanı önceden kurar. Ön ısıtma ve tanılama akışlarında kullanılır.</summary>
     public Task EnsureBuiltAsync(CancellationToken ct = default) => InnerAsync(ct).AsTask();
 
     // A2A kartı oluşturulurken iç ajanı KURMA (MCP'ye dokunma): yalnızca metadata döndür.

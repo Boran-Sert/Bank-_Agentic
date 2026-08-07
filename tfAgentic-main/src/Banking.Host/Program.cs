@@ -94,6 +94,9 @@ builder.Services.AddSingleton<AgentRuntime>();
 // Durum istek başına BİR kez okunur (scope açılışı) ve BİR kez yazılır (scope kapanışı);
 // aradaki katmanlar yalnızca SessionContext görür, depoya dokunmaz.
 // Redis'e geçiş: aşağıdaki ISessionStore satırını değiştirmek yeterli.
+// Oturum ömrü yapılandırmadan gelir: pencere kullanıcının iki mesajı arasındaki duraklamadan
+// kısa olduğunda yarım kalan akış sessizce kaybolur (bkz. SessionStoreOptions).
+builder.Services.Configure<SessionStoreOptions>(builder.Configuration.GetSection(SessionStoreOptions.SectionName));
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ISessionStore, InMemorySessionStore>();
 builder.Services.AddSingleton<ISessionAccessor, AmbientSessionAccessor>();
@@ -114,6 +117,10 @@ builder.Services.AddSingleton<OrchestratorFallback>(sp => async (userMessage, ca
 // eklemek = bir YAML (veya [Workflow] etiketli bir record); C# eksekütör yazılmaz.
 // Taban adres ve erişim anahtarı yapılandırmanın "BankApi" bölümünden gelir.
 builder.Services.AddBankApiClient(builder.Configuration);
+
+// Bankaya giden her isteğin gövdesi ve dönen her yanıtın alanları canlı izleme akışına düşer.
+// Kayıt AddBankApiClient'tan sonra yapılır: oradaki varsayılan (sessiz) gözlemcinin yerini alır.
+builder.Services.AddSingleton<IBankApiCallObserver, TraceHubBankApiObserver>();
 
 // Onay sonrası bankaya giden TEK bileşen. Durumsuz olduğu için singleton; akışın kimliği ve
 // gideceği yol her çağrıda parametre olarak gelir.

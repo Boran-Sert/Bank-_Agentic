@@ -1,5 +1,199 @@
 # Mimari Değişiklik Günlüğü (Changelog)
 
+## Sürüm: [Semantik-Baypasın-Kaldırılması] - 2026-08-07
+
+> Kapsam: `AgentRuntime` (semantik yönlendirme) ve `AgentPrompts` (orkestratörün niyet kuralı, aday listesi bağlamı). Semantik arama kaldırılmadı; **karar verme yetkisi** kaldırıldı. Bu sürüm bir önceki sürümdeki "baypası ilk turla sınırla" düzeltmesinin yerini alır.
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+
+Bir önceki sürümde baypas oturumun ilk turuyla sınırlandırılmıştı. Sınırın içinde kalan bir mesaj yine yanlış akış açtı:
+
+```
+SYSTEM      Kullanıcı sorusu alındı → 'Kartımın kullanılabilir limiti nedir?'
+FLOWROUTER  limit-artirim akışı başlatıldı.
+WORKFLOW    StateBag Durumu Sorgulandı → Dolu: 0, Eksik: 2
+```
+
+Bu bir **bilgi sorusu**; kullanıcı hiçbir şeyin değişmesini istemiyor. Yine de limit artırım akışı açıldı ve kullanıcıdan yeni limit istenmeye başlandı.
+
+Bu üçüncü vaka, sorunun ayarla değil **yapıyla** ilgili olduğunu gösterdi. Vektör benzerliği *konu* yakınlığını ölçer, *niyeti* değil; aynı konudaki bilgi sorusu ile işlem talebi aynı sözcükleri taşır. "Kartımın kullanılabilir limiti nedir?" ile "Kullanıcının kredi kartı limitini artırma talepleri" arasındaki benzerlik gerçekten yüksektir — ölçü yanılmıyor, ölçtüğü şey karar için yeterli değil.
+
+Eşik ve rakiple fark koşulları bu ayrımı üretemez, çünkü ikisi de aynı skorun türevidir. Dahası fark koşulu burada **ters** çalışır: bir konuda tek akış varsa rakip skoru düşük kalır, fark rahatça sağlanır ve baypas tam da en kırılgan durumda tetiklenir.
+
+Baypasın gerçek dünyadaki sicili üç vakada üç hata oldu:
+
+| Mesaj | Başlattığı akış | Olması gereken |
+|---|---|---|
+| "Kartımın kullanılabilir limiti nedir?" | `limit-artirim` | Kart uzmanı cevaplar |
+| "Diğerini de yap sana zahmet" | `harcama-analizi` | Netleştirici soru |
+| "Kartlarımı göster" (0.751 skor, `CLAUDE.md`'de kayıtlı) | `limit-artirim` | Kart uzmanı cevaplar |
+
+Buna karşılık baypasın doğru bulduğu her vaka (ör. "Mastercard kartımın borcunun tamamını ... öde") orkestratör yolunda da doğru yönlendiriliyordu.
+
+### Çözüm ve Yeni Yapı
+
+#### 1. Arama karar vermiyor, aday üretiyor
+`SearchMatchingWorkflows` + `StartWorkflowDirectlyAsync` yerine tek bir `SearchCandidateWorkflows` var: `topK: 3` sonucun metadata'sını döner, o kadar. `SemanticWorkflowMatchThreshold` ve `SemanticWorkflowMatchMargin` sabitleri silindi. `AskOrchestratorAsync` artık tek yol izliyor — adaylar bağlam olarak verilir, kararı orkestratör verir ve akış yalnızca `start_workflow` aracı çağrıldığında başlar.
+
+**Aramanın kaldırılmadığına dikkat:** kazandırdığı iki şey duruyor — orkestratör akışların tamamı yerine bir avuç adayı görür (kapsam daraltma) ve akış adları sistem talimatına gömülmediği için çalışma zamanında eklenen YAML akışları anında yönlendirilebilir kalır.
+
+#### 2. Ayrımı yapacak kural netleştirildi
+Karar tümüyle orkestratöre geçtiği için o kural güçlendirildi. Talimata `SORU İLE TALEBİ AYIR` eklendi: bir konuda akış bulunması, o konudaki her mesajın işlem talebi olduğu anlamına gelmez. `BuildCandidateWorkflowsContext` de listeyi ne olduğunu söyleyerek sunuyor — "öneri değil, ad sözlüğü; yakınlık konu benzerliğiyle ölçülmüştür, kullanıcının ne istediğiyle değil" — çünkü her turda enjekte edilen bir akış listesi, aksi söylenmezse modeli akış başlatmaya iter.
+
+### Takas
+Soğuk başlangıçta kazanılan bir LLM çağrısı kayboldu. Karşılığında, bilgi sorusunun para/limit akışına dönüşmesi ihtimali ortadan kalktı. Baypası geri istemek için `SearchCandidateWorkflows`'un skorları da döndürmesi ve `AskOrchestratorAsync`'e bir eşik dalı eklenmesi gerekir — ama yukarıdaki üç vaka o dalın neden kaldırıldığını gösteriyor.
+
+### Doğrulama
+`Banking.Agents` derlendi (0 uyarı, 0 hata). Davranışsal doğrulama manueldir: "Kartımın kullanılabilir limiti nedir?" yazıldığında izde `limit-artirim akışı başlatıldı` **görünmemeli**, soru kart uzmanına gitmeli; "limitimi 50 bine çıkar" ise `start_workflow` aracıyla akışı başlatmalı.
+
+## Sürüm: [Onay-Kapısının-Koşulu-ve-Baypasın-Sınırı] - 2026-08-07
+
+> Kapsam: `WorkflowEngine` (onay kapısının kurulma koşulu) ve `AgentRuntime` (semantik baypasın açık olduğu an). Yeni sınıf eklenmedi; her iki düzeltme de zaten var olan bir alanı (`WorkflowActionDefinition.CallsBank`) ve zaten var olan bir parametreyi (`DeterministicActionWorkflow.Build(requiresApproval:)`) kullanır.
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+
+Ödemesi biten bir kullanıcı "Diğerini de yap sana zahmet" yazdı. İzde iki ayrı hata art arda göründü.
+
+#### 1. Zamirli mesaj yanlış akışı başlattı
+
+`FLOWROUTER: harcama-analizi akışı başlatıldı.` — semantik baypas, hiç LLM'e uğramadan harcama analizi akışını açtı. Sebep, eşiğin düşüklüğü değil, **indeksin kapsamı**: `SemanticWorkflowSearcher` yalnızca akış açıklamalarını taşır, konuşmayı taşımaz. "Diğerini de yap" önceki tura gönderme yapar; indekste karşılığı olan bir istek değildir. Buna rağmen yüksek skor aldı, çünkü `harcama-analizi` açıklaması şöyleydi: "Kullanıcının harcama yönelimlerini ve **diğer** kalemlerinin analizini **yapar**." Eşleşme konuyla değil, işlev sözcüklerinin örtüşmesiyle oluştu — eşik ve fark koşullarının ikisi de bu örtüşmeyi eler değil, besler.
+
+Baypas, mesajın kendi kendine yettiği varsayımına dayanır. Bu varsayımın kesin olarak doğru olduğu tek an, oturumda henüz başka bir tur geçmemiş olmasıdır; öncesinde gönderge yapılacak bir şey yoktur.
+
+#### 2. Bankayı hiç çağırmayan akış ödeme onayı ekranı açtı
+
+`harcama-analizi.yaml` bir `action:` bloğu taşımaz; `WorkflowActionDefinition.Path` null, `CallsBank` false olur ve `RestWorkflowExecutor` bankaya hiçbir istek göndermez. Buna rağmen akış `GATEWAY: Onay ekranı hazır → CONFIRM_PAYMENT` ile bitti ve ajan "Harcama analiziniz hazırlanmıştır. Onayladığınız takdirde detayları görüntüleyebilirsiniz." dedi. Kullanıcıya, gerçekleşmeyecek bir işlemin ödeme onayı gösterildi.
+
+`WorkflowEngine.PresentConfirmation` evreyi koşulsuz `AwaitingApproval` yapıyor, `RunApprovalGraphAsync` ise `requiresApproval: true` sabitini geçiyordu. `DeterministicActionWorkflow.Build` **zaten** `requiresApproval: false` dalını taşıyordu ("onay kapısı kurulmaz ve eylem doğrudan çalışır") — ama bu dala hiçbir çağrı yapılmadığı için ölü koddu.
+
+### Çözüm ve Yeni Yapı
+
+#### 1. Onay kapısının koşulu banka etkisidir
+`PresentConfirmation` → `ConcludeSlotFillingAsync` oldu ve `action.CallsBank` false ise onay kapısını kurmadan, `RunActionGraphAsync`'i `isApproved: true` ile çalıştırıp akışı aynı istekte bitiriyor. `RunApprovalGraphAsync` → `RunActionGraphAsync` oldu ve `requiresApproval` değerini `action.CallsBank`'ten okuyor; grafiğin girdisi kapılı yolda onay ekranı, kapısız yolda doğrudan onay kararıdır. Ayrım YAML'daki `action.path` alanından gelir — akış adı, türü veya bir liste sorulmaz. Kapı, gerekçesi olan yerde (para hareketi) kalır.
+
+#### 2. Semantik baypas oturumun ilk turuyla sınırlandı
+`SearchMatchingWorkflows` bir `allowDirectStart` parametresi aldı; `false` olduğunda eşik ve fark hiç değerlendirilmez, sonuç yalnızca aday listesidir ve karar orkestratöre gider. `AskOrchestratorAsync` bu değeri `session.LastUserMessage`'ı **üzerine yazmadan önce** okuyarak üretir: alan null ise bu, oturumun ilk turudur. İlk turdan sonra orkestratör kesin olarak üstündür — hem `BuildCandidateWorkflowsContext` ile adayları hem de konuşma geçmişini görür.
+
+### Bilinen sınır (bu sürümde kapatılmadı)
+Bir akış tamamlandığında orkestratörün konuşmasında o akışa dair kayıt yoktur: akış turlarında `FlowRouter` orkestratörü baypas eder ve `TopicContextProvider` bağlamı `start_workflow` tetiklendiğinde zaten siler. Bu yüzden "Diğerini de yap" artık yanlış akış başlatmaz ama orkestratör de neyin kastedildiğini bilemez; doğru davranış olarak netleştirici soru sorar. Tamamlanan akışı orkestratörün konuşmasına iliştirmek ayrı bir değişikliktir.
+
+### Doğrulama
+`Banking.Agents` derlendi (0 uyarı, 0 hata). Davranışsal doğrulama manueldir: (a) ödeme bittikten sonra "diğerini de yap" yazıldığında izde `harcama-analizi akışı başlatıldı` **görünmemeli**, orkestratör netleştirici soru sormalı; (b) `harcama-analizi` gibi `action` bloğu olmayan bir akış tamamlandığında `CONFIRM_PAYMENT` yerine doğrudan metin yanıtı dönmeli ve izde "onay kapısı kurulmadı" satırı olmalı; (c) `card-payment` ve `money-transfer` onay ekranını açmaya devam etmeli.
+
+## Sürüm: [Oturum-Ömrü-ve-Kayıt-Sunumu] - 2026-08-07
+
+> Kapsam: `Banking.Agents/Sessions` (yeni `SessionStoreOptions`, `InMemorySessionStore`), `Program.cs` kaydı, `appsettings.json` ve `AgentPrompts` içindeki kayıt sunumu kuralları. Oturum sözleşmesi (tek kapı, tek okuma/tek yazma, oturum başına kilit) değişmedi.
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+
+#### 1. Oturum, kullanıcı düşünürken düşüyordu — asıl hata buydu
+
+`InMemorySessionStore.SlidingTimeToLive` **sabit 1 dakikaydı**. Süre son istekten itibaren işlediği için, kullanıcının iki mesajı arasındaki duraklama 60 saniyeyi geçtiğinde oturum tahliye ediliyordu. Canlı izde bire bir görüldü:
+
+| Olay | Saat | Önceki mesajdan fark |
+|---|---|---|
+| Akış başladı, `sourceAccountId=ACC-1001` yazıldı | 13:36:12 | — |
+| "son haneleri bunlar değil ki" | 13:37:33 | **81 sn** → oturum düşmüş |
+| "mastercard 8831" | 13:37:43 | 10 sn → ayakta |
+| "belirtim ya daha öncesinde" | 13:38:02 | 19 sn → ayakta |
+
+81 saniyelik duraklamadan sonra `HasActiveWorkflow` false döndü, mesaj **orkestratöre** gitti ("Lütfen ... son haneleri belirterek tekrar paylaşır mısınız?") ve toplanmış parametrenin tamamı kayboldu. Bir sonraki mesaj akışı sıfırdan başlattı (`Dolu: 0, Eksik: 3`). Kullanıcı bunu "asistan söylediklerimi unutuyor" olarak yaşadı; "belirtim ya daha öncesinde" itirazı doğruydu — bilgi gerçekten verilmişti, sunucu unutmuştu.
+
+Süre, onay ekranı için de geçerliydi: kullanıcının HITL ekranını okuyup düğmeye basması 60 saniyeyi aşarsa `ReadProposedSlots()` boş dönüp "Oturumunuzun süresi doldu" üretiyordu.
+
+Bu risk `REFACTOR-PLAN.md` §6'da "kapsam dışı" olarak zaten yazılıydı; gerçekleşti.
+
+#### 2. Kayıp sessizdi
+
+`AmbientSessionAccessor`, depo `null` döndüğünde yeni bir `SessionState` kuruyor. Süresi dolmuş oturumla hiç var olmamış oturum ayırt edilemediği için ne izde ne kullanıcıda bir işaret oluşuyordu; hata ayıklamanın tek yolu istek zaman damgalarını elle çıkarmaktı.
+
+#### 3. Ajan, dahili kimliği "son haneler" diye kullanıcıya gösterdi
+
+Akış ajanı uzmana "Mastercard kartının **kimliği** ve borç tutarı nedir?" diye sordu; uzman iki eşleşen kaydı yalnızca kimlikleriyle döndürdü (`CARD-2003`, `CARD-2002`). Elinde okunabilir ayırt edici bilgi kalmayan ajan, kullanıcıya **"...2003 son haneli kart"** ve **"...2002 son haneli kart"** diye sordu. Bu değerler kartların son haneleri değil, dahili kimliklerin son dört karakteriydi — gerçek son haneler 8831 ve 8830. Kullanıcı haklı olarak "son haneleri bunlar değil ki" dedi.
+
+Kural boşluğu iki taraflıydı: `InternalGuardrail` "okunabilir bir özellikle sor" diyor ama elde öyle bir özellik yokken ne yapılacağını söylemiyordu; `RecordMatchingDuty` ise birden fazla eşleşmede "hangisinin kastedildiğini sor" diyordu — oysa uzmanın muhatabı kullanıcı değil ajandır, soramaz.
+
+### Çözüm ve Yeni Yapı
+
+#### 1. Oturum ömrü yapılandırmaya alındı
+Yeni `SessionStoreOptions` (`Sessions` bölümü) `SlidingTimeToLiveMinutes` taşır, **varsayılanı 30 dakikadır**. Tip adı bilerek `SessionOptions` değildir: ASP.NET Core'un aynı adlı tipi kompozisyon kökünde belirsizlik üretip derlemeyi durduruyor. Sıfır veya negatif değer, sessizce her isteği yeni oturum yapmak yerine açık bir istisna fırlatır.
+
+#### 2. Tahliye artık ize düşüyor
+`SaveAsync`, önbellek girdisine `RegisterPostEvictionCallback` bağlar. Süresi dolan oturum `SYSTEM` kategorisine yazılır ve aktif akış varsa hangi akışın hangi evrede kaybolduğu belirtilir. `Replaced`/`Removed` sebepleri elenir — onlar normal yazma akışıdır, kayıp değil. Geri çağrım oturum scope'u dışında çalıştığı için yalnızca `TraceHub` gibi oturumdan bağımsız bileşenler kullanılır.
+
+#### 3. Kayıt sunumu kuralları tamamlandı
+- `RecordMatchingDuty` (uzman): birden fazla kayıt eşleşiyorsa hepsi, **kullanıcının ayırt edebileceği okunabilir özellikleriyle** döndürülür; "sor" yerine "hepsini döndür", çünkü uzmanın muhatabı bir ajandır.
+- Akış ajanına iki kural eklendi: uzmana bir kaydı sorarken kimlik ile okunabilir özelliği **aynı soruda** iste; okunabilir özelliğin yoksa onu uzmandan iste ve teknik kimliğin kendisinden veya bir parçasından okunabilir etiket **türetme**.
+
+### Doğrulama
+Çözüm derlendi (`Banking.Agents` ve `Banking.Host`: 0 uyarı, 0 hata; solution build yalnızca çalışan uygulamanın dll kilidine takıldığı için Host ayrı çıktı dizinine derlenerek doğrulandı). TTL düzeltmesi zaman bağımlı olduğundan davranışsal doğrulaması manueldir: akışın ortasında 90 saniye beklenip mesaj gönderildiğinde artık akış ayakta kalmalı; `Sessions:SlidingTimeToLiveMinutes` geçici olarak `1` yapılırsa aynı senaryo izde "Oturum düştü (Expired) → ... YARIM KALAN AKIŞ" satırını üretmelidir.
+
+## Sürüm: [Slot-Toplama-Sözleşmesi] - 2026-08-07
+
+> Kapsam: `AgentPrompts` ortak kural sabitleri, `WorkflowEngine`'in tur mesajı ve `declarative-agents/*.yaml` parametre açıklamaları. Motor sözleşmesi (sinyal araçları, HITL kapısı, oturum yolu, şema denetimi) değişmedi; değişen yalnızca LLM'e giden metin.
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+
+"Sonu 8831 olan kartımın borcunun tamamını vadesiz hesabımdan öde" cümlesi üç zorunlu parametrenin üçüne de dayanak taşırken, akış üç turda hiçbirini tamamlayamadı ve `cardId` boş kalarak tıkandı. Tek bir kullanıcı cümlesinde beş ayrı prompt hatası birleşiyordu:
+
+1. **Tur başına tek parametre dayatılıyordu.** `<output_contract>` "her turda tek konuya odaklan; eksik parametreleri toplu bir sorgu listesi hâlinde sorma" diyordu. Kural, kullanıcı tek cümlede üç bilgi verdiğinde de geçerli olduğu için ajan bilgileri elinde tutup tek tek soruyordu; her ek tur, modelin değer uydurabileceği yeni bir fırsattı.
+2. **Dolaylı anlatım dayanaksız sayılıyordu.** "Asla değer uydurma" kuralı yalnızca "açıkça söylenen değer"i meşru sayıyor, YAML da bunu pekiştiriyordu ("Kullanıcının açıkça söylediği rakamdır; borç tutarından türetilmez"). "Borcun tamamı" bu tanıma girmediği için ajan, kullanıcının zaten verdiği tutarı yeniden soruyordu.
+3. **Kimlik eşleme isteği uzmanlar tarafından reddediliyordu.** Kart uzmanı `cardId` sorusuna "Bu konu benim alanımın dışındadır", analiz uzmanı "sistem kuralları gereği paylaşamam" dedi. `InternalIdAgentChannel` istisnayı **koşullu** yazıyordu ("soran taraf bir ajansa"); uzmana gelen mesajda bunu belirten deterministik bir işaret olmadığı için model belirsizlikte reddetmeyi seçiyor ve istisna hiç uygulanmıyordu. `<scope>` blokları alanı konu üzerinden tanımladığından kimlik sorusu teknik görünüp alan dışı sayılıyordu.
+4. **Okunabilir gösterim kimliğin yerine yazılıyordu.** `sourceAccountId` slotuna hesap kimliği yerine IBAN yazıldı. Tip `string` olduğu için şema kapısından geçti; bankaya bu değerle gidilseydi işlem uçta reddedilecekti.
+5. **YAML'daki araç adları modelin sahip olmadığı araçları işaret ediyordu.** Parametre açıklamaları "`list_cards` aracından gelir" diyordu; oysa akış ajanının banka aracı yoktur, yalnızca uzman köprüleri vardır. Aynı satırlar rehberdeki "prompt'a araç adı yazma" kuralını da ihlal ediyordu.
+
+Ek olarak ajan, topladığı değerleri kullanıcıya "onaylıyor musunuz?" diye tekrar sorup bir tur harcıyordu; onay ekranını zaten sistem gösterir.
+
+### Çözüm ve Yeni Yapı
+
+#### 1. Tur başına parametre sınırı kaldırıldı
+`BuildSlotFillingRules` artık "bir mesaj kaç parametreye dair dayanak taşıyorsa hepsini aynı turda kaydet" der; `<output_contract>` de kalan eksiklerin **tek mesajda** sorulmasını ister. Uydurmayı engelleyen kural sayı değil dayanak zorunluluğudur ve o kural bağımsız olarak yerinde durur — ikisi birbirinin yerine geçmez.
+
+#### 2. Dolaylı anlatım açık dayanak sayılır
+Yeni kural, tarif edilen değeri (tamamı, asgarisi, son haneleriyle anılan kayıt) parametrenin verilmiş hâli sayar ve karşılığının **uzmandan öğrenilmesini**, modelce hesaplanmamasını şart koşar. Böylece "değer uydurma" yasağı, kullanıcının gerçekten sustuğu alanlara daralır.
+
+#### 3. Kanal artık koşul değil, olgu
+`InternalIdAgentChannel` "sana gelen her soru bir ajandan gelir" diye yazıldı. Yanına eklenen `RecordMatchingDuty`, kullanıcının tarifini kayda eşlemenin uzmanın işinin parçası olduğunu ve teknik göründüğü için alan dışı sayılamayacağını söyler. İkisi de `SpecialistGuardrails` içinde olduğundan derlenmiş ve deklaratif tüm uzmanlara koşulsuz ulaşır.
+
+#### 4. Slot değerinin biçimi kurala bağlandı
+"Teknik karşılığı yaz" kuralı, bir kaydı gösteren parametreye okunabilir bilgiyi (numara, IBAN, ad) değil uzmanın döndürdüğü kimliği yazdırır. Deterministik karşılığı yoktur; `update_slot` şema kapısı yalnızca tipi doğrular, bu ayrım tip düzeyinde görünmez.
+
+#### 5. Tur yönergesi tek sabitten gelir
+`AgentPrompts.SlotTurnDirective`, `WorkflowEngine`'in hem başlatma hem slot toplama turunda kullanıcı mesajının sonuna eklediği tek satırdır. Sistem talimatı konuşma uzadıkça bağlamın başında kalır; turun hemen yanındaki hatırlatma "tek turda hepsi" davranışını canlı tutar. İki metnin ayrışmaması için yönerge sabit olarak tutulur, çağrı yerinde yazılmaz.
+
+#### 6. YAML parametre açıklamaları düzeltildi
+Beş akış tanımında araç adları uzman adlarıyla değiştirildi, tarif edilebilen tutar alanlarına tarifin nereden çözüleceği yazıldı ve kimlik alanlarının okunabilir gösterimi kabul etmediği belirtildi.
+
+### Doğrulama
+`Banking.Agents` derlendi (0 uyarı, 0 hata). Prompt metinleri davranışsal olduğundan asıl doğrulama manueldir: `docs/PROMPT-YAZIM-REHBERI.md` §6.4'e 8., 9. ve 10. vakalar eklendi (tek turda üç parametre, uzmandan kimlik alma, IBAN yerine hesap kimliği yazılması).
+
+## Sürüm: [Banka-Trafiği-İzlenebilirliği] - 2026-08-07
+
+> Kapsam: `Banking.BankApi.Client` (giden çağrı), `Banking.BankApi` (gelen istek), `Banking.Agents/Tracing`, `TraceCategories` ve canlı izleme ekranı. Bankanın sözleşmesi, istemci arayüzü (`IBankApiClient`) ve akış motoru değişmedi.
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+Bankaya giden trafik izlerde yalnızca sonucuyla görünüyordu: `SERVICE` kategorisinde `PUT /api/card-payment → "Banka işlemi tamamladı"` gibi **sabit cümleler** vardı, çağrının hangi parametrelerle yapıldığı hiçbir yerde yoktu. Bir istek reddedildiğinde ("Hesap bulunamadı: ACC-9") gövdede ne gönderildiği bilinmediği için hatanın kaynağı ayırt edilemiyordu: yanlış `accountId` mi gitti, alan hiç gitmedi mi, yoksa banka mı reddetti? MCP okuma yolu (`AskBankAsync`) izlerde hiç görünmüyordu; yalnızca aracın tetiklendiği yazılıyordu, bankaya ne sorulduğu yazılmıyordu.
+
+### Çözüm ve Yeni Yapı
+
+#### 1. Üç yeni iz kategorisi
+`TraceCategories` içine `ApiRequest` (`API-REQUEST`), `ApiResponse` (`API-RESPONSE`) ve `ApiError` (`API-ERROR`) eklendi. Mevcut `Service` kategorisi çağrının **sonucunu** özetlemeye devam eder; yeni kategoriler çağrının **içeriğini** taşır. Ekrandaki renkler `index.html` içinde `.l-API-*` sınıflarıyla tanımlıdır.
+
+#### 2. Gözlemci sözleşmesi (`IBankApiCallObserver`)
+`Banking.BankApi.Client` içinde tanımlıdır: `OnRequest` / `OnResponse` / `OnError`. İstemci gözlemcinin ne yaptığını bilmez; canlı izleme, dosya logu veya metrik toplayıcı aynı kapıdan beslenir. `AddBankApiClient` varsayılan olarak sessiz uygulamayı (`NullBankApiCallObserver`) `TryAddSingleton` ile kaydeder — izleme bağlanmamış uygulamalar (ör. `tools/WorkflowTest`) etkilenmez. `Program.cs` bunun yerine `TraceHubBankApiObserver`'ı kaydeder ve trafik canlı akışa düşer.
+
+#### 3. Alan adları sözleşmeden değil, gövdeden okunur
+`BankApiPayloadReader` istek/yanıt gövdesini düzleştirip `ad = değer` çiftlerine çevirir (`customerId = CUST-001`, `[0].balance = 48750.00`). **Hiçbir yol için alan adı listesi tutulmaz:** adlar gövdenin kendisinden gelir, dolayısıyla bankanın sözleşmesi değiştiğinde güncellenecek bir liste yoktur. Kırpma sınırları (40 alan / 200 karakter) tek yerdedir.
+
+#### 4. `BankApiClient` enstrümantasyonu
+Her çağrı kısa bir korelasyon kimliği (`CallId`) alır; istek, yanıt ve hata satırları bu kimlikle eşleşir ve süre (ms), durum kodu, `Idempotency-Key` ile birlikte hem `ILogger`'a yapılandırılmış olarak hem de gözlemciye yazılır. **Gözlem yolu banka yolunu düşüremez:** gözlemci çağrısı sarmalanır, hatası `Debug` seviyesine yazılıp yutulur.
+
+#### 5. Bankanın kendi tarafı (`ApiTrafficLoggingMiddleware`)
+Banka ayrı süreçte (`:5001`) çalıştığı için ajan tarafındaki izleme onu görmez. Boru hattının başına konan tek ara katman gelen gövdeyi ve giden yanıtı loglar; **uç başına log satırı yoktur**, yeni bir uç eklendiğinde yapılacak bir şey yoktur. 4xx/5xx yanıtlar `Warning` seviyesine düşer, çünkü kullanıcıya gösterilen gerekçe tam olarak orada oluşur.
+
+### Doğrulama
+`Banking.BankApi` ayağa kaldırılıp `/api/accounts` (200) ve eksik alanlı `/api/account` (400) çağrıldı: her iki yönde gövde loglandı. İstemci tarafı ayrı bir tüketiciyle sınandı: başarılı okuma, bankanın reddi ve `Idempotency-Key` taşıyan para hareketi çağrısı için istek parametreleri, yanıt alanları, durum kodu ve süre hem logda hem gözlemcide göründü.
+
 ## Sürüm: [Prompt-Deseni-Standardizasyonu] - 2026-08-06
 
 > Kapsam: `Banking.Agents/Prompts/AgentPrompts.cs` ile prompt üreten iki deklaratif kurucu. Motor sözleşmesi (sinyal araçları, HITL kapısı, oturum yolu) değişmedi; değişen yalnızca LLM'e giden metin ve o metnin tek kaynaktan üretilme biçimi.

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Banking.BankApi.Client;
 
@@ -31,6 +32,10 @@ public static class BankApiClientServiceCollectionExtensions
         var options = new BankApiOptions();
         configuration.GetSection(BankApiOptions.SectionName).Bind(options);
         services.AddSingleton(options);
+
+        // Gözlemci bağlanmamış uygulamalarda (ör. tools/WorkflowTest) istemci yine ayağa kalkar.
+        // Canlı izlemeyi besleyen bir gözlemci kaydedildiğinde bu varsayılan devre dışı kalır.
+        services.TryAddSingleton<IBankApiCallObserver, NullBankApiCallObserver>();
 
         services.AddHttpClient<IBankApiClient, BankApiClient>(http =>
         {

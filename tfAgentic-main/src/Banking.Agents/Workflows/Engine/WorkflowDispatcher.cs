@@ -6,8 +6,8 @@ namespace Banking.Agents.Workflows.Engine;
 /// İş akışlarının giriş kapısı: adı verilen akışı başlatır veya aktif akışa bir mesaj iletir.
 /// <para>
 /// <b>Oturum kilidi almaz ve oturum deposuna erişmez.</b> Oturum başına serileştirme ile tek
-/// okuma/tek yazma garantisi <see cref="ISessionAccessor.RunInSessionScopeAsync{TResult}"/>
-/// scope'una aittir; burada tekrarlanması iki ayrı kilit katmanı oluşturur.
+/// okuma/tek yazma garantisi <see cref="ISessionAccessor.OpenAsync"/> ile açılan scope'a aittir;
+/// burada tekrarlanması iki ayrı kilit katmanı oluşturur.
 /// </para>
 /// </summary>
 public sealed class WorkflowDispatcher(WorkflowRegistry workflowRegistry, ISessionAccessor sessionAccessor)

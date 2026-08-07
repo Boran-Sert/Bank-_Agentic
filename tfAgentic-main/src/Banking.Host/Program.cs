@@ -1,6 +1,5 @@
 
 using Banking.Agents.Mcp;
-using Banking.Agents.Prompts;
 using Banking.Agents.Runtime;
 using Banking.Agents.Specialists;
 using Banking.Agents.Specialists.Declarative;
@@ -68,27 +67,19 @@ builder.Services.AddSingleton<SemanticFinancingSearcher>();
 builder.Services.AddSingleton<SemanticWorkflowSearcher>();
 
 
-// --- Tool Registry (Merkezi araç haritası & otomatik keşif) ---
-builder.Services.AddSingleton<IToolRegistry>(ToolRegistry.Instance);
-
 // --- LLM + ajan altyapısı ---
 builder.Services.AddSingleton<TraceHub>();
 builder.Services.AddSingleton(sp => ChatClientFactory.Create(sp.GetRequiredService<AgentOptions>()));
 builder.Services.AddSingleton<AnalyzeTools>();
 
 // İzleme katmanıyla sarmalanmış chat istemcisi üreteci; ajan kuran her bileşen bunu kullanır.
-builder.Services.AddSingleton<Func<string, IChatClient>>(sp =>
-{
-    var chatClient = sp.GetRequiredService<ChatClient>();
-    var traceHub = sp.GetRequiredService<TraceHub>();
-    var agentOptions = sp.GetRequiredService<AgentOptions>();
-    return label => new TracingChatClient(chatClient.AsIChatClient(), traceHub, label, agentOptions.Temperature);
-});
+builder.Services.AddSingleton<TracedChatClientFactory>();
 
 builder.Services.AddSingleton<McpToolProvider>();
 builder.Services.AddSingleton<SpecialistCatalog>();
 builder.Services.AddSingleton<NavigationTools>();
 builder.Services.AddSingleton<AgentRuntime>();
+builder.Services.AddSingleton(sp => new Lazy<WorkflowDispatcher>(sp.GetRequiredService<WorkflowDispatcher>));
 
 // --- Oturum yönetimi (tek alan) ---
 // Durum istek başına BİR kez okunur (scope açılışı) ve BİR kez yazılır (scope kapanışı);
@@ -207,7 +198,7 @@ using (var scope = app.Services.CreateScope())
         try
         {
             var content = File.ReadAllText(filePath);
-            specialistCatalog.RegisterDeclarativeSpecialist(content.TrimStart().StartsWith('{')
+            await specialistCatalog.RegisterDeclarativeSpecialistAsync(content.TrimStart().StartsWith('{')
                 ? DeclarativeSpecialistBuilder.ParseFromJson(content)
                 : DeclarativeSpecialistBuilder.ParseFromYaml(content));
         }
@@ -344,7 +335,7 @@ app.MapPost("/api/specialists/register-declarative", async (HttpRequest request,
     AgentCard card;
     try
     {
-        card = catalog.RegisterDeclarativeSpecialist(definition);
+        card = await catalog.RegisterDeclarativeSpecialistAsync(definition);
     }
     catch (InvalidOperationException ex)
     {
@@ -428,7 +419,7 @@ app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>
     var log = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Warmup");
     try
     {
-        await app.Services.GetRequiredService<AgentRuntime>().WarmUpAsync();
+        await app.Services.GetRequiredService<AgentRuntime>().EnsureReadyAsync();
         log.LogInformation("Ajan grafiği ön ısıtıldı.");
     }
     catch (Exception ex)

@@ -21,7 +21,7 @@ public static class ChatClientFactory
         var key = string.IsNullOrWhiteSpace(options.ApiKey) ? "dummy" : options.ApiKey;
         var credential = new ApiKeyCredential(key);
 
-        OpenAIClient client = string.IsNullOrWhiteSpace(options.Endpoint)
+        var client = string.IsNullOrWhiteSpace(options.Endpoint)
             ? new OpenAIClient(credential)
             : new OpenAIClient(credential, new OpenAIClientOptions { Endpoint = new Uri(options.Endpoint!) });
 

@@ -9,7 +9,6 @@ using Banking.Domain.Workflows;
 using Banking.Mcp.Registry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 using ChatRole = Microsoft.Extensions.AI.ChatRole;
@@ -42,35 +41,105 @@ public sealed class AgentRuntime(
     AgentOptions options,
     TraceHub hub,
     ILogger<AgentRuntime> logger,
-    IServiceProvider serviceProvider,
     SpecialistCatalog specialistCatalog,
     NavigationTools navigationTools,
     McpToolProvider mcpToolProvider,
     ISessionAccessor sessionAccessor,
-    Func<string, IChatClient> tracedChatClientFactory)
+    TracedChatClientFactory chatClientFactory,
+    SemanticWorkflowSearcher workflowSearcher,
+    Lazy<WorkflowDispatcher> workflowDispatcher)
 {
-    private readonly SemaphoreSlim _orchestratorGate = new(1, 1);
+    private readonly SemaphoreSlim _buildGate = new(1, 1);
     private AIAgent? _orchestrator;
 
-    /// <summary>Orkestratörün kurulduğu andaki uzman kataloğu sürümü; sürüm değişirse ajan yeniden kurulur.</summary>
-    private int _orchestratorSpecialistVersion = -1;
-
-    /// <summary>Uzmanlara erişimde kullanılan taşıma katmanı. Tanılama ekranında raporlanır.</summary>
-    public string SpecialistTransport => specialistCatalog.Transport;
+    /// <summary>Orkestratörün kurulduğu andaki uzman kataloğu sürümü; sürüm değişirse yeniden kurulur.</summary>
+    private int _builtSpecialistVersion = -1;
+    
+    private AIAgent Orchestrator =>
+        _orchestrator ?? throw new InvalidOperationException(
+            "Orkestratör henüz kurulmadı. Bu çağrıdan önce EnsureReadyAsync çağrılmalıdır.");
 
     // =================================================================================
-    // 1. GİRİŞ NOKTALARI
+    // 1. KURULUM
     // =================================================================================
 
     /// <summary>
-    /// Kullanıcı mesajını işler. Önce semantik yönlendirme denenir; kesin bir eşleşme yoksa karar LLM
-    /// orkestratörüne bırakılır ve en yakın adaylar ona bağlam olarak verilir.
+    /// Uzmanları ve orkestratörü kurar. Uygulama dinlemeye başladığında ön ısıtma olarak, ayrıca her
+    /// isteğin başında güvence olarak çağrılır; kurulu ve güncelse etkisizdir.
+    /// <para>
+    /// <b>Yeniden kurulumun tek nedeni uzman kataloğunun değişmesidir.</b> Hem köprü araçları hem de
+    /// yönlendirme kuralları uzman kartlarından üretilir; katalog değiştiğinde orkestratör yeniden
+    /// kurulmazsa yeni uzman hiç tanımlanmamış gibi davranır.
+    /// </para>
+    /// <para>
+    /// <b>Başarısız kurulum kalıcı değildir:</b> ön ısıtma sırasında MCP sunucusuna ulaşılamazsa
+    /// kurulum tamamlanmış sayılmaz ve ilk istek yeniden dener. Tek bir geçici bağlantı hatasının
+    /// sistemi kalıcı olarak yanıtsız bırakmaması için gereklidir.
+    /// </para>
+    /// </summary>
+    public async Task EnsureReadyAsync(CancellationToken cancellationToken = default)
+    {
+        if (_orchestrator is not null && _builtSpecialistVersion == specialistCatalog.Version) return;
+
+        await _buildGate.WaitAsync(cancellationToken);
+        try
+        {
+            var specialistVersion = specialistCatalog.Version;
+            if (_orchestrator is not null && _builtSpecialistVersion == specialistVersion) return;
+
+            await specialistCatalog.EnsureInitializedAsync(cancellationToken);
+
+            _orchestrator = BuildOrchestrator();
+            _builtSpecialistVersion = specialistVersion;
+
+            logger.LogInformation("Orkestratör hazır (uzman erişimi: {Transport}).", specialistCatalog.Transport);
+        }
+        finally
+        {
+            _buildGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Orkestratör ajanını kartlardan ve araçlardan kurar. Sistem talimatı kullanıcıya veya isteğe
+    /// özel bilgi içermediğinden tek örnek tüm istekleri karşılar; aday akışlar çalışma anında mesaj
+    /// olarak iletilir.
+    /// </summary>
+    private ChatClientAgent BuildOrchestrator()
+    {
+        var tools = new List<AITool>();
+        tools.AddRange(specialistCatalog.BuildBridgeTools());
+        tools.Add(BuildStartWorkflowTool());
+        tools.AddRange(navigationTools.BuildTools());
+
+        return chatClientFactory.Create("Orkestratör").AsAIAgent(new ChatClientAgentOptions
+        {
+            Name = "Orkestrator",
+            ChatOptions = new ChatOptions
+            {
+                Temperature = 0.0f,
+                Instructions = AgentPrompts.GetOrchestratorInstructions(BuildSpecialistRoutingRules()),
+                Tools = tools
+            },
+            AIContextProviders = [new ContextProviders.TopicContextProvider(hub)]
+        });
+    }
+
+    // =================================================================================
+    // 2. GİRİŞ NOKTALARI
+    // =================================================================================
+
+    /// <summary>
+    /// Kullanıcı mesajını işler. Mesaja semantik olarak yakın akışlar orkestratöre <b>bağlam</b>
+    /// olarak verilir; kararı orkestratör verir.
     /// <para>
     /// Oturum ambient scope'tan okunur; parametre olarak taşınmaz.
     /// </para>
     /// </summary>
     public async Task<OrchestratorReply> AskOrchestratorAsync(string userMessage, CancellationToken cancellationToken = default)
     {
+        await EnsureReadyAsync(cancellationToken);
+
         var session = sessionAccessor.Current;
 
         logger.LogInformation("Kullanıcı sorusu işleniyor.");
@@ -83,24 +152,23 @@ public sealed class AgentRuntime(
         // (normal yolda FlowRouter orkestratöre hiç uğramaz). Böyle bir turda aday listesi
         // verilseydi, kullanıcının sorusu devam eden işlemi sessizce başka bir akışla
         // değiştirmeye davet ederdi; burada yalnızca soru cevaplanır.
-        if (session.HasActiveWorkflow)
-            return await AskLanguageModelAsync(session, userMessage, [], cancellationToken);
+        var candidates = session.HasActiveWorkflow ? [] : SearchCandidateWorkflows(userMessage);
 
-        return await AskLanguageModelAsync(session, userMessage, SearchCandidateWorkflows(userMessage), cancellationToken);
+        return await AskLanguageModelAsync(session, userMessage, candidates, cancellationToken);
     }
 
     /// <summary>Çalışma zamanının tanılama durumunu (ajanlar, taşıma katmanı, araç sayıları) döner.</summary>
     public async Task<object> GetDiagnosticsAsync(CancellationToken cancellationToken = default)
     {
-        await EnsureOrchestratorAsync(cancellationToken);
-
         try
         {
-            await specialistCatalog.WarmUpAsync(cancellationToken);
+            await EnsureReadyAsync(cancellationToken);
         }
         catch (Exception exception)
         {
-            logger.LogWarning(exception, "Uzman ön ısıtma (diag) başarısız.");
+            // Tanılama ekranı, kurulum başarısız olduğunda da açılabilmelidir; asıl bilgi
+            // zaten aşağıdaki alanlarda görünür.
+            logger.LogWarning(exception, "Tanılama sırasında kurulum başarısız.");
         }
 
         return new
@@ -115,66 +183,9 @@ public sealed class AgentRuntime(
         };
     }
 
-    /// <summary>Uzman ajanları ve orkestratörü önceden kurarak ilk isteğin soğuk başlangıç gecikmesini önler.</summary>
-    public async Task WarmUpAsync(CancellationToken cancellationToken = default)
-    {
-        await EnsureOrchestratorAsync(cancellationToken);
-        await specialistCatalog.WarmUpAsync(cancellationToken);
-    }
-
-    /// <summary>Adı verilen uzman ajanı döner. A2A endpoint kaydı sırasında kullanılır.</summary>
-    public AIAgent GetSpecialist(string specialistName) => specialistCatalog.GetSpecialist(specialistName);
-
     // =================================================================================
-    // 2. ORKESTRATÖR
+    // 3. MODEL TURU
     // =================================================================================
-
-    /// <summary>
-    /// Orkestratörü kurar ve önbellekler. Sistem talimatı kullanıcıya veya isteğe özel bilgi
-    /// içermediğinden tek örnek tüm istekleri karşılar; aday akışlar çalışma anında mesaj olarak
-    /// iletilir.
-    /// <para>
-    /// <b>Tek yeniden kurulum nedeni uzman kataloğunun değişmesidir.</b> Hem köprü araçları hem de
-    /// yönlendirme kuralları uzman kartlarından üretilir; katalog değiştiğinde ajan yeniden
-    /// kurulmazsa yeni uzman hiç tanımlanmamış gibi davranır.
-    /// </para>
-    /// </summary>
-    public async Task EnsureOrchestratorAsync(CancellationToken cancellationToken = default)
-    {
-        if (_orchestrator is not null && _orchestratorSpecialistVersion == specialistCatalog.Version) return;
-
-        await _orchestratorGate.WaitAsync(cancellationToken);
-        try
-        {
-            var specialistVersion = specialistCatalog.Version;
-            if (_orchestrator is not null && _orchestratorSpecialistVersion == specialistVersion) return;
-
-            var tools = new List<AITool>();
-            tools.AddRange(specialistCatalog.BuildBridgeTools());
-            tools.Add(BuildStartWorkflowTool());
-            tools.AddRange(navigationTools.BuildTools());
-
-            _orchestrator = tracedChatClientFactory("Orkestratör").AsAIAgent(new ChatClientAgentOptions
-            {
-                Name = "Orkestrator",
-                ChatOptions = new ChatOptions
-                {
-                    Temperature = 0.0f,
-                    Instructions = AgentPrompts.GetOrchestratorInstructions(BuildSpecialistRoutingRules()),
-                    Tools = tools
-                },
-                AIContextProviders = [new ContextProviders.TopicContextProvider(hub)]
-            });
-
-            _orchestratorSpecialistVersion = specialistVersion;
-
-            logger.LogInformation("Orkestratör hazır (uzman erişimi: {Transport}).", specialistCatalog.Transport);
-        }
-        finally
-        {
-            _orchestratorGate.Release();
-        }
-    }
 
     private async Task<OrchestratorReply> AskLanguageModelAsync(
         SessionContext session,
@@ -182,20 +193,18 @@ public sealed class AgentRuntime(
         IReadOnlyList<WorkflowMetadata> candidateWorkflows,
         CancellationToken cancellationToken)
     {
-        await EnsureOrchestratorAsync(cancellationToken);
-
         var messages = new List<ChatMessage>();
         if (candidateWorkflows.Count > 0)
             messages.Add(new ChatMessage(ChatRole.System, AgentPrompts.BuildCandidateWorkflowsContext(candidateWorkflows)));
         messages.Add(new ChatMessage(ChatRole.User, userMessage));
 
         var agentSession = await ResumeOrCreateAgentSessionAsync(session, cancellationToken);
-        var response = await _orchestrator!.RunAsync(messages, session: agentSession, cancellationToken: cancellationToken);
+        var response = await Orchestrator.RunAsync(messages, session: agentSession, cancellationToken: cancellationToken);
 
         // Clone(): JsonElement altındaki JsonDocument'in ömrüne bağlıdır; TTL boyunca saklanacağı
         // için bağımsız bir kopya alınır.
         session.OrchestratorConversation =
-            (await _orchestrator.SerializeSessionAsync(agentSession, cancellationToken: cancellationToken)).Clone();
+            (await Orchestrator.SerializeSessionAsync(agentSession, cancellationToken: cancellationToken)).Clone();
 
         hub.Publish(TraceCategories.System, "Yanıt kullanıcıya hazır");
 
@@ -213,22 +222,22 @@ public sealed class AgentRuntime(
     private async Task<AgentSession> ResumeOrCreateAgentSessionAsync(SessionContext session, CancellationToken cancellationToken)
     {
         if (session.OrchestratorConversation is not { } serializedConversation)
-            return await _orchestrator!.CreateSessionAsync(cancellationToken: cancellationToken);
+            return await Orchestrator.CreateSessionAsync(cancellationToken: cancellationToken);
 
         try
         {
-            return await _orchestrator!.DeserializeSessionAsync(serializedConversation, cancellationToken: cancellationToken);
+            return await Orchestrator.DeserializeSessionAsync(serializedConversation, cancellationToken: cancellationToken);
         }
         catch (Exception exception)
         {
             // Geçmiş okunamıyorsa konuşmayı kaybetmek, yanlış geçmişle devam etmekten iyidir.
             logger.LogWarning(exception, "Orkestratör oturumu geri yüklenemedi; yeni oturum açılıyor.");
-            return await _orchestrator!.CreateSessionAsync(cancellationToken: cancellationToken);
+            return await Orchestrator.CreateSessionAsync(cancellationToken: cancellationToken);
         }
     }
 
     // =================================================================================
-    // 3. SEMANTİK ADAY ARAMA VE AKIŞ BAŞLATMA
+    // 4. SEMANTİK ADAY ARAMA VE AKIŞ BAŞLATMA
     // =================================================================================
 
     /// <summary>
@@ -250,22 +259,15 @@ public sealed class AgentRuntime(
     /// için çalışma zamanında eklenen akışlar da anında yönlendirilebilir olur.
     /// </para>
     /// </summary>
-    private IReadOnlyList<WorkflowMetadata> SearchCandidateWorkflows(string userMessage)
-    {
-        if (serviceProvider.GetService<SemanticWorkflowSearcher>() is not { } searcher)
-            return [];
-
-        return searcher.Search(userMessage, topK: 3)
-            .Select(match => match.Metadata)
-            .ToList();
-    }
+    private List<WorkflowMetadata> SearchCandidateWorkflows(string userMessage) =>
+        workflowSearcher.Search(userMessage, topK: 3).Select(match => match.Metadata).ToList();
 
     private AITool BuildStartWorkflowTool()
     {
         var definition = ToolRegistry.Instance.Get(ToolNames.StartWorkflow);
 
         var tool = AIFunctionFactory.Create(
-            (string workflowName, CancellationToken cancellationToken) => StartWorkflowAsync(workflowName, cancellationToken),
+            StartWorkflowAsync,
             new AIFunctionFactoryOptions { Name = definition.Name, Description = definition.Description });
 
         return new TracingAIFunction(tool, hub, TraceCategories.Workflow, "Jenerik iş akışı tetiklendi");
@@ -275,8 +277,7 @@ public sealed class AgentRuntime(
     /// Adı verilen iş akışını aktif oturumda başlatır ve ilk soruyu döner. Oturumda zaten bir akış
     /// varsa yeni akış başlatılmaz; yarım kalmış bir işlemin sessizce düşürülmesi engellenir.
     /// </summary>
-    private async Task<string> 
-        StartWorkflowAsync(string workflowName, CancellationToken cancellationToken)
+    private async Task<string> StartWorkflowAsync(string workflowName, CancellationToken cancellationToken)
     {
         logger.LogInformation("Jenerik iş akışının başlatılması istendi: {WorkflowName}", workflowName);
 
@@ -296,10 +297,7 @@ public sealed class AgentRuntime(
             ? message
             : "İş akışı başlatılıyor";
 
-        // Geç çözülür: dispatcher zinciri dolaylı olarak bu sınıfa geri döner (konu dışı sorularda
-        // orkestratöre devretme), yapıcıda çözülseydi döngüsel bağımlılık olurdu.
-        var dispatcher = serviceProvider.GetRequiredService<WorkflowDispatcher>();
-        var stepResult = await dispatcher.StartWorkflowAsync(workflowName, initialMessage, cancellationToken);
+        var stepResult = await workflowDispatcher.Value.StartWorkflowAsync(workflowName, initialMessage, cancellationToken);
 
         return stepResult.Prompt ?? $"{workflowName} iş akışı başlatıldı.";
     }

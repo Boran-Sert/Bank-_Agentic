@@ -32,7 +32,7 @@ public sealed class GatewayService(
     /// </summary>
     /// <param name="request">İstek gövdesi. Oturum jetonu boşsa yeni bir oturum başlatılır.</param>
     /// <param name="cancellationToken">İptal jetonu. İptal hâlinde o ana kadarki oturum ilerlemesi yazılır.</param>
-    public Task<GatewayResponse> ProcessUserRequestAsync(GatewayRequest request, CancellationToken cancellationToken = default)
+    public async Task<GatewayResponse> ProcessUserRequestAsync(GatewayRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -40,13 +40,9 @@ public sealed class GatewayService(
 
         // Scope'un içindeki hiçbir katman sessionId taşımak zorunda değildir; oturum kimliği
         // LLM araçlarına parametre olarak da verilmez (oturum izolasyonu).
-        return sessionAccessor.RunInSessionScopeAsync(sessionToken, (_, token) =>
-            HandleInSessionAsync(request, sessionToken, token), cancellationToken);
-    }
+        var lease = await sessionAccessor.OpenAsync(sessionToken, cancellationToken);
+        await using var session = lease.Enter();
 
-    private async Task<GatewayResponse> HandleInSessionAsync(
-        GatewayRequest request, string sessionToken, CancellationToken cancellationToken)
-    {
         hub.Publish(TraceCategories.Gateway, "İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
         logger.LogInformation("Gateway istek: session={SessionToken}, text={Text}", sessionToken, Truncate(request.Text, 100));
 

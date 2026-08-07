@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Banking.Agents.Runtime;
 using Banking.Agents.Sessions;
 using Banking.Agents.Specialists;
 using Banking.Agents.Tracing;
@@ -24,7 +25,7 @@ namespace Banking.Agents.Workflows.Engine;
 public sealed class WorkflowAgentFactory(
     SpecialistCatalog specialistCatalog,
     ISessionAccessor sessionAccessor,
-    Func<string, IChatClient> tracedChatClientFactory,
+    TracedChatClientFactory chatClientFactory,
     TraceHub hub)
 {
     private const string UpdateSlotToolName = "update_slot";
@@ -76,7 +77,7 @@ public sealed class WorkflowAgentFactory(
             && string.Equals(cached.InstructionsFingerprint, fingerprint, StringComparison.Ordinal))
             return Task.FromResult(cached.Agent);
 
-        AIAgent agent = tracedChatClientFactory(definition.AgentName).AsAIAgent(new ChatClientAgentOptions
+        AIAgent agent = chatClientFactory.Create(definition.AgentName).AsAIAgent(new ChatClientAgentOptions
         {
             Name = definition.AgentName,
             // Sıcaklık burada sabitlenmez: YAML söylediyse o, susmuşsa null bırakılır ve

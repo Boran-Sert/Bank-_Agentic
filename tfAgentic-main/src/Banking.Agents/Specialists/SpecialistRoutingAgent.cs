@@ -37,9 +37,12 @@ public sealed class SpecialistRoutingAgent(
     /// <summary>Dağıtıcı ajanın A2A kartında görünen açıklaması.</summary>
     public override string Description => "Gelen A2A isteğini yoldaki uzmana devreder.";
 
-    /// <summary>İstek yolundaki <c>route</c> değerinden hedef uzmanı çözer.</summary>
+    /// <summary>
+    /// İstek yolundaki <c>route</c> değerinden hedef uzmanı çözer. Uzmanlar henüz kurulmamışsa
+    /// (A2A isteği ön ısıtmadan önce geldiyse) kurulum burada tamamlanır.
+    /// </summary>
     /// <exception cref="InvalidOperationException">HTTP bağlamı olmadan çağrıldığında fırlatılır.</exception>
-    private AIAgent ResolveTarget()
+    private async Task<AIAgent> ResolveTargetAsync(CancellationToken cancellationToken)
     {
         var httpContext = httpContextAccessor.HttpContext
             ?? throw new InvalidOperationException(
@@ -49,23 +52,27 @@ public sealed class SpecialistRoutingAgent(
             ? value?.ToString()
             : null;
 
+        await catalog.EnsureInitializedAsync(cancellationToken);
+
         return catalog.GetSpecialistByA2ARoute(route);
     }
 
     protected override async ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken)
-        => await ResolveTarget().CreateSessionAsync(cancellationToken);
+        => await (await ResolveTargetAsync(cancellationToken)).CreateSessionAsync(cancellationToken);
 
     protected override async ValueTask<AgentSession> DeserializeSessionCoreAsync(
         JsonElement serializedState, JsonSerializerOptions? jsonSerializerOptions, CancellationToken cancellationToken)
-        => await ResolveTarget().DeserializeSessionAsync(serializedState, jsonSerializerOptions, cancellationToken);
+        => await (await ResolveTargetAsync(cancellationToken))
+            .DeserializeSessionAsync(serializedState, jsonSerializerOptions, cancellationToken);
 
     protected override async ValueTask<JsonElement> SerializeSessionCoreAsync(
         AgentSession session, JsonSerializerOptions? jsonSerializerOptions, CancellationToken cancellationToken)
-        => await ResolveTarget().SerializeSessionAsync(session, jsonSerializerOptions, cancellationToken);
+        => await (await ResolveTargetAsync(cancellationToken))
+            .SerializeSessionAsync(session, jsonSerializerOptions, cancellationToken);
 
     protected override async Task<AgentResponse> RunCoreAsync(
         IEnumerable<ChatMessage> messages, AgentSession? session, AgentRunOptions? options, CancellationToken cancellationToken)
-        => await ResolveTarget().RunAsync(messages, session, options, cancellationToken);
+        => await (await ResolveTargetAsync(cancellationToken)).RunAsync(messages, session, options, cancellationToken);
 
     protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages, AgentSession? session, AgentRunOptions? options,
@@ -73,7 +80,7 @@ public sealed class SpecialistRoutingAgent(
     {
         // Hedef, akış başlamadan ÖNCE çözülür: iterator gövdesi geciktirilerek çalıştığında
         // HttpContext'in hâlâ akışta olacağının garantisi yoktur.
-        var target = ResolveTarget();
+        var target = await ResolveTargetAsync(cancellationToken);
 
         await foreach (var update in target.RunStreamingAsync(messages, session, options, cancellationToken)
                            .WithCancellation(cancellationToken))

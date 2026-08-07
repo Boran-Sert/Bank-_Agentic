@@ -9,7 +9,7 @@ namespace Banking.Agents.Sessions;
 /// <list type="number">
 /// <item><b>İzolasyon</b> — aktif oturum asenkron akış boyunca taşınır ve farklı bir oturumla iç içe
 /// scope açmak istisna üretir. Bir isteğin verisi başka bir isteğe sızamaz.</item>
-/// <item><b>Tek okuma / tek yazma</b> — durum scope başında yüklenir, scope sonunda yazılır. Aradaki
+/// <item><b>Tek okuma / tek yazma</b> — durum scope açılışında yüklenir, kapanışında yazılır. Aradaki
 /// katmanların tamamı aynı nesne üzerinde çalışır ve hiçbiri depoya erişmez.</item>
 /// <item><b>Oturum başına serileştirme</b> — aynı oturuma gelen eşzamanlı istekler sıraya girer.
 /// Onay düğmesine çift tıklamanın iki paralel yükleme ve karşılıklı üzerine yazma üretmesi bu
@@ -26,15 +26,11 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
     public SessionContext Current =>
         _currentSession.Value
         ?? throw new InvalidOperationException(
-            "Aktif oturum scope'u yok. Bu çağrı ISessionAccessor.RunInSessionScopeAsync içinden yapılmalıdır.");
+            "Aktif oturum scope'u yok. Bu çağrı ISessionAccessor.OpenAsync ile açılmış bir scope içinden yapılmalıdır.");
 
-    public async Task<TResult> RunInSessionScopeAsync<TResult>(
-        string sessionId,
-        Func<SessionContext, CancellationToken, Task<TResult>> operation,
-        CancellationToken cancellationToken = default)
+    public async Task<SessionLease> OpenAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
-        ArgumentNullException.ThrowIfNull(operation);
 
         if (_currentSession.Value is { } activeSession)
         {
@@ -45,36 +41,64 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
                     $"Aktif oturum '{activeSession.SessionId}' iken farklı bir oturum ('{sessionId}') scope'u açılamaz. " +
                     "Bu, oturum izolasyonunun bozulduğu anlamına gelir.");
 
-            return await operation(activeSession, cancellationToken);
+            return SessionLease.Nested(this, activeSession);
         }
 
         var sessionLock = AcquireLockHandle(sessionId);
-        await sessionLock.Gate.WaitAsync(cancellationToken);
+
+        try
+        {
+            await sessionLock.Gate.WaitAsync(cancellationToken);
+        }
+        catch
+        {
+            // Kilit alınamadan sayaç artırılmıştı; bekleyen kaydı geri al.
+            ReleaseLockHandle(sessionId, sessionLock);
+            throw;
+        }
 
         try
         {
             var state = await sessionStore.TryGetAsync(sessionId, cancellationToken)
                         ?? new SessionState { SessionId = sessionId };
 
-            var session = new SessionContext(state, hub);
-            _currentSession.Value = session;
+            return SessionLease.Owned(this, new SessionContext(state, hub), state, sessionLock);
+        }
+        catch
+        {
+            // Yükleme başarısızsa scope hiç açılmamıştır; kilit burada bırakılır çünkü
+            // çağırana dönecek bir SessionLease yok, dolayısıyla DisposeAsync da çalışmayacak.
+            sessionLock.Gate.Release();
+            ReleaseLockHandle(sessionId, sessionLock);
+            throw;
+        }
+    }
 
-            try
-            {
-                return await operation(session, cancellationToken);
-            }
-            finally
-            {
-                // İstek iptal edilse veya hata alsa bile o ana kadarki ilerleme yazılır;
-                // aksi hâlde kullanıcı yarım kalan akışını kaybederdi.
-                await sessionStore.SaveAsync(state, CancellationToken.None);
-                _currentSession.Value = null;
-            }
+    /// <summary>
+    /// Ambient oturumu yazar. <see cref="SessionLease.Enter"/> tarafından <b>senkron</b> çağrılır;
+    /// gerekçesi orada belgelidir.
+    /// </summary>
+    internal void SetAmbientSession(SessionContext? session) => _currentSession.Value = session;
+
+    /// <summary>
+    /// Scope'u kapatır: durumu depoya yazar, ambient oturumu temizler ve kilidi bırakır.
+    /// İç içe scope'ta hiçbir şey yapmaz; sahiplik dıştaki scope'undur.
+    /// </summary>
+    internal async ValueTask CloseAsync(SessionLease lease)
+    {
+        if (lease.IsNested) return;
+
+        try
+        {
+            // İstek iptal edilse veya hata alsa bile o ana kadarki ilerleme yazılır;
+            // aksi hâlde kullanıcı yarım kalan akışını kaybederdi.
+            await sessionStore.SaveAsync(lease.State!, CancellationToken.None);
         }
         finally
         {
-            sessionLock.Gate.Release();
-            ReleaseLockHandle(sessionId, sessionLock);
+            _currentSession.Value = null;
+            lease.Lock!.Gate.Release();
+            ReleaseLockHandle(lease.Context.SessionId, lease.Lock);
         }
     }
 
@@ -105,7 +129,8 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
         }
     }
 
-    private sealed class SessionLock
+    /// <summary>Tek bir oturumun kilidi ve o kilidi bekleyenlerin sayısı.</summary>
+    internal sealed class SessionLock
     {
         public SemaphoreSlim Gate { get; } = new(1, 1);
         public int WaiterCount { get; set; }

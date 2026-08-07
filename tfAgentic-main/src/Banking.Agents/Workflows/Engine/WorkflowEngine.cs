@@ -179,7 +179,7 @@ public sealed class WorkflowEngine(
 
         session.StoreProposedSlots(confirmationView.WorkflowName, slots);
         session.PendingConfirmation = confirmationView;
-        session.IdempotencyToken = ComputeIdempotencyToken(confirmationView);
+        session.IdempotencyToken = GenericConfirmationView.ComputeIdempotencyToken(confirmationView);
         session.CompletedOutcome = null;
 
         if (!action.CallsBank)
@@ -226,7 +226,7 @@ public sealed class WorkflowEngine(
         }
 
         if (session.CompletedOutcome is { } alreadyProducedOutcome &&
-            session.IdempotencyToken == ComputeIdempotencyToken(confirmationView))
+            session.IdempotencyToken == GenericConfirmationView.ComputeIdempotencyToken(confirmationView))
         {
             hub.Publish(TraceCategories.Workflow, "Aynı onay tekrar geldi → eylem yeniden çalıştırılmadı (idempotency)");
             return FinishWorkflow(alreadyProducedOutcome);
@@ -371,12 +371,4 @@ public sealed class WorkflowEngine(
             return null;
         }
     }
-
-    /// <summary>
-    /// Onaya sunulan slot kümesinin parmak izini üretir. Aynı ekran için gelen ikinci onay isteği
-    /// bu anahtarla tanınır; farklı bir teklif farklı anahtar üretir. Hesaplama
-    /// <see cref="GenericConfirmationView"/> içindedir ve executor bankaya aynı anahtarı iletir.
-    /// </summary>
-    private static string ComputeIdempotencyToken(GenericConfirmationView confirmationView) =>
-        GenericConfirmationView.ComputeIdempotencyToken(confirmationView);
 }

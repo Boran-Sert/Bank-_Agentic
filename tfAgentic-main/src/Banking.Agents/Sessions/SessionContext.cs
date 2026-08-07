@@ -11,10 +11,10 @@ namespace Banking.Agents.Sessions;
 /// Bir isteğin oturum durumuna açılan tek erişim noktası. Oturum verisine erişen her katman —
 /// orkestratör, iş akışı motoru, slot yazıcı — bu tip üzerinden geçer.
 /// <para>
-/// <b>Değişmez:</b> oturum durumu istek başına bir kez yüklenir ve bir kez yazılır
-/// (<see cref="ISessionAccessor.RunInSessionScopeAsync{TResult}"/>). Ara okuma veya ara yazma
-/// yapılmaz; dağıtık bir depoda her okuma ayrı bir kopya döndüreceğinden, çok noktalı erişim bir
-/// katmanın yazdığını diğerinin sessizce ezmesine yol açar.
+/// <b>Değişmez:</b> oturum durumu istek başına bir kez yüklenir (<see cref="ISessionAccessor.OpenAsync"/>)
+/// ve bir kez yazılır (scope kapanışı). Ara okuma veya ara yazma yapılmaz; dağıtık bir depoda her
+/// okuma ayrı bir kopya döndüreceğinden, çok noktalı erişim bir katmanın yazdığını diğerinin
+/// sessizce ezmesine yol açar.
 /// </para>
 /// <para>
 /// Bu nedenle buradaki metotlar senkrondur: veri bellektedir, I/O yapılmaz.

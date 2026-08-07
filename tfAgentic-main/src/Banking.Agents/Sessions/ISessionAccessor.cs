@@ -16,13 +16,17 @@ public interface ISessionAccessor
     SessionContext Current { get; }
 
     /// <summary>
-    /// Verilen işi bir oturum scope'u içinde çalıştırır: durum depodan bir kez yüklenir, oturuma
-    /// özel kilit alınır, iş bittiğinde durum depoya bir kez yazılır ve kilit bırakılır.
+    /// Oturum scope'unu açar: oturuma özel kilit alınır ve durum depodan <b>bir kez</b> yüklenir.
+    /// Dönen kiralama <see cref="SessionLease.Enter"/> ile ambient hâle getirilir ve
+    /// <c>await using</c> ile kapatılır; kapanışta durum depoya bir kez yazılır.
     /// <para>
-    /// <b>Scope açılışı ve kapanışı tek metotta tutulur;</b> açık bırakılmış veya yazılmadan
-    /// terk edilmiş bir scope oluşturmak mümkün değildir. Ayrıca <see cref="AsyncLocal{T}"/>
-    /// değişiklikleri <c>async</c> bir metottan çağırana geri yayılmadığından, ambient oturumu
-    /// görünür kılmanın güvenli yolu delege tabanlı bu imzadır.
+    /// Kullanım kalıbı:
+    /// <code>
+    /// var lease = await sessionAccessor.OpenAsync(sessionId, cancellationToken);
+    /// await using var session = lease.Enter();
+    /// </code>
+    /// Açma (asenkron) ile ambient yazımın (senkron) ayrı olmasının nedeni
+    /// <see cref="AsyncLocal{T}"/> semantiğidir; gerekçe <see cref="SessionLease.Enter"/> üzerindedir.
     /// </para>
     /// <para>
     /// Aynı oturumla iç içe çağrıldığında yeniden yükleme, yeniden kilitleme ve ara yazma yapılmaz.
@@ -30,13 +34,9 @@ public interface ISessionAccessor
     /// </para>
     /// </summary>
     /// <param name="sessionId">Çalışılacak oturumun kimliği; boş olamaz.</param>
-    /// <param name="operation">Scope içinde çalıştırılacak iş.</param>
-    /// <param name="cancellationToken">İptal jetonu. İptal hâlinde de durum depoya bir kez yazılır.</param>
+    /// <param name="cancellationToken">İptal jetonu.</param>
     /// <exception cref="InvalidOperationException">
     /// Aktif bir scope varken farklı bir <paramref name="sessionId"/> ile çağrıldığında fırlatılır.
     /// </exception>
-    Task<TResult> RunInSessionScopeAsync<TResult>(
-        string sessionId,
-        Func<SessionContext, CancellationToken, Task<TResult>> operation,
-        CancellationToken cancellationToken = default);
+    Task<SessionLease> OpenAsync(string sessionId, CancellationToken cancellationToken = default);
 }

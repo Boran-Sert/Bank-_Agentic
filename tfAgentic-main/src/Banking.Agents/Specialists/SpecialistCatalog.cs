@@ -20,26 +20,35 @@ namespace Banking.Agents.Specialists;
 /// deklaratif tanımlar. Her ikisi de aynı <see cref="AgentCard"/> tipine dönüşür; bu sınıfın
 /// altındaki katmanlar iki kaynak arasındaki farkı görmez.
 /// </para>
+/// <para>
+/// <b>Ajanlar bir kez, sırayla kurulur ve saklanır.</b> Kurulum
+/// <see cref="EnsureInitializedAsync"/> ile sunucu dinlemeye başladıktan sonra yapılır — süreç içi
+/// MCP sunucusuna loopback bağlantı ancak o noktada kurulabilir. Kurulumdan sonra uzmana erişim
+/// (<see cref="GetSpecialist"/>, <see cref="GetSpecialistByA2ARoute"/>, <see cref="BuildBridgeTools"/>)
+/// senkron bir sözlük aramasıdır; çağrı başına kurulum, kilit veya erteleme yoktur.
+/// </para>
 /// </summary>
 public sealed class SpecialistCatalog(
     AgentOptions options,
     McpToolProvider mcpToolProvider,
-    Func<string, IChatClient> tracedChatClientFactory,
+    TracedChatClientFactory chatClientFactory,
     TraceHub hub,
     ILogger<SpecialistCatalog> logger)
 {
     private readonly ConcurrentDictionary<string, AgentCard> _declarativeCards = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, DeferredSpecialistAgent> _agents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, AIAgent> _agents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly SemaphoreSlim _initializationGate = new(1, 1);
 
+    private bool _initialized;
     private int _version;
 
     /// <summary>
-    /// Uzman kataloğunun sürümü; her kayıt ve güncellemede artar.
+    /// Uzman kataloğunun sürümü; her kayıtta artar.
     /// <para>
-    /// Uzmanlardan köprü aracı üretip önbellekleyen her bileşen kurulduğu sürümü saklar ve sürüm
-    /// değiştiğinde kendini yeniden kurar. <b>Bildirim yerine sürüm numarası kullanılır:</b> sürüm
-    /// karşılaştırması abonelik sırasına bağlı değildir ve kontrol, zaten var olan kilitlerin içinde
-    /// yapılabilir.
+    /// Uzmanlardan köprü aracı üretip önbellekleyen her bileşen (orkestratör ve akış ajanları)
+    /// kurulduğu sürümü saklar ve sürüm değiştiğinde kendini yeniden kurar. <b>Bildirim yerine sürüm
+    /// numarası kullanılır:</b> karşılaştırma abonelik sırasına bağlı değildir ve yeni bir tüketici
+    /// eklendiğinde kayıt tarafında hatırlanması gereken bir adım oluşmaz.
     /// </para>
     /// </summary>
     public int Version => Volatile.Read(ref _version);
@@ -55,25 +64,76 @@ public sealed class SpecialistCatalog(
     public IReadOnlyCollection<string> SpecialistNames => Cards.Select(card => card.Name).ToList();
 
     // =================================================================================
+    // KURULUM
+    // =================================================================================
+
+    /// <summary>
+    /// Kayıtlı tüm uzmanları <b>sırayla</b> kurar. Uygulama dinlemeye başladıktan sonra bir kez
+    /// çağrılır; sonraki çağrılar etkisizdir.
+    /// <para>
+    /// <b>Başarısız kurulum kalıcı değildir:</b> MCP sunucusuna ilk denemede ulaşılamazsa kurulum
+    /// tamamlanmış sayılmaz ve sonraki istek yeniden dener. Aksi hâlde tek bir geçici bağlantı
+    /// hatası sistemi kalıcı olarak yanıtsız bırakırdı.
+    /// </para>
+    /// </summary>
+    public async Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
+    {
+        if (_initialized) return;
+
+        await _initializationGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_initialized) return;
+
+            foreach (var card in Cards)
+                _agents[card.Name] = await BuildFromCardAsync(card, cancellationToken);
+
+            Transport = options.UseA2AForSpecialists ? "A2A" : "in-process";
+            _initialized = true;
+
+            logger.LogInformation("{Count} uzman ajan kuruldu (erişim: {Transport}).", _agents.Count, Transport);
+        }
+        finally
+        {
+            _initializationGate.Release();
+        }
+    }
+
+    // =================================================================================
     // KAYIT
     // =================================================================================
 
     /// <summary>
-    /// Deklaratif uzman tanımını çalışma zamanında kaydeder. Aynı ad ikinci kez gönderildiğinde kayıt
-    /// üzerine yazılır ve kurulmuş örnek düşürülür; böylece yeni talimat ve araç kümesi geçerli olur.
+    /// Deklaratif uzman tanımını kaydeder. Aynı ad ikinci kez gönderildiğinde kayıt üzerine yazılır;
+    /// böylece yeni talimat ve araç kümesi geçerli olur.
+    /// <para>
+    /// <b>Ajan yalnızca katalog kurulmuşsa hemen kurulur.</b> Kurulum öncesi kayıtlar (uygulama
+    /// başlangıcında diskten yükleme) yalnızca kartı yazar: o anda süreç içi MCP sunucusu henüz
+    /// dinlemediğinden ajan kurulamaz. Onları <see cref="EnsureInitializedAsync"/> sırayla kurar.
+    /// Kurulum sonrası kayıtlarda (arayüzden tanımlama) sunucu zaten dinliyordur ve ajan burada
+    /// kurulur; ertelenmesi, kayıt başarılı görünürken uzmanın ilk çağrıda hata vermesi demekti.
+    /// </para>
+    /// <para>
+    /// Kayıt <see cref="Version"/> değerini artırır; köprü araçlarını önbellekleyen bileşenler
+    /// kendilerini bu sayede yeniler.
+    /// </para>
     /// </summary>
     /// <param name="definition">Kaydedilecek deklaratif uzman tanımı.</param>
+    /// <param name="cancellationToken">İptal jetonu.</param>
     /// <exception cref="InvalidOperationException">
     /// Tanım, derlenmiş bir uzmanın adını, köprü aracı adını veya A2A yolunu kullandığında fırlatılır.
     /// </exception>
-    public AgentCard RegisterDeclarativeSpecialist(SpecialistDefinition definition)
+    public async Task<AgentCard> RegisterDeclarativeSpecialistAsync(
+        SpecialistDefinition definition, CancellationToken cancellationToken = default)
     {
         var card = DeclarativeSpecialistBuilder.ToAgentCard(definition);
 
         GuardAgainstCompiledCollision(card);
 
         _declarativeCards[card.Name] = card;
-        _agents.TryRemove(card.Name, out _);
+
+        if (_initialized)
+            _agents[card.Name] = await BuildFromCardAsync(card, cancellationToken);
 
         logger.LogInformation("Deklaratif uzman kaydedildi: {Name} (/a2a/{Route}).", card.Name, card.A2ARoute);
         hub.Publish(Banking.Domain.Constants.TraceCategories.System,
@@ -117,80 +177,55 @@ public sealed class SpecialistCatalog(
     // =================================================================================
 
     /// <summary>
-    /// Adı verilen uzman ajanı döner. Ajan tembel kurulur; ilk çağrıya kadar MCP bağlantısı açılmaz.
-    /// Tam ad eşleşmesi bulunamazsa kısmi ad eşleşmesi denenir.
+    /// Adı verilen kurulmuş uzman ajanı döner. Tam ad eşleşmesi bulunamazsa kısmi ad eşleşmesi denenir.
     /// </summary>
     /// <exception cref="ArgumentException">Ad hiçbir uzmanla eşleşmediğinde fırlatılır.</exception>
-    public DeferredSpecialistAgent GetSpecialist(string specialistName)
+    public AIAgent GetSpecialist(string specialistName)
     {
-        var card = FindCard(candidate =>
-                       string.Equals(candidate.Name, specialistName, StringComparison.OrdinalIgnoreCase))
-                   // Esnek eşleştirme: kısmi ad da kabul edilir (A2A çağrılarında ad varyasyonları olabiliyor).
-                   ?? FindCard(candidate =>
-                       candidate.Name.Contains(specialistName, StringComparison.OrdinalIgnoreCase) ||
-                       specialistName.Contains(candidate.Name, StringComparison.OrdinalIgnoreCase))
-                   ?? throw new ArgumentException($"Bilinmeyen uzman: {specialistName}", nameof(specialistName));
+        if (_agents.TryGetValue(specialistName, out var agent)) return agent;
 
-        return GetOrCreateAgent(card);
+        // Esnek eşleştirme: kısmi ad da kabul edilir (A2A çağrılarında ad varyasyonları olabiliyor).
+        foreach (var (name, candidate) in _agents)
+        {
+            if (name.Contains(specialistName, StringComparison.OrdinalIgnoreCase) ||
+                specialistName.Contains(name, StringComparison.OrdinalIgnoreCase))
+                return candidate;
+        }
+
+        throw new ArgumentException($"Bilinmeyen uzman: {specialistName}", nameof(specialistName));
     }
 
     /// <summary>
-    /// A2A yolundan (<c>/a2a/{route}</c>) uzmanı çözer. Tek dağıtıcı endpoint'in arkasında hangi
-    /// uzmanın yanıt vereceğini bu eşleme belirler.
+    /// A2A yolundan (<c>/a2a/{route}</c>) kurulmuş uzmanı çözer. Tek dağıtıcı endpoint'in arkasında
+    /// hangi uzmanın yanıt vereceğini bu eşleme belirler.
     /// </summary>
     /// <exception cref="ArgumentException">Yol hiçbir uzmanla eşleşmediğinde fırlatılır.</exception>
-    public DeferredSpecialistAgent GetSpecialistByA2ARoute(string? a2aRoute)
+    public AIAgent GetSpecialistByA2ARoute(string? a2aRoute)
     {
-        var card = FindCard(candidate => string.Equals(candidate.A2ARoute, a2aRoute, StringComparison.OrdinalIgnoreCase))
+        var card = Cards.FirstOrDefault(candidate =>
+                       string.Equals(candidate.A2ARoute, a2aRoute, StringComparison.OrdinalIgnoreCase))
                    ?? throw new ArgumentException($"Bilinmeyen A2A yolu: {a2aRoute}", nameof(a2aRoute));
 
-        return GetOrCreateAgent(card);
+        return GetSpecialist(card.Name);
     }
 
     /// <summary>
     /// Her uzman için çağıranın kullanabileceği köprü aracını üretir. A2A etkinse araçlar HTTP
-    /// loopback üzerinden, değilse doğrudan süreç içi ajana bağlanır.
+    /// loopback üzerinden, değilse doğrudan kurulmuş süreç içi ajana bağlanır.
     /// </summary>
     public IReadOnlyList<AITool> BuildBridgeTools()
     {
-        var cards = Cards;
-
         if (!options.UseA2AForSpecialists)
-        {
-            Transport = "in-process";
-            return cards.Select(card => BuildBridgeTool(card, GetOrCreateAgent(card), "In-Process", "Dahili Bağlantı")).ToList();
-        }
+            return Cards.Select(card => BuildBridgeTool(
+                card, GetSpecialist(card.Name), "In-Process", "Dahili Bağlantı")).ToList();
 
-        Transport = "A2A";
-
-        return cards.Select(card => BuildBridgeTool(
+        return Cards.Select(card => BuildBridgeTool(
             card,
             new A2AClient(new Uri(options.A2AUrl(card.A2ARoute)))
                 .AsAIAgent(name: card.BridgeToolName, description: card.Description),
             "A2A",
             $"→ {options.A2AUrl(card.A2ARoute)}")).ToList();
     }
-
-    /// <summary>Tüm uzmanları önceden kurarak ilk isteğin soğuk başlangıç gecikmesini önler.</summary>
-    public async Task WarmUpAsync(CancellationToken cancellationToken = default)
-    {
-        var cards = Cards;
-
-        foreach (var card in cards)
-            await GetOrCreateAgent(card).EnsureBuiltAsync(cancellationToken);
-
-        logger.LogInformation("{Count} uzman ajan ön ısıtıldı.", cards.Count);
-    }
-
-    // =================================================================================
-    // KURULUM
-    // =================================================================================
-
-    private AgentCard? FindCard(Func<AgentCard, bool> predicate) => Cards.FirstOrDefault(predicate);
-
-    private DeferredSpecialistAgent GetOrCreateAgent(AgentCard card) =>
-        _agents.GetOrAdd(card.Name, _ => new DeferredSpecialistAgent(
-            card.Name, card.Description, ct => BuildFromCardAsync(card, ct)));
 
     private AITool BuildBridgeTool(AgentCard card, AIAgent specialistAgent, string transportLabel, string endpointInfo)
     {
@@ -226,7 +261,7 @@ public sealed class SpecialistCatalog(
             ? await mcpToolProvider.GetTracedToolsByNamesAsync(card.ToolNames, cancellationToken)
             : await mcpToolProvider.GetTracedToolsForGroupAsync(card.ToolGroup, cancellationToken);
 
-        var chatClient = tracedChatClientFactory(card.DisplayName);
+        var chatClient = chatClientFactory.Create(card.DisplayName);
 
         var compiledType = DiscoverCompiledCards()
             .FirstOrDefault(entry => string.Equals(entry.Card.Name, card.Name, StringComparison.OrdinalIgnoreCase))

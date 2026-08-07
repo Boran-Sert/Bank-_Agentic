@@ -19,12 +19,13 @@ builder.Services.AddSingleton<IAccountService, AccountService>();
 builder.Services.AddSingleton<ICardService, CardService>();
 builder.Services.AddSingleton<ICollectionService, CollectionService>();
 builder.Services.AddSingleton<ITransferService, TransferService>();
+builder.Services.AddSingleton<IAnalyzeService,AnalyzeService>();
 
 var app = builder.Build();
 
 
 
-// ---------- URLS -------------------------------------------------------------
+// ---------- HESAPLAR -------------------------------------------------------------
 app.MapGet("/api/accounts", (string customerId, IAccountService accountsService) =>
 {
     var accounts = accountsService.GetAccounts(customerId);
@@ -40,6 +41,7 @@ app.MapGet("/api/accounts/{accountId}/transactions", (string accountId, DateOnly
     var transactions = accountsService.GetTransactions(accountId, from, to);
     return transactions;
 });
+// ---------- KARTLAR -------------------------------------------------------------
 app.MapGet("/api/cards", (string customerId, ICardService cardService) =>
 {
     var cards = cardService.GetCards(customerId);
@@ -49,6 +51,12 @@ app.MapGet("/api/cards/{id}", (string id, ICardService cardService) =>
 {
     var card = cardService.GetCard(id);
     return card;
+});
+
+app.MapGet("/api/overdue-cards/{customer_id}", (string customer_id, ICardService cardService) =>
+{
+    var cards = cardService.GetOverdueCards(customer_id);
+    return cards;
 });
 
 // ---------- PARA HAREKETİ ----------------------------------------------------
@@ -79,6 +87,7 @@ app.MapPut("/api/money-transfer", (MoneyTransferRequest request, ITransferServic
         return Results.BadRequest(new { message = exception.Message });
     }
 });
+
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 

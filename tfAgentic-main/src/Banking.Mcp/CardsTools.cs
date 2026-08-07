@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Banking.Domain.Models;
 using Banking.Domain.Services;
 using ModelContextProtocol.Server;
 using Banking.Mcp.Constants;
@@ -82,5 +83,10 @@ public sealed class CardsTools(ICardService cards, CustomerContext context)
             StatementDate = card.StatementDate.ToString("yyyy-MM-dd"),
             DueDate = card.DueDate.ToString("yyyy-MM-dd")
         };
+    }
+    [McpServerTool(Name = CardToolNames.)]
+    public IReadOnlyList<Card> GetOverdueCards(string customerId)
+    {
+        return cards.GetOverdueCards(customerId);
     }
 }

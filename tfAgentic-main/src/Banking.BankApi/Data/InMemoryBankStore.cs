@@ -56,16 +56,23 @@ public sealed class InMemoryBankStore
         var card1 = new Card(
             "CARD-2001", customer.Id, "1234 1234 1234 4521", "4521", "Visa",
             CreditLimit: 50_000m, CurrentDebt: 12_450.00m, MinimumPayment: 1_245.00m,
-            StatementDate: new DateOnly(2026, 6, 20), DueDate: new DateOnly(2026, 7, 5));
+            StatementDate: new DateOnly(2026, 6, 20), DueDate: new DateOnly(2026, 8, 20));
 
         // Gecikmiş borçlu kart (tahsilat senaryosu için)
         var card2 = new Card(
             "CARD-2002", customer.Id, "2456 1234 5684 8830", "8830", "Mastercard",
             CreditLimit: 30_000m, CurrentDebt: 8_900.00m, MinimumPayment: 2_670.00m,
             StatementDate: new DateOnly(2026, 5, 25), DueDate: new DateOnly(2026, 6, 10));
+        
+        // Gecikmiş borçlu kart (tahsilat senaryosu için)
+        var card3 = new Card(
+            "CARD-2003", customer.Id, "6842 1234 5684 8831", "8831", "Mastercard",
+            CreditLimit: 30_000m, CurrentDebt: 11_900.00m, MinimumPayment: 6_670.00m,
+            StatementDate: new DateOnly(2026, 5, 25), DueDate: new DateOnly(2026, 8, 6));
 
         Cards[card1.Id] = card1;
         Cards[card2.Id] = card2;
+        Cards[card3.Id] = card3;
 
         // Mock Banka ve Kart Kampanyaları
         var camp1 = new Campaign(

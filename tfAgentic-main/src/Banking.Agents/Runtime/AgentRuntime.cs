@@ -198,13 +198,17 @@ public sealed class AgentRuntime(
             messages.Add(new ChatMessage(ChatRole.System, AgentPrompts.BuildCandidateWorkflowsContext(candidateWorkflows)));
         messages.Add(new ChatMessage(ChatRole.User, userMessage));
 
-        var agentSession = await ResumeOrCreateAgentSessionAsync(session, cancellationToken);
-        var response = await Orchestrator.RunAsync(messages, session: agentSession, cancellationToken: cancellationToken);
+        var restored = await AgentConversationStore.ResumeOrCreateAsync(
+            Orchestrator, session.OrchestratorConversation, cancellationToken);
 
-        // Clone(): JsonElement altındaki JsonDocument'in ömrüne bağlıdır; TTL boyunca saklanacağı
-        // için bağımsız bir kopya alınır.
+        if (restored.RestoreFailure is { } restoreFailure)
+            logger.LogWarning(restoreFailure, "Orkestratör oturumu geri yüklenemedi; yeni oturum açılıyor.");
+
+        var response = await Orchestrator.RunAsync(
+            messages, session: restored.Session, cancellationToken: cancellationToken);
+
         session.OrchestratorConversation =
-            (await Orchestrator.SerializeSessionAsync(agentSession, cancellationToken: cancellationToken)).Clone();
+            await AgentConversationStore.CaptureAsync(Orchestrator, restored.Session, cancellationToken);
 
         hub.Publish(TraceCategories.System, "Yanıt kullanıcıya hazır");
 
@@ -213,27 +217,6 @@ public sealed class AgentRuntime(
             .LastOrDefault();
 
         return new OrchestratorReply(response.Text, lastFunctionCall?.Name, lastFunctionCall?.Arguments);
-    }
-
-    /// <summary>
-    /// Orkestratörün konuşma geçmişini oturumdan geri yükler; kayıt yoksa yeni bir konuşma açar.
-    /// Canlı <see cref="AgentSession"/> nesnesi istekler arasında bellekte tutulmaz.
-    /// </summary>
-    private async Task<AgentSession> ResumeOrCreateAgentSessionAsync(SessionContext session, CancellationToken cancellationToken)
-    {
-        if (session.OrchestratorConversation is not { } serializedConversation)
-            return await Orchestrator.CreateSessionAsync(cancellationToken: cancellationToken);
-
-        try
-        {
-            return await Orchestrator.DeserializeSessionAsync(serializedConversation, cancellationToken: cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            // Geçmiş okunamıyorsa konuşmayı kaybetmek, yanlış geçmişle devam etmekten iyidir.
-            logger.LogWarning(exception, "Orkestratör oturumu geri yüklenemedi; yeni oturum açılıyor.");
-            return await Orchestrator.CreateSessionAsync(cancellationToken: cancellationToken);
-        }
     }
 
     // =================================================================================

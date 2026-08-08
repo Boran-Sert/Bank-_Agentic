@@ -326,32 +326,19 @@ public sealed class WorkflowEngine(
     /// </summary>
     private async Task<string?> RunAgentTurnAsync(string message, CancellationToken cancellationToken)
     {
-        var agentSession = await ResumeOrCreateAgentSessionAsync(cancellationToken);
-        var response = await workflowAgent.RunAsync(message, agentSession, cancellationToken: cancellationToken);
+        var restored = await AgentConversationStore.ResumeOrCreateAsync(
+            workflowAgent, session.WorkflowConversation, cancellationToken);
 
-        // Clone(): JsonElement altındaki JsonDocument'in ömrüne bağlıdır; TTL boyunca
-        // saklanacağı için bağımsız bir kopya alınır.
+        if (restored.RestoreFailure is { } restoreFailure)
+            hub.Publish(TraceCategories.Workflow,
+                $"İş akışı ajan oturumu geri yüklenemedi, yeniden başlatıldı: {restoreFailure.Message}");
+
+        var response = await workflowAgent.RunAsync(message, restored.Session, cancellationToken: cancellationToken);
+
         session.WorkflowConversation =
-            (await workflowAgent.SerializeSessionAsync(agentSession, cancellationToken: cancellationToken)).Clone();
+            await AgentConversationStore.CaptureAsync(workflowAgent, restored.Session, cancellationToken);
 
         return response.Text;
-    }
-
-    private async Task<AgentSession> ResumeOrCreateAgentSessionAsync(CancellationToken cancellationToken)
-    {
-        if (session.WorkflowConversation is not { } serializedConversation)
-            return await workflowAgent.CreateSessionAsync(cancellationToken: cancellationToken);
-
-        try
-        {
-            return await workflowAgent.DeserializeSessionAsync(serializedConversation, cancellationToken: cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            // Geçmiş okunamıyorsa konuşmayı kaybetmek, yanlış geçmişle devam etmekten iyidir.
-            hub.Publish(TraceCategories.Workflow, $"İş akışı ajan oturumu geri yüklenemedi, yeniden başlatıldı: {exception.Message}");
-            return await workflowAgent.CreateSessionAsync(cancellationToken: cancellationToken);
-        }
     }
 
     private static bool Contains(string? agentText, string marker) =>

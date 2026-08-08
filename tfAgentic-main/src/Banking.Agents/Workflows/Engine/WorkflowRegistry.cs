@@ -4,7 +4,6 @@ using Banking.Agents.Tracing;
 using Banking.Agents.Workflows.Actions;
 using Banking.Agents.Workflows.Declarative;
 using Banking.Domain.Workflows;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace Banking.Agents.Workflows.Engine;
 
@@ -14,16 +13,35 @@ namespace Banking.Agents.Workflows.Engine;
 /// <b>Tek kayıt yolu MAF deklaratif YAML/JSON tanımıdır.</b> Yeni bir akış eklemek bir metin dosyası
 /// yazmaktan ibarettir: C# record'u, akışa özel executor, attribute veya DI kaydı gerekmez.
 /// </para>
+/// <para>
+/// <b>Kayıt defteri davranış değil veri tutar.</b> Sözlükte akış başına bir
+/// <see cref="RegisteredWorkflow"/> saklanır; motoru ondan <see cref="BuildEngineAsync"/> kurar.
+/// Kapanış (closure) saklansaydı kayıtlı akışın yolu, şeması ve talimatı yalnızca o kapanışın içinde
+/// yaşar, hata ayıklarken ne sözlükte görülebilir ne de motorun kurulumuna kesme noktası konabilirdi.
+/// Kayıt hâlâ çalışma zamanında yapılabilir; değişen tek şey saklananın ne olduğudur.
+/// </para>
 /// </summary>
 public sealed class WorkflowRegistry(
-    IServiceProvider serviceProvider,
     WorkflowAgentFactory workflowAgentFactory,
     ISessionAccessor sessionAccessor,
     IDeterministicActionExecutor actionExecutor,
+    Lazy<OrchestratorFallback> orchestratorFallback,
     TraceHub hub)
 {
-    /// <summary>Akış adı → motor fabrikası. Kayıtlar çalışma zamanında eklenebilir.</summary>
-    private readonly ConcurrentDictionary<string, Func<Task<IWorkflowEngine>>> _engineFactories =
+    /// <summary>
+    /// Kayıtlı bir akışın motorunu kurmak için gereken her şey. YAML'dan bir kez okunur ve olduğu
+    /// gibi saklanır; kurulum sırasında yeniden ayrıştırma yapılmaz.
+    /// </summary>
+    /// <param name="Action">Akışın kimliği, ekran kodu ve bankada gideceği yol.</param>
+    /// <param name="SlotSchema">Akışın toplayacağı slotların şeması; şemasız akışta <c>null</c>.</param>
+    /// <param name="Definition">Talimat metninin üretileceği ham deklaratif tanım.</param>
+    private sealed record RegisteredWorkflow(
+        WorkflowActionDefinition Action,
+        IReadOnlyDictionary<string, DeclarativePropertyConfig>? SlotSchema,
+        MicrosoftAgentDeclarativeDefinition Definition);
+
+    /// <summary>Akış adı → kayıt. Kayıtlar çalışma zamanında eklenebilir.</summary>
+    private readonly ConcurrentDictionary<string, RegisteredWorkflow> _workflows =
         new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -58,28 +76,10 @@ public sealed class WorkflowRegistry(
             definition.Action?.Path,
             definition.DisplayName);
 
-        var schemaProperties = definition.OutputSchema?.Properties ?? definition.InputSchema?.Properties;
-
-        _engineFactories[workflowName] = async () =>
-        {
-            var session = sessionAccessor.Current;
-
-            // Şema oturuma tanıtılır: motor "ne eksik", update_slot "hangi tip" sorusunu buradan yanıtlar.
-            session.DeclareExpectedSlots(schemaProperties);
-
-            // Ajan kimliği önce kurulur; talimat metni araç adlarını ondan okur, kendi türetmez.
-            var agentDefinition = WorkflowAgentDefinition.For(
-                workflowName, slotSchema: schemaProperties, modelOptions: definition.Model?.Options);
-            agentDefinition = agentDefinition with
-            {
-                Instructions = DeclarativeWorkflowBuilder.BuildInstructions(definition, agentDefinition)
-            };
-
-            var workflowAgent = await workflowAgentFactory.GetOrCreateAsync(agentDefinition);
-
-            return new WorkflowEngine(
-                session, action, workflowAgent, actionExecutor, ResolveOrchestratorFallback(), hub);
-        };
+        _workflows[workflowName] = new RegisteredWorkflow(
+            action,
+            definition.OutputSchema?.Properties ?? definition.InputSchema?.Properties,
+            definition);
     }
 
     // =================================================================================
@@ -90,18 +90,41 @@ public sealed class WorkflowRegistry(
     /// <exception cref="KeyNotFoundException">Verilen ad kayıtlı bir akışa karşılık gelmediğinde fırlatılır.</exception>
     public async Task<IWorkflowEngine> CreateEngineAsync(string workflowName)
     {
-        if (_engineFactories.TryGetValue(workflowName, out var engineFactory))
-            return await engineFactory();
+        if (_workflows.TryGetValue(workflowName, out var registered))
+            return await BuildEngineAsync(registered);
 
         throw new KeyNotFoundException(
             $"'{workflowName}' adında kayıtlı bir iş akışı bulunamadı. " +
-            $"Kayıtlı akışlar: {string.Join(", ", _engineFactories.Keys)}");
+            $"Kayıtlı akışlar: {string.Join(", ", _workflows.Keys)}");
     }
 
     /// <summary>
-    /// Orkestratöre devretme kanalını DI'dan çözer. <b>Çözüm bilerek geciktirilir:</b> orkestratör de
-    /// akış başlatabildiğinden, kanalın yapıcıda çözülmesi döngüsel bağımlılık oluşturur.
+    /// Kayıttan bu isteğe ait motoru kurar. Sıra bağlayıcıdır: önce şema oturuma tanıtılır, sonra
+    /// ajan kimliği kurulur, en son motor bağlanır.
     /// </summary>
-    private OrchestratorFallback ResolveOrchestratorFallback() =>
-        serviceProvider.GetRequiredService<OrchestratorFallback>();
+    private async Task<IWorkflowEngine> BuildEngineAsync(RegisteredWorkflow registered)
+    {
+        var session = sessionAccessor.Current;
+
+        // Şema oturuma tanıtılır: motor "ne eksik", update_slot "hangi tip" sorusunu buradan yanıtlar.
+        session.DeclareExpectedSlots(registered.SlotSchema);
+
+        // Ajan kimliği önce kurulur; talimat metni araç adlarını ondan okur, kendi türetmez.
+        var agentDefinition = WorkflowAgentDefinition.For(
+            registered.Action.WorkflowName,
+            slotSchema: registered.SlotSchema,
+            modelOptions: registered.Definition.Model?.Options);
+
+        agentDefinition = agentDefinition with
+        {
+            Instructions = DeclarativeWorkflowBuilder.BuildInstructions(registered.Definition, agentDefinition)
+        };
+
+        var workflowAgent = await workflowAgentFactory.GetOrCreateAsync(agentDefinition);
+
+        // Orkestratöre devretme kanalı geç çözülür: orkestratör de akış başlatabildiğinden,
+        // kanalın yapıcıda çözülmesi döngüsel bağımlılık oluşturur.
+        return new WorkflowEngine(
+            session, registered.Action, workflowAgent, actionExecutor, orchestratorFallback.Value, hub);
+    }
 }

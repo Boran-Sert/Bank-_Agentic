@@ -24,7 +24,7 @@ public sealed class GatewayService(
     ILogger<GatewayService> logger,
     ResponseSanitizer sanitizer,
     GatewayResponseMapper responseMapper,
-    ISessionAccessor sessionAccessor)
+    AmbientSessionAccessor sessionAccessor)
 {
     /// <summary>
     /// Kullanıcı isteğini oturum scope'u içinde işler, yönlendirir ve sonucu UI protokolüne çevirir.

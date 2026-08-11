@@ -37,8 +37,8 @@ public sealed record FlowExecutionResult(
 /// </summary>
 public sealed class FlowRouter(
     AgentRuntime runtime,
-    WorkflowDispatcher workflowDispatcher,
-    ISessionAccessor sessionAccessor,
+    WorkflowRegistry workflowRegistry,
+    AmbientSessionAccessor sessionAccessor,
     TraceHub hub,
     ILogger<FlowRouter> logger)
 {
@@ -48,14 +48,17 @@ public sealed class FlowRouter(
     /// </summary>
     public async Task<FlowExecutionResult> RouteUserRequestAsync(string userMessage, CancellationToken cancellationToken = default)
     {
-        var sessionId = sessionAccessor.Current.SessionId;
+        var session = sessionAccessor.Current;
 
-        if (workflowDispatcher.HasActiveWorkflow)
+        // İkinci koşul her zaman doğrudur — HasActiveWorkflow zaten akış adının dolu olmasını
+        // gerektirir — ama adı buradan bağlamak, motoru kurarken null denetimi taşımayı gereksiz kılar.
+        if (session.HasActiveWorkflow && session.ActiveWorkflowName is { } activeWorkflowName)
         {
             hub.Publish(TraceCategories.FlowRouter, "Aktif iş akışı oturumu → mesaj doğrudan workflow ajanına yönlendiriliyor");
-            logger.LogInformation("Deterministik yönlendirme: session={SessionId}", sessionId);
+            logger.LogInformation("Deterministik yönlendirme: session={SessionId}", session.SessionId);
 
-            var stepResult = await workflowDispatcher.ContinueWorkflowAsync(userMessage, cancellationToken);
+            var engine = await workflowRegistry.CreateEngineAsync(activeWorkflowName);
+            var stepResult = await engine.AdvanceWorkflowStepAsync(userMessage, cancellationToken);
 
             if (stepResult.Status is WorkflowStatuses.Completed or WorkflowStatuses.Cancelled)
                 hub.Publish(TraceCategories.FlowRouter, $"İş akışı oturumu sonlandı (durum: {stepResult.Status})");
@@ -65,8 +68,8 @@ public sealed class FlowRouter(
 
         var reply = await runtime.AskOrchestratorAsync(userMessage, cancellationToken);
 
-        if (workflowDispatcher.HasActiveWorkflow)
-            hub.Publish(TraceCategories.FlowRouter, $"İş akışı başarıyla başlatıldı ve bağlandı: {sessionId}");
+        if (session.HasActiveWorkflow)
+            hub.Publish(TraceCategories.FlowRouter, $"İş akışı başarıyla başlatıldı ve bağlandı: {session.SessionId}");
 
         return new FlowExecutionResult(FlowExecutionType.OrchestratorReply, OrchestratorReply: reply);
     }

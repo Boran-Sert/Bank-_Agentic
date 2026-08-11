@@ -2,8 +2,8 @@ using Banking.Agents.Runtime;
 using Banking.Agents.Tracing;
 using Banking.Agents.Workflows;
 using Banking.Domain.Constants;
-using Banking.Domain.MkCodes;
 using Banking.Gateway.Models;
+using Banking.Mcp.Semantic;
 using Microsoft.Extensions.Logging;
 
 namespace Banking.Gateway;
@@ -15,7 +15,8 @@ namespace Banking.Gateway;
 /// değerini olduğu gibi taşır. Yeni bir iş akışı eklenmesi bu sınıfta değişiklik gerektirmez.
 /// </para>
 /// </summary>
-public sealed class GatewayResponseMapper(TraceHub hub, ILogger<GatewayResponseMapper> logger)
+public sealed class GatewayResponseMapper(
+    TraceHub hub, MkCodeCatalog mkCodeCatalog, ILogger<GatewayResponseMapper> logger)
 {
     /// <summary>Yönlendirme sonucunu istemciye gönderilecek yanıta dönüştürür.</summary>
     public GatewayResponse Map(FlowExecutionResult flowResult) => flowResult switch
@@ -86,9 +87,9 @@ public sealed class GatewayResponseMapper(TraceHub hub, ILogger<GatewayResponseM
             return GatewayResponse.AsGenericConfirmation(confirmation.WorkflowName, confirmation.Parameters);
         }
 
-        if (MkCodesRegistry.Get(confirmation.ScreenMkCode) is not { } mkCodeDefinition)
+        if (mkCodeCatalog.Get(confirmation.ScreenMkCode) is not { } mkCodeDefinition)
         {
-            logger.LogWarning("'{WorkflowName}' akışının ekran kodu '{MkCode}' registry'de bulunamadı.",
+            logger.LogWarning("'{WorkflowName}' akışının ekran kodu '{MkCode}' bankanın kataloğunda bulunamadı.",
                 confirmation.WorkflowName, confirmation.ScreenMkCode);
             return GatewayResponse.AsGenericConfirmation(confirmation.ScreenMkCode, confirmation.Parameters);
         }

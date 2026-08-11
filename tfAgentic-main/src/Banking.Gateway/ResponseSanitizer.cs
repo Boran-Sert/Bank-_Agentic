@@ -35,18 +35,16 @@ public sealed class ResponseSanitizer
 {
     private readonly ILogger<ResponseSanitizer> _logger;
     private readonly TraceHub _hub;
-    private readonly IToolRegistry _registry;
     private readonly Regex _toolNamePattern;
 
     /// <summary>Temizlik sonrası metin tamamen boşaldığında kullanıcıya döndürülen güvenli varsayılan yanıt.</summary>
     private const string FallbackMessage = "Talebiniz işleniyor. Lütfen sorunuzu tekrar yazınız.";
 
-    public ResponseSanitizer(ILogger<ResponseSanitizer> logger, TraceHub hub, IToolRegistry? registry = null)
+    public ResponseSanitizer(ILogger<ResponseSanitizer> logger, TraceHub hub)
     {
         _logger = logger;
         _hub = hub;
-        _registry = registry ?? ToolRegistry.Instance;
-        _toolNamePattern = BuildToolNameRegex(_registry.GetAllSanitizableToolNames());
+        _toolNamePattern = BuildToolNameRegex(ToolRegistry.Instance.GetAllSanitizableToolNames());
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -103,6 +101,8 @@ public sealed class ResponseSanitizer
             @"|response_guidelines|guardrails|security_guardrails|available_tools" +
             @"|tool|workflow_guidelines|purpose|tone_of_voice|role|name" +
             @"|slot_filling_goal|state_retention_rules|interaction_rules" +
+            @"|candidate_workflows|previous_turn|scope|operating_rules|output_contract" +
+            @"|custom_instructions|required_parameters" +
             @"|step_\w+|examples?|thought_process|user_query|response_format" +
         @")\s*/?\s*>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant
@@ -112,7 +112,9 @@ public sealed class ResponseSanitizer
     private static readonly Regex XmlBlockPattern = new(
         @"<\s*(?<tag>context_state|active_workflow_rules|system_prompt|identity" +
         @"|routing_rules|security_guardrails|guardrails|available_tools|slot_filling_goal" +
-        @"|state_retention_rules|interaction_rules|workflow_guidelines|purpose)\s*>" +
+        @"|state_retention_rules|interaction_rules|workflow_guidelines|purpose" +
+        @"|candidate_workflows|previous_turn|scope|operating_rules|output_contract" +
+        @"|custom_instructions|required_parameters)\s*>" +
         @"[\s\S]*?" +
         @"<\s*/\s*\k<tag>\s*>",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant
@@ -358,7 +360,7 @@ public sealed class ResponseSanitizer
     /// Verilen araç adlarını büyük/küçük harf duyarsız ve kelime sınırlı olarak yakalayan derlenmiş
     /// bir regex üretir. Tırnak veya ters tırnak içine alınmış adlar da eşleşir.
     /// </summary>
-    /// <param name="internalToolNames">Maskelenecek dahili araç adları; <see cref="IToolRegistry"/>'den gelir.</param>
+    /// <param name="internalToolNames">Maskelenecek dahili araç adları; <see cref="ToolRegistry"/>'den gelir.</param>
     private static Regex BuildToolNameRegex(IEnumerable<string> internalToolNames)
     {
         // Araç adlarını escape edip alternation (|) ile birleştir.

@@ -4,12 +4,12 @@ using Banking.Agents.Specialists.Declarative;
 using Banking.Agents.Tracing;
 using Banking.Agents.Workflows.Declarative;
 using Banking.Agents.Workflows.Engine;
-using Banking.Domain.Campaigns;
 using Banking.Domain.Constants;
 using Banking.Domain.Workflows;
 using Banking.Gateway;
 using Banking.Gateway.Models;
 using Banking.Mcp.Registry;
+using Banking.Mcp.Semantic;
 
 namespace Banking.Host.Composition;
 
@@ -211,17 +211,17 @@ public static class ApiEndpoints
             })));
 
         // Araç kataloğu: uzman tanımlarken hangi MCP araçlarının seçilebileceğini arayüze verir
-        app.MapGet("/api/tools", (IToolRegistry toolRegistry) =>
-            Results.Ok(toolRegistry.GetAllTools()
+        app.MapGet("/api/tools", () =>
+            Results.Ok(ToolRegistry.Instance.GetAllTools()
                 .Where(tool => tool.Type == ToolType.Mcp)
                 .Select(tool => new { tool.Name, group = tool.Group.ToString(), tool.Description })));
 
-        // Kampanya senkronizasyonu: backend'den yeni kampanyaları çekip zero-downtime indeksler
+        // Kampanya senkronizasyonu: bankadan güncel kampanyaları çekip indeksi kesintisiz tazeler
         app.MapPost("/api/campaigns/sync", async (ICampaignSyncService syncService, TraceHub hub, CancellationToken ct) =>
         {
             var syncedCount = await syncService.SyncFromBackendAsync(ct);
             hub.Publish(TraceCategories.Workflow,
-                $"[CAMPAIGN SYNC] Backend senkronizasyonu tetiklendi → {syncedCount} kampanya eklendi/güncellendi");
+                $"[CAMPAIGN SYNC] Banka senkronizasyonu tetiklendi → {syncedCount} kampanya indekste");
             return Results.Ok(new { syncedCount });
         });
     }

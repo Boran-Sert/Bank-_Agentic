@@ -3,10 +3,8 @@ using Banking.Agents.Specialists;
 using Banking.Agents.Specialists.Declarative;
 using Banking.Agents.Workflows.Declarative;
 using Banking.Agents.Workflows.Engine;
-using Banking.Domain.Campaigns;
-using Banking.Domain.Financing;
-using Banking.Domain.MkCodes;
 using Banking.Domain.Workflows;
+using Banking.Mcp.Semantic;
 
 namespace Banking.Host.Composition;
 
@@ -36,9 +34,11 @@ public static class StartupLoader
         var services = scope.ServiceProvider;
 
         // Semantik mkCode, kampanya ve finansman indekslerini hafızaya al (soğuk başlangıç önleme).
-        services.GetRequiredService<SemanticMkCodeSearcher>().Initialize();
-        services.GetRequiredService<SemanticCampaignSearcher>().Initialize();
-        services.GetRequiredService<SemanticFinancingSearcher>().Initialize();
+        // Üç katalog da bankadan okunur; banka bu anda ayakta değilse indeks boş kalır ve ilgili
+        // araç ilk çağrıldığında yeniden dener — açılış bu yüzden durdurulmaz.
+        await services.GetRequiredService<SemanticMkCodeSearcher>().InitializeAsync();
+        await services.GetRequiredService<SemanticCampaignSearcher>().InitializeAsync();
+        await services.GetRequiredService<SemanticFinancingSearcher>().InitializeAsync();
 
         var workflowRegistry = services.GetRequiredService<WorkflowRegistry>();
 

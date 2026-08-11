@@ -9,7 +9,7 @@ namespace Banking.Agents.Sessions;
 /// <see cref="ISessionStore"/> arayüzünün tek süreçlik bellek içi uygulaması. Oturumlar kayan TTL
 /// ile tutulur; süresi dolan kayıt <see cref="IMemoryCache"/> tarafından tahliye edilir.
 /// <para>
-/// Süre <see cref="SessionOptions.SlidingTimeToLive"/>'dan gelir ve <b>sabit değildir</b>: pencerenin
+/// Süre <see cref="SessionStoreOptions.SlidingTimeToLive"/>'dan gelir ve <b>sabit değildir</b>: pencerenin
 /// uzunluğu kullanıcının iki mesajı arasında ne kadar duraklayabileceğini belirler, dolayısıyla
 /// dağıtım ortamına göre ayarlanabilir olmalıdır.
 /// </para>

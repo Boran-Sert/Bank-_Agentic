@@ -66,7 +66,7 @@ public sealed class WorkflowRegistry(
     {
         var workflowName = definition.Name.ToLowerInvariant();
 
-        _discoveredWorkflows[workflowName] = new WorkflowMetadata(workflowName, definition.Description);
+        _discoveredWorkflows[workflowName] = new WorkflowMetadata(workflowName, definition.Description, definition.Instructions);
 
         // Akışın kimliği ve nereye gideceği: tamamı YAML'dan, dört alan.
         var action = new WorkflowActionDefinition(

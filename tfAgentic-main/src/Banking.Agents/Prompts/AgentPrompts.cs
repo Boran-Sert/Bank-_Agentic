@@ -403,7 +403,17 @@ public static class AgentPrompts
     public static string BuildCandidateWorkflowsContext(IReadOnlyList<WorkflowMetadata> candidateWorkflows)
     {
         var candidateList = string.Join("\n", candidateWorkflows.Select(workflow =>
-            $"- workflowName: '{workflow.WorkflowName}' — {workflow.Description}"));
+        {
+            var instructionsSummary = string.IsNullOrWhiteSpace(workflow.Instructions)
+                ? ""
+                : workflow.Instructions.Split('\n').FirstOrDefault()?.Trim() ?? "";
+
+            return $"""
+            - workflowName: '{workflow.WorkflowName}'
+              Açıklama: {workflow.Description}
+              Talimat: {instructionsSummary}
+            """;
+        }));
 
         return $"""
         <candidate_workflows>

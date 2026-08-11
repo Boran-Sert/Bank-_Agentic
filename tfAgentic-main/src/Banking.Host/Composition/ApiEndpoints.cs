@@ -113,7 +113,7 @@ public static class ApiEndpoints
                 environment.ContentRootPath, StartupLoader.WorkflowsFolder, workflowName, content);
 
             // Yeni akışı anında RAG semantik indeksine al (sıfır soğuk başlangıç).
-            searcher.AddOrUpdate(new WorkflowMetadata(workflowName, definition.Description));
+            searcher.AddOrUpdate(new WorkflowMetadata(workflowName, definition.Description, definition.Instructions));
 
             hub.Publish(TraceCategories.Workflow,
                 $"[WORKFLOW REGISTERED] '{definition.Name}' ajanı çalışma zamanında eklendi ve diske kaydedildi",

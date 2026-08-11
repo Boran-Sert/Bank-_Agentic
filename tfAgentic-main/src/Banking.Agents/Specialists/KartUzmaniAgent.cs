@@ -1,12 +1,10 @@
-using System.Collections.Generic;
 using Banking.Agents.Prompts;
 using Banking.Domain.Constants;
 using Banking.Mcp.Registry;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
 
 namespace Banking.Agents.Specialists;
 
+/// <summary>Kredi kartı borcu, limit ve son ödeme tarihi sorularını yanıtlayan uzmanın kimlik kartı.</summary>
 public static class KartUzmaniAgent
 {
     public static AgentCard Card { get; } = new(
@@ -18,14 +16,4 @@ public static class KartUzmaniAgent
         A2ARoute: "kart",
         DisplayName: "Kart Uzmanı"
     );
-
-    /// <summary>
-    /// Kredi kartı uzmanı ajanını verilen sohbet istemcisi ve araçlar ile oluşturur.
-    /// </summary>
-    public static AIAgent Build(IChatClient chat, IList<AITool> cardTools) =>
-        chat.AsAIAgent(
-            instructions: Card.Instructions,
-            name: Card.Name,
-            description: Card.Description,
-            tools: cardTools);
 }

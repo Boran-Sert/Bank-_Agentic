@@ -1,12 +1,10 @@
-using System.Collections.Generic;
 using Banking.Agents.Prompts;
 using Banking.Domain.Constants;
 using Banking.Mcp.Registry;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
 
 namespace Banking.Agents.Specialists;
 
+/// <summary>Ekstre analizi ve semantik kampanya/finansman önerisi yapan uzmanın kimlik kartı.</summary>
 public static class AnalizUzmaniAgent
 {
     public static AgentCard Card { get; } = new(
@@ -18,14 +16,4 @@ public static class AnalizUzmaniAgent
         A2ARoute: "analiz",
         DisplayName: "Analiz Uzmanı"
     );
-
-    /// <summary>
-    /// Finansal analiz uzmanı ajanını verilen sohbet istemcisi ve araçlar ile oluşturur.
-    /// </summary>
-    public static AIAgent Build(IChatClient chat, IList<AITool> analyzeTools) =>
-        chat.AsAIAgent(
-            instructions: Card.Instructions,
-            name: Card.Name,
-            description: Card.Description,
-            tools: analyzeTools);
 }

@@ -68,9 +68,6 @@ public sealed class FlowRouter(
 
         var reply = await runtime.AskOrchestratorAsync(userMessage, cancellationToken);
 
-        if (session.HasActiveWorkflow)
-            hub.Publish(TraceCategories.FlowRouter, $"İş akışı başarıyla başlatıldı ve bağlandı: {session.SessionId}");
-
         return new FlowExecutionResult(FlowExecutionType.OrchestratorReply, OrchestratorReply: reply);
     }
 }

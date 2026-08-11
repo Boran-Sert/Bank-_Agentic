@@ -1,10 +1,8 @@
 kind: Prompt
 name: otomatik-odeme-talimati
 displayName: Otomatik Ödeme Talimatı Akışı
-description: Fatura veya kredi kartı ödemeleri için düzenli belirli periyodlarla gerçekleşen otomatik ödeme talimatları 
-  oluştutur.
+description: Fatura veya kredi kartı ödemeleri için otomatik ödeme talimatı oluşturur.
 instructions: |
-  Bu akış sadece kullanıcının otomatik olarak ödeme talimatları vermesi için kullanılır .
   Kullanıcının hangi kartını hangi hesaba bağlamak istediğini netleştir.
   Kart ve hesap kimliklerini kullanıcıya sorma; kartı kart uzmanına, hesabı hesap uzmanına
   danışarak bul, kullanıcı tarif ettiyse doğrudan eşle, tarif etmediyse seçenekleri sun.

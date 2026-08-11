@@ -6,4 +6,4 @@ namespace Banking.Domain.Workflows;
 /// </summary>
 /// <param name="WorkflowName">Akışın kanonik adı.</param>
 /// <param name="Description">Akışın açıklaması; semantik eşleştirme bu metin üzerinden yapılır.</param>
-public record WorkflowMetadata(string WorkflowName, string Description, string Instructions);
+public record WorkflowMetadata(string WorkflowName, string Description);

@@ -3,8 +3,7 @@ name: limit-artirim
 displayName: Kredi Kartı Limit Artırım Akışı
 description: Kullanıcının kredi kartı limitini artırma taleplerini ve gerekli tutar bilgilerini toplar.
 instructions: |
-  Bu akış sadece kredi kartı limiti arttırımı için kullanılacaktır .Kullanıcının hangi kartının limitini, 
-  hangi tutara çıkarmak istediğini netleştir.
+  Kullanıcının hangi kartının limitini, hangi tutara çıkarmak istediğini netleştir.
   Kart kimliğini kullanıcıya sorma; kart uzmanına danışarak bul, kullanıcı tarif ettiyse
   doğrudan eşle, tarif etmediyse seçenekleri sun.
 model:

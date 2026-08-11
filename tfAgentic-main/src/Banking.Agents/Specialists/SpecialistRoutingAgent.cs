@@ -38,8 +38,8 @@ public sealed class SpecialistRoutingAgent(
     public override string Description => "Gelen A2A isteğini yoldaki uzmana devreder.";
 
     /// <summary>
-    /// İstek yolundaki <c>route</c> değerinden hedef uzmanı çözer. Uzmanlar henüz kurulmamışsa
-    /// (A2A isteği ön ısıtmadan önce geldiyse) kurulum burada tamamlanır.
+    /// İstek yolundaki <c>route</c> değerinden hedef uzmanı çözer. Katalog henüz hazır değilse
+    /// (A2A isteği ön ısıtmadan önce geldiyse) hazırlık burada tamamlanır.
     /// </summary>
     /// <exception cref="InvalidOperationException">HTTP bağlamı olmadan çağrıldığında fırlatılır.</exception>
     private async Task<AIAgent> ResolveTargetAsync(CancellationToken cancellationToken)
@@ -54,7 +54,7 @@ public sealed class SpecialistRoutingAgent(
 
         await catalog.EnsureInitializedAsync(cancellationToken);
 
-        return catalog.GetSpecialistByA2ARoute(route);
+        return await catalog.GetSpecialistByA2ARouteAsync(route, cancellationToken);
     }
 
     protected override async ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken)

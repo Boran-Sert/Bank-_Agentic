@@ -44,10 +44,10 @@ public sealed class AgentRuntime(
     SpecialistCatalog specialistCatalog,
     NavigationTools navigationTools,
     McpToolProvider mcpToolProvider,
-    ISessionAccessor sessionAccessor,
+    AmbientSessionAccessor sessionAccessor,
     TracedChatClientFactory chatClientFactory,
     SemanticWorkflowSearcher workflowSearcher,
-    Lazy<WorkflowDispatcher> workflowDispatcher)
+    WorkflowRegistry workflowRegistry)
 {
     private readonly SemaphoreSlim _buildGate = new(1, 1);
     private AIAgent? _orchestrator;
@@ -104,6 +104,12 @@ public sealed class AgentRuntime(
     /// Orkestratör ajanını kartlardan ve araçlardan kurar. Sistem talimatı kullanıcıya veya isteğe
     /// özel bilgi içermediğinden tek örnek tüm istekleri karşılar; aday akışlar çalışma anında mesaj
     /// olarak iletilir.
+    /// <para>
+    /// <b>Önceki turun bağlamı bu metotta değil, ajanın kendi bağlam sağlayıcısında yönetilir</b>
+    /// (<see cref="ContextProviders.TopicContextProvider"/>). Sağlayıcı bağlamı konuşmanın kendisiyle
+    /// aynı yerde saklar; turdan önce ekleme ve turdan sonra saklama tek tipin içinde kalır ve iki
+    /// yarının ayrışması mümkün olmaz.
+    /// </para>
     /// </summary>
     private ChatClientAgent BuildOrchestrator()
     {
@@ -196,6 +202,7 @@ public sealed class AgentRuntime(
         var messages = new List<ChatMessage>();
         if (candidateWorkflows.Count > 0)
             messages.Add(new ChatMessage(ChatRole.System, AgentPrompts.BuildCandidateWorkflowsContext(candidateWorkflows)));
+
         messages.Add(new ChatMessage(ChatRole.User, userMessage));
 
         var restored = await AgentConversationStore.ResumeOrCreateAsync(
@@ -280,7 +287,12 @@ public sealed class AgentRuntime(
             ? message
             : "İş akışı başlatılıyor";
 
-        var stepResult = await workflowDispatcher.Value.StartWorkflowAsync(workflowName, initialMessage, cancellationToken);
+        // Boş ad sessizce bir akışa (örn. ödemeye) düşürülmez: yanlış akış başlatmak, hata
+        // vermekten çok daha tehlikelidir. Denetimi BeginWorkflow yapar ve istisna fırlatır.
+        sessionAccessor.Current.BeginWorkflow(workflowName);
+
+        var engine = await workflowRegistry.CreateEngineAsync(workflowName);
+        var stepResult = await engine.AdvanceWorkflowStepAsync(initialMessage, cancellationToken);
 
         return stepResult.Prompt ?? $"{workflowName} iş akışı başlatıldı.";
     }

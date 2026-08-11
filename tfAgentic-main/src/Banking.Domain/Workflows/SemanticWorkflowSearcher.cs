@@ -24,7 +24,7 @@ public sealed class SemanticWorkflowSearcher(LocalEmbedder embedder, ILogger<Sem
     private readonly SemanticIndex<WorkflowMetadata> _index = new(
         embedder,
         keySelector: workflow => workflow.WorkflowName,
-        textSelector: workflow => $"{workflow.WorkflowName}: {workflow.Description}",
+        textSelector: workflow => $"{workflow.WorkflowName}: {workflow.Description}, {workflow.Instructions}",
         SimilarityThreshold,
         logger,
         label: "Akış");

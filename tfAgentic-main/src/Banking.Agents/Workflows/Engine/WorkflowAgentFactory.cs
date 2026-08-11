@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Banking.Agents.Runtime;
@@ -11,6 +10,7 @@ using Banking.Domain.Constants;
 using Banking.Mcp.Registry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace Banking.Agents.Workflows.Engine;
 
@@ -21,11 +21,19 @@ namespace Banking.Agents.Workflows.Engine;
 /// ambient scope üzerinden erişirler. Bu nedenle ajan adı başına tek örnek yeterlidir ve her istek
 /// için yeniden ajan kurma maliyeti oluşmaz.
 /// </para>
+/// <para>
+/// <b>Önbellek süre sınırlıdır.</b> Akış tanımları çalışma zamanında YAML ile eklenebildiğinden ada
+/// göre büyüyen bir sözlüğün üst sınırı yoktur; nadiren kullanılan bir akışın ajanı
+/// <see cref="AgentOptions.AgentIdleTimeout"/> boyunca istenmezse bırakılır ve sonraki çağrıda
+/// yeniden kurulur.
+/// </para>
 /// </summary>
 public sealed class WorkflowAgentFactory(
     SpecialistCatalog specialistCatalog,
-    ISessionAccessor sessionAccessor,
+    AmbientSessionAccessor sessionAccessor,
     TracedChatClientFactory chatClientFactory,
+    AgentOptions options,
+    IMemoryCache agentCache,
     TraceHub hub)
 {
     private const string UpdateSlotToolName = "update_slot";
@@ -45,8 +53,6 @@ public sealed class WorkflowAgentFactory(
         TransformSchemaNode = (_, schema) =>
             schema.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? new JsonObject() : schema
     };
-
-    private readonly ConcurrentDictionary<string, CachedWorkflowAgent> _agentsByName = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Önbellekteki ajan ve kurulduğu andaki girdilerin parmak izi.
@@ -71,8 +77,10 @@ public sealed class WorkflowAgentFactory(
     {
         var specialistVersion = specialistCatalog.Version;
         var fingerprint = definition.Instructions ?? string.Empty;
+        var cacheKey = BuildCacheKey(definition.AgentName);
 
-        if (_agentsByName.TryGetValue(definition.AgentName, out var cached)
+        if (agentCache.TryGetValue(cacheKey, out CachedWorkflowAgent? cached)
+            && cached is not null
             && cached.SpecialistVersion == specialistVersion
             && string.Equals(cached.InstructionsFingerprint, fingerprint, StringComparison.Ordinal))
             return Task.FromResult(cached.Agent);
@@ -92,10 +100,31 @@ public sealed class WorkflowAgentFactory(
             }
         });
 
-        _agentsByName[definition.AgentName] = new CachedWorkflowAgent(agent, fingerprint, specialistVersion);
+        var entryOptions = new MemoryCacheEntryOptions { SlidingExpiration = options.AgentIdleTimeout };
+        entryOptions.RegisterPostEvictionCallback(PublishEviction, definition.AgentName);
+
+        agentCache.Set(cacheKey, new CachedWorkflowAgent(agent, fingerprint, specialistVersion), entryOptions);
 
         return Task.FromResult(agent);
     }
+
+    /// <summary>
+    /// Tahliye edilen iş akışı ajanını ize yazar. Tahliye kullanıcıya hata olarak görünmez; bu satır
+    /// olmadan sonraki isteğin neden geciktiği okunamaz.
+    /// </summary>
+    private void PublishEviction(object key, object? value, EvictionReason reason, object? state)
+    {
+        if (reason is EvictionReason.Replaced or EvictionReason.Removed) return;
+
+        hub.Publish(TraceCategories.Workflow,
+            $"Akış ajanı bırakıldı ({reason}) → {state} | sonraki istekte yeniden kurulacak");
+    }
+
+    /// <summary>
+    /// Önbellek anahtarını üretir. Aynı <see cref="IMemoryCache"/> örneği oturumlar ve uzman
+    /// ajanlarıyla paylaşıldığından anahtarlar ön ekle ayrıştırılır.
+    /// </summary>
+    private static string BuildCacheKey(string agentName) => $"workflow-agent:{agentName}";
 
     /// <summary>
     /// Akış ajanının araç kümesini kurar: uzman köprüleri ve motorun denetim araçları.
@@ -183,18 +212,20 @@ public sealed class WorkflowAgentFactory(
             () =>
             {
                 var session = sessionAccessor.Current;
-                var construction = session.ConstructSlots();
+                var slotStatus = session.GetSlotStatus();
 
-                if (!construction.IsComplete)
+                if (!slotStatus.IsComplete)
                 {
-                    hub.Publish(TraceCategories.Workflow, $"Teklif reddedildi → {construction.DescribeProblems()}");
-                    return $"ERROR: Teklif oluşturulamadı ({construction.DescribeProblems()}). Bu alanları kullanıcıdan tekrar iste.";
+                    hub.Publish(TraceCategories.Workflow, $"Teklif reddedildi → {slotStatus.DescribeProblems()}");
+                    return $"ERROR: Teklif oluşturulamadı ({slotStatus.DescribeProblems()}). Bu alanları kullanıcıdan tekrar iste.";
                 }
 
-                session.StoreProposedSlots(session.ActiveWorkflowName ?? definition.AgentName, construction.Slots!);
+                var proposedSlots = slotStatus.ToProposedSlots();
+
+                session.StoreProposedSlots(session.ActiveWorkflowName ?? definition.AgentName, proposedSlots);
                 hub.Publish(TraceCategories.Workflow, $"{definition.AgentName} parametreleri onaya hazır");
 
-                return WorkflowAgentSignals.ProposalReady + JsonSerializer.Serialize(construction.Slots);
+                return WorkflowAgentSignals.ProposalReady + JsonSerializer.Serialize(proposedSlots);
             },
             new AIFunctionFactoryOptions
             {

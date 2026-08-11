@@ -17,15 +17,28 @@ namespace Banking.Agents.Workflows.Actions;
 /// <b>Bankacılık kuralı içermez.</b> Tutar karşılaştırması, limit denetimi ve IBAN doğrulaması
 /// bankanın kendi uçlarına aittir; buraya taşınmaları kuralın iki yerde tutulması anlamına gelir.
 /// </para>
+/// <para>
+/// <b><see cref="ExecuteAsync"/> hiçbir koşulda istisna sızdırmaz.</b> Banka reddi ve ağ hatası dâhil
+/// tüm başarısızlıklar <see cref="WorkflowOutcome.Failure"/> olarak döner. Bu zorunludur: eylem MAF
+/// grafiğinin içinde çalışır ve oradan fırlayan bir istisna çağırana ulaşmaz, event akışına düşer.
+/// </para>
 /// </summary>
-public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub) : IDeterministicActionExecutor
+public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
 {
+    /// <summary>Toplanan slotlardan kullanıcıya gösterilecek onay ekranını üretir.</summary>
+    /// <param name="action">Akışın kimliği ve ekran kodu.</param>
+    /// <param name="slots">Onaya sunulacak slot kümesi.</param>
     public GenericConfirmationView BuildConfirmationView(
         WorkflowActionDefinition action, IReadOnlyDictionary<string, object?> slots) =>
         new(action.WorkflowName,
             new Dictionary<string, object?>(slots, StringComparer.OrdinalIgnoreCase),
             action.MkCode);
 
+    /// <summary>Kullanıcının onay kararını uygular ve sonucu <see cref="WorkflowOutcome"/> olarak döner.</summary>
+    /// <param name="action">Akışın kimliği, HTTP metodu ve hedef yolu.</param>
+    /// <param name="slots">Onaya sunulmuş slot kümesi.</param>
+    /// <param name="approved">Kullanıcının onay kararı. <c>false</c> ise bankaya istek gönderilmez.</param>
+    /// <param name="cancellationToken">İptal jetonu.</param>
     public async ValueTask<WorkflowOutcome> ExecuteAsync(
         WorkflowActionDefinition action,
         IReadOnlyDictionary<string, object?> slots,
@@ -78,16 +91,8 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub) : ID
     }
 
     /// <summary>
-    /// Bankanın ham yanıtından akıştan bağımsız tek bir makbuz sonucu üretir.
-    /// <para>
-    /// Akışa özel makbuz tipi veya başarı metni yoktur: banka ne döndürdüyse o taşınır ve kullanıcıya
-    /// gösterilecek cümle akışın YAML'daki görünen adından kurulur. Yeni bir akış eklemek bu metodu
-    /// değiştirmez.
-    /// </para>
-    /// <para>
-    /// <b>Makbuz numarası yalnızca bankadan gelir.</b> Banka numara döndürmediyse makbuz üretilmez;
-    /// bu katman numara türetmez.
-    /// </para>
+    /// Bankanın ham yanıtından akıştan bağımsız tek bir makbuz sonucu üretir. Makbuz numarası
+    /// yalnızca bankadan gelir; banka döndürmediyse bu katman numara türetmez.
     /// </summary>
     private static WorkflowOutcome BuildReceipt(WorkflowActionDefinition action, JsonElement bankResponse)
     {

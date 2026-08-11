@@ -35,14 +35,36 @@ public delegate Task<string> OrchestratorFallback(string userMessage, Cancellati
 /// <see cref="SessionContext"/>'tedir. Bu sayede herhangi bir sunucu örneği herhangi bir isteği
 /// karşılayabilir ve bellekte asılı kalan konuşma nesnesi oluşmaz.
 /// </para>
+/// <para>
+/// <b>Ajanın turu, kontrol sırası bağlayıcı olan bir yorumlamadan geçer</b>
+/// (<see cref="InterpretAgentOutputAsync"/>): iptal her şeyden, devretme teklif kontrollerinden,
+/// teklif de soru üretmekten önce gelir. Karar ajanın araç çağrılarından okunur — oturuma yazılan
+/// sinyal ve slot durumundan, yanıt metninden değil; model araç sonucunu metnine kopyalamaz, kendi
+/// cümlesini kurar ve serbest metinde sinyal aramak bu yüzden güvenilir değildir.
+/// </para>
+/// <para>
+/// <b>Onay kapısı yalnızca bankaya istek gönderen akışlar için kurulur</b>
+/// (<see cref="ConcludeSlotFillingAsync"/>). Gerekçe para hareketidir
+/// (<see cref="WorkflowActionDefinition.CallsBank"/>): hedef yolu tanımlanmamış bir akış bankayı hiç
+/// çağırmaz, onaylanacak bir işlem olmadığı hâlde kullanıcıyı ödeme onayı ekranına götürmek
+/// gerçekleşmeyecek bir işlemi gerçekleşecekmiş gibi gösterir. Onaya çıkan yolda MAF grafiği burada
+/// başlatılmaz; onay gelene kadar sunucuda askıda bir çalıştırma tutulmadığından yapışkan oturum
+/// (sticky session) gerekmez.
+/// </para>
+/// <para>
+/// <b>Anlaşılmayan onay yanıtı onay sayılmaz</b> (<see cref="ApplyApprovalDecisionAsync"/>); akış
+/// onay evresinde bekletilir ve soru tekrarlanır. Aynı teklif için ikinci kez onay geldiğinde eylem
+/// yeniden çalıştırılmaz, saklanan sonuç döner — çift tıklamanın çift tahsilata dönüşmesini engelleyen
+/// idempotency kontrolü budur.
+/// </para>
 /// </summary>
 public sealed class WorkflowEngine(
     SessionContext session,
     WorkflowActionDefinition action,
     AIAgent workflowAgent,
-    IDeterministicActionExecutor actionExecutor,
+    RestWorkflowExecutor actionExecutor,
     OrchestratorFallback orchestratorFallback,
-    TraceHub hub) : IWorkflowEngine
+    TraceHub hub)
 {
     /// <summary>
     /// Akışı bir adım ilerletir. İçinde bulunulan evre oturumdan okunur; çağıranın evreyi bilmesi
@@ -103,15 +125,7 @@ public sealed class WorkflowEngine(
         return await InterpretAgentOutputAsync(agentText, answer, cancellationToken);
     }
 
-    /// <summary>
-    /// Ajanın turunu yorumlar ve akışın bir sonraki adımına karar verir. Kontrol sırası bağlayıcıdır:
-    /// iptal her şeyden, devretme teklif kontrollerinden, teklif de soru üretmekten önce gelir.
-    /// <para>
-    /// <b>Karar ajanın araç çağrılarından okunur</b> — oturuma yazılan sinyal ve slot durumundan,
-    /// yanıt metninden değil. Model araç sonucunu metnine kopyalamaz, kendi cümlesini kurar;
-    /// serbest metinde sinyal aramak bu nedenle güvenilir değildir.
-    /// </para>
-    /// </summary>
+    /// <summary>Ajanın turunu yorumlar ve akışın bir sonraki adımına karar verir.</summary>
     private async Task<WorkflowStepResult> InterpretAgentOutputAsync(
         string? agentText, string userMessage, CancellationToken cancellationToken)
     {
@@ -158,20 +172,7 @@ public sealed class WorkflowEngine(
     // 3. EVRE — ONAY (HITL)
     // =================================================================================
 
-    /// <summary>
-    /// Parametreler tamamlandığında akışı sonlandırma yoluna sokar: <b>onay kapısı yalnızca bankaya
-    /// istek gönderen akışlar için kurulur.</b>
-    /// <para>
-    /// Kapının gerekçesi para hareketidir (<see cref="WorkflowActionDefinition.CallsBank"/>). Hedef
-    /// yolu tanımlanmamış bir akış bankayı hiç çağırmaz; onaylanacak bir işlem olmadığı hâlde
-    /// kullanıcıyı ödeme onayı ekranına götürmek, gerçekleşmeyecek bir işlemi gerçekleşecekmiş gibi
-    /// gösterir. Ayrım YAML'daki <c>action.path</c> alanından okunur; akış adı veya türü sorulmaz.
-    /// </para>
-    /// <para>
-    /// Onaya çıkan yolda <b>MAF grafiği burada başlatılmaz:</b> onay gelene kadar sunucuda askıda bir
-    /// çalıştırma tutulmaz, bu yüzden yapışkan oturum (sticky session) gerekmez.
-    /// </para>
-    /// </summary>
+    /// <summary>Parametreler tamamlandığında akışı sonlandırma yoluna sokar.</summary>
     private async Task<WorkflowStepResult> ConcludeSlotFillingAsync(
         Dictionary<string, object?> slots, CancellationToken cancellationToken)
     {
@@ -199,14 +200,7 @@ public sealed class WorkflowEngine(
         return WorkflowStepResult.AwaitApproval(session.SessionId, confirmationView);
     }
 
-    /// <summary>
-    /// Kullanıcının onay yanıtını uygular.
-    /// <para>
-    /// <b>Anlaşılmayan yanıt onay sayılmaz;</b> akış onay evresinde bekletilir ve soru tekrarlanır.
-    /// Aynı teklif için ikinci kez onay geldiğinde eylem yeniden çalıştırılmaz, saklanan sonuç
-    /// döner: çift tıklamanın çift tahsilata dönüşmesini engelleyen idempotency kontrolü budur.
-    /// </para>
-    /// </summary>
+    /// <summary>Kullanıcının onay yanıtını uygular.</summary>
     private async Task<WorkflowStepResult> ApplyApprovalDecisionAsync(string? userMessage, CancellationToken cancellationToken)
     {
         var intent = ApprovalIntentParser.Parse(userMessage ?? string.Empty);

@@ -23,8 +23,8 @@ namespace Banking.Agents.Workflows.Engine;
 /// </summary>
 public sealed class WorkflowRegistry(
     WorkflowAgentFactory workflowAgentFactory,
-    ISessionAccessor sessionAccessor,
-    IDeterministicActionExecutor actionExecutor,
+    AmbientSessionAccessor sessionAccessor,
+    RestWorkflowExecutor actionExecutor,
     Lazy<OrchestratorFallback> orchestratorFallback,
     TraceHub hub)
 {
@@ -88,7 +88,7 @@ public sealed class WorkflowRegistry(
 
     /// <summary>Adı verilen akış için bu isteğe ait motoru üretir.</summary>
     /// <exception cref="KeyNotFoundException">Verilen ad kayıtlı bir akışa karşılık gelmediğinde fırlatılır.</exception>
-    public async Task<IWorkflowEngine> CreateEngineAsync(string workflowName)
+    public async Task<WorkflowEngine> CreateEngineAsync(string workflowName)
     {
         if (_workflows.TryGetValue(workflowName, out var registered))
             return await BuildEngineAsync(registered);
@@ -102,7 +102,7 @@ public sealed class WorkflowRegistry(
     /// Kayıttan bu isteğe ait motoru kurar. Sıra bağlayıcıdır: önce şema oturuma tanıtılır, sonra
     /// ajan kimliği kurulur, en son motor bağlanır.
     /// </summary>
-    private async Task<IWorkflowEngine> BuildEngineAsync(RegisteredWorkflow registered)
+    private async Task<WorkflowEngine> BuildEngineAsync(RegisteredWorkflow registered)
     {
         var session = sessionAccessor.Current;
 

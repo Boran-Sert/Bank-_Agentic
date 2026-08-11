@@ -2,7 +2,7 @@ kind: Workflow
 name: money-transfer
 displayName: Para Transferi
 description: IBAN'a para transferi, EFT ve havale işlemleri.
-mkCode: TransferMenu
+mkCode: TransferWithIBAN
 instructions: |
   Kullanıcının parayı hangi hesaptan göndereceğini, hedef IBAN'ı ve tutarı netleştir.
   Kaynak hesap kimliğini kullanıcıya sorma; hesap uzmanına danışarak bul, kullanıcı tarif

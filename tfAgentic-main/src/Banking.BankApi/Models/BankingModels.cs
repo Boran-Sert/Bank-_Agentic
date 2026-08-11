@@ -85,3 +85,15 @@ public record TransferReceipt(
     decimal RemainingBalance,
     string Status);
 
+
+/// <summary>
+/// Bankanın mobil uygulamasındaki bir ekranın kodu ve görünen adı.
+/// </summary>
+/// <param name="Value">Ekranı açan kod (örn. <c>CardPaymentSubMenu</c>).</param>
+/// <param name="Label">Ekranın kullanıcıya görünen adı.</param>
+/// <param name="Keywords">
+/// Bankanın bu ekran için tanımladığı arama takma adları. Kullanıcı ekranı çoğu zaman resmî adıyla
+/// değil yapmak istediği işle arar ("ekstre", "nakit avans"); anlamsal aramanın isabetini belirleyen
+/// asıl metin budur.
+/// </param>
+public record MkCodeItem(string Value, string Label, IReadOnlyList<string> Keywords);

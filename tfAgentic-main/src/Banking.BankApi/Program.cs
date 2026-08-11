@@ -33,6 +33,7 @@ builder.Services.AddSingleton<ITransferService, TransferService>();
 builder.Services.AddSingleton<IAnalyzeService, AnalyzeService>();
 builder.Services.AddSingleton<ICampaignCatalogService, CampaignCatalogService>();
 builder.Services.AddSingleton<IFinancingCatalogService, FinancingCatalogService>();
+builder.Services.AddSingleton<IMkCodeCatalogService, MkCodeCatalogService>();
 
 var app = builder.Build();
 
@@ -156,6 +157,10 @@ app.MapPost("/api/financing-options", (FinancingRequest? request, IFinancingCata
     Results.Ok(string.IsNullOrWhiteSpace(request?.Type)
         ? financingCatalog.GetAllFinancingOptions()
         : financingCatalog.FindFinancingOptionsByType(request.Type)));
+
+// Ekran kodu kataloğu. Gövde alınmaz: liste müşteriye göre değişmez, bankanın yüzeyini tarif eder.
+app.MapPost("/api/mkcodes", (IMkCodeCatalogService mkCodeCatalog) =>
+    Results.Ok(mkCodeCatalog.GetAllMkCodes()));
 
 // ---------- PARA HAREKETİ ----------------------------------------------------
 // Gövde anahtarları çağıran tarafın topladığı parametre adlarıyla birebir aynıdır; eşleme yok.

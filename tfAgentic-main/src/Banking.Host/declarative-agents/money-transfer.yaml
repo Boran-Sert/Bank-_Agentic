@@ -4,6 +4,7 @@ displayName: Para Transferi
 description: IBAN'a para transferi, EFT ve havale işlemleri.
 mkCode: TransferWithIBAN
 instructions: |
+  Bu akış sadece para aktırımı işlemleri için kullanılır (HAVALE, EFT vb.).
   Kullanıcının parayı hangi hesaptan göndereceğini, hedef IBAN'ı ve tutarı netleştir.
   Kaynak hesap kimliğini kullanıcıya sorma; hesap uzmanına danışarak bul, kullanıcı tarif
   ettiyse doğrudan eşle, tarif etmediyse seçenekleri sun. Açıklama zorunlu değildir.

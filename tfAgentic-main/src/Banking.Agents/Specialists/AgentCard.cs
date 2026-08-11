@@ -6,8 +6,8 @@ namespace Banking.Agents.Specialists;
 /// Bir uzman ajanın kimlik kartı ve <b>uzman hakkındaki tek doğruluk kaynağı</b>: keşif, MCP araç
 /// kapsamı, orkestratörün göreceği köprü aracı ve A2A adresi bu kayıttan türetilir.
 /// <para>
-/// Yeni bir uzman eklemek için statik <c>Card</c> ve <c>Build</c> üyeleri taşıyan bir sınıf yazmak
-/// yeterlidir; yönlendirme kodunda değişiklik gerekmez.
+/// Yeni bir uzman eklemek için statik <c>Card</c> özelliği taşıyan bir sınıf yazmak yeterlidir;
+/// kurulum kartın kendisinden yapılır, yönlendirme kodunda değişiklik gerekmez.
 /// </para>
 /// </summary>
 /// <param name="Name">Uzmanın benzersiz adı (örn. <c>HesapUzmani</c>).</param>

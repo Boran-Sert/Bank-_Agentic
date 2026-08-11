@@ -131,6 +131,25 @@ public static class AgentPrompts
     public const string SlotTurnDirective =
         "(Bu mesajda dayanağı olan parametrelerin hepsini şimdi kaydet; kalan eksikleri tek mesajda sor.)";
 
+    /// <summary>
+    /// Araçların tek turda toplanmasını isteyen çalışma kuralı. Uzman talimatlarının
+    /// <c>operating_rules</c> bloğuna girer.
+    /// <para>
+    /// <b>Maliyeti belirleyen mesaj başına model turudur.</b> Model birbirine bağlı olmayan iki aracı
+    /// sırayla çağırdığında ikinci çağrı için yeni bir tur harcanır; aynı turda çağırdığında harcanmaz.
+    /// Kural <see cref="SlotTurnDirective"/> ile aynı ilkeyi araç tarafında söyler.
+    /// </para>
+    /// <para>
+    /// <b>Kural araç adı veya alan adı saymaz.</b> Sayılan bir liste, listeye girmemiş her araç için
+    /// kuralı sessizce geçersiz kılar ve yeni araç eklendiğinde güncellenmesi hatırlanmayan bir yer
+    /// daha oluşturur. Bağımlılık ayrımını modelin yapması gerekir; bir aracın girdisi diğerinin
+    /// çıktısıysa sıra zaten zorunludur.
+    /// </para>
+    /// </summary>
+    private const string SingleTurnToolUse =
+        "İhtiyacın olan araçlardan birbirine bağlı olmayanları aynı turda birlikte çağır; " +
+        "yalnızca bir aracın girdisi başka bir aracın sonucundan geliyorsa sıraya koy.";
+
     /// <summary>Kullanıcıya dönük tüm yanıtların uyduğu ortak biçim ve sunum sözleşmesi.</summary>
     public const string PresentationContract =
         """
@@ -200,6 +219,7 @@ public static class AgentPrompts
         - Her cevabın dayanağı araçlardan dönen güncel veridir; konuşmanın önceki turlarında geçen bir tutarı güncel varsayma, yeniden sorgula.
         - Bir kayda ihtiyacın varsa önce ilgili listeleme aracını çağır. Hangi kaydın kastedildiği net değilse seçenekleri sun ve kullanıcıya sor.
         - Araç boş sonuç dönerse durumu olduğu gibi bildir; eksik veriyi tahminle tamamlama.
+        - {SingleTurnToolUse}
         - Sorulan bilgiyle sınırlı kal; istenmeyen ek analiz veya öneri üretme.
         </operating_rules>
 
@@ -228,6 +248,7 @@ public static class AgentPrompts
         - Bir karta ihtiyacın varsa önce ilgili listeleme aracını çağır. Hangi kartın kastedildiği net değilse seçenekleri sun ve kullanıcıya sor.
         - Kullanıcı ödeme yapmak isterse tutarı veya kaydı sen belirleme; talebi karşılamadığını belirt, işlemi ilgili akış yürütür.
         - Araç boş sonuç dönerse durumu olduğu gibi bildir; eksik veriyi tahminle tamamlama.
+        - {SingleTurnToolUse}
         </operating_rules>
 
         <output_contract>
@@ -256,6 +277,7 @@ public static class AgentPrompts
         - Kampanya aramasını YALNIZCA kullanıcı kampanya, indirim veya öneri istediğinde yap; sistem bir önceki turda kampanya konuşulduğunu bildiriyorsa bunu açık talep say. Salt analiz sorusuna kendiliğinden kampanya ekleme.
         - Kampanyayı araçtan geldiği gibi sun: adı, koşulu ve geçerlilik tarihi; koşul veya tarih uydurma, genişletme.
         - Her bulguyu dayandığı veriye bağla (hangi kategori, hangi oran); veriye dayanmayan genel geçer tavsiye verme.
+        - {SingleTurnToolUse}
         </operating_rules>
 
         <output_contract>

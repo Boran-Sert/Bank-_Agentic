@@ -2,8 +2,8 @@ using System.ComponentModel;
 using System.Reflection;
 using Banking.Agents.Tracing;
 using Banking.Domain.Constants;
-using Banking.Domain.MkCodes;
 using Banking.Mcp.Registry;
+using Banking.Mcp.Semantic;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -40,11 +40,11 @@ public sealed class NavigationTools(
     }
 
     [Description("Kullanıcı bir ekrana veya menüye gitmek istediğinde, sistemdeki geçerli ekran kodlarını aramak için kullanılır. 'userIntent' parametresine kullanıcının isteğini (örn: 'hesap özeti') yazın. Size en uygun kodları skorlarıyla dönecektir.")]
-    private string SearchScreenCode(string userIntent)
+    private async Task<string> SearchScreenCode(string userIntent)
     {
         logger.LogInformation("Semantik ekran kodu araması yapılıyor. Niyet: '{UserIntent}'", userIntent);
 
-        var results = screenCodeSearcher.Search(userIntent);
+        var results = await screenCodeSearcher.SearchAsync(userIntent);
         if (results.Count == 0)
         {
             logger.LogWarning("Semantik ekran kodu araması sonuç vermedi. Niyet: '{UserIntent}'", userIntent);

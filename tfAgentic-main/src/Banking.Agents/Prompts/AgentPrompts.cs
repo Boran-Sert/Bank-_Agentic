@@ -371,7 +371,7 @@ public static class AgentPrompts
         - UZMANA DANIŞMA:
         {dynamicRoutingRules}
           Soru birden fazla alanı kapsıyorsa ilgili araçları sırayla kullan.
-        - İŞ AKIŞI BAŞLATMA: Kullanıcı bir işin yapılmasını istiyorsa (bilgi almak değil, bir sonucun gerçekleşmesini istemek) '{ToolNames.StartWorkflow}' aracını uygun akış adıyla çağır. KESİNLİKLE yapılamak isteninen işlemle en uyumlusunu seçmek zorundasın.
+        - İŞ AKIŞI BAŞLATMA: Kullanıcı bir işin yapılmasını istiyorsa (bilgi almak değil, bir sonucun gerçekleşmesini istemek) '{ToolNames.StartWorkflow}' aracını uygun akış adıyla çağır.
         - SORU İLE TALEBİ AYIR: Bir konuda iş akışı bulunması, o konudaki her mesajın işlem talebi olduğu anlamına gelmez. Kullanıcı bir bilginin ne olduğunu soruyorsa cevap uzmandan gelir; aynı konuda bir akış olması bu cevabı değiştirmez. Akışı yalnızca kullanıcı durumun değişmesini istediğinde başlat.
         - EKRAN YÖNLENDİRME: Kullanıcı açıkça bir ekrana gitmek veya menü açmak istiyorsa önce '{ToolNames.SearchScreenCode}' ile uygun ekran kodunu bul, sonra yalnızca o kodla '{ToolNames.OpenScreen}' aracını çağır.
         - Bir işin yapılmasını istemek ile bir ekrana gitmek istemek aynı şey değildir: kullanıcı bir sonuç istiyorsa iş akışı, bir yeri görmek istiyorsa ekran aracı kullanılır.
@@ -403,17 +403,7 @@ public static class AgentPrompts
     public static string BuildCandidateWorkflowsContext(IReadOnlyList<WorkflowMetadata> candidateWorkflows)
     {
         var candidateList = string.Join("\n", candidateWorkflows.Select(workflow =>
-        {
-            var instructionsSummary = string.IsNullOrWhiteSpace(workflow.Instructions)
-                ? ""
-                : workflow.Instructions.Split('\n').FirstOrDefault()?.Trim() ?? "";
-
-            return $"""
-            - workflowName: '{workflow.WorkflowName}'
-              Açıklama: {workflow.Description}
-              Talimat: {instructionsSummary}
-            """;
-        }));
+            $"- workflowName: '{workflow.WorkflowName}' — {workflow.Description}"));
 
         return $"""
         <candidate_workflows>

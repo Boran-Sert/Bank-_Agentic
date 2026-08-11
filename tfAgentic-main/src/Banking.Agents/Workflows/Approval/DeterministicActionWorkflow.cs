@@ -1,5 +1,6 @@
 using Banking.Agents.Tracing;
 using Banking.Agents.Workflows.Actions;
+using Banking.Agents.Workflows.Engine;
 using Banking.Domain.Constants;
 using Microsoft.Agents.AI.Workflows;
 
@@ -29,7 +30,7 @@ public static class DeterministicActionWorkflow
     public static Workflow Build(
         WorkflowActionDefinition action,
         IReadOnlyDictionary<string, object?> slots,
-        IDeterministicActionExecutor actionExecutor,
+        RestWorkflowExecutor actionExecutor,
         TraceHub hub,
         bool requiresApproval = true)
     {
@@ -62,7 +63,7 @@ internal sealed class DeterministicActionStep(
     string id,
     WorkflowActionDefinition action,
     IReadOnlyDictionary<string, object?> slots,
-    IDeterministicActionExecutor actionExecutor,
+    RestWorkflowExecutor actionExecutor,
     TraceHub hub)
     : Executor<bool, WorkflowOutcome>(id)
 {

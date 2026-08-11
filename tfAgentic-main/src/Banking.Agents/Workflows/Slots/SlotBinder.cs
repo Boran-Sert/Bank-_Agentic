@@ -14,6 +14,19 @@ public sealed record SlotStatus(
     /// <summary>Zorunlu slotların tamamının dolu olduğunu belirtir. Opsiyonel slotlar tamlığı etkilemez.</summary>
     public bool IsComplete => MissingSlots.Count == 0;
 
+    /// <summary>
+    /// Onaya sunulacak slot kümesini üretir: değeri girilmiş slotlar. <see cref="IsComplete"/>
+    /// doğrulanmadan çağrılırsa eksik slotlar kümede hiç görünmez — kontrol çağırana aittir.
+    /// </summary>
+    public Dictionary<string, object?> ToProposedSlots() =>
+        FilledSlots.ToDictionary(slot => slot.Key, slot => (object?)slot.Value, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Eksik slotları, ajanın kullanıcıya tekrar sorabileceği biçimde özetler.</summary>
+    public string DescribeProblems() =>
+        MissingSlots.Count == 0
+            ? "Tüm zorunlu alanlar dolu."
+            : $"eksik alanlar: {string.Join(", ", MissingSlots)}";
+
     /// <summary>Durumu, ajanın turuna eklenecek tek satırlık özete çevirir.</summary>
     public string Describe()
     {
@@ -78,31 +91,11 @@ internal static class SlotBinder
     }
 
     /// <summary>
-    /// Onaya sunulacak slot kümesini kurar. Zorunlu bir slot eksikse küme kurulmaz ve hangi
-    /// slotların sorulması gerektiği çağırana bildirilir.
-    /// </summary>
-    public static SlotConstructionResult Construct(
-        IReadOnlyDictionary<string, object?> slotValues,
-        IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
-    {
-        var status = GetStatus(slotValues, expectedSlots);
-
-        if (!status.IsComplete)
-            return new SlotConstructionResult(null, status.MissingSlots);
-
-        var slots = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (slotName, slotValue) in status.FilledSlots)
-            slots[slotName] = slotValue;
-
-        return new SlotConstructionResult(slots, []);
-    }
-
-    /// <summary>
     /// Değerlendirmeye alınacak slot adlarının birleşimini çözer: toplanan anahtarlar ve şemadaki
     /// slotlar. <b>Şemada olmayan ancak model tarafından yazılmış anahtarlar da görünür kalır;</b>
     /// sessizce düşürülmeleri, modelin yanlış slot adı ürettiği durumları teşhis edilemez kılar.
     /// </summary>
-    private static IEnumerable<string> ResolveSlotNames(
+    private static HashSet<string> ResolveSlotNames(
         IReadOnlyDictionary<string, object?> slotValues,
         IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
     {

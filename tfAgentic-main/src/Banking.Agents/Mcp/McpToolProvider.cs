@@ -20,18 +20,31 @@ namespace Banking.Agents.Mcp;
 /// <see cref="ToolGroup"/> grubundaki araçları görür. Bu sınırlama hem hatanın etki alanını hem de
 /// talimat maliyetini küçültür.
 /// </para>
+/// <para>
+/// <b><see cref="GetTracedToolsByNamesAsync"/> bilinmeyen bir araç adını sessizce atlamaz.</b>
+/// Atlanması durumunda, ada göre araç seçen deklaratif bir uzman sahip olduğunu varsaydığı araç
+/// olmadan çalışmaya devam eder ve kullanıcıya nedeni görünmeyen bir yetersizlik yanıtı döner.
+/// </para>
 /// </summary>
 public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<McpToolProvider> logger)
     : IAsyncDisposable
 {
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
-    private readonly IToolRegistry _registry = ToolRegistry.Instance;
+    private readonly ToolRegistry _registry = ToolRegistry.Instance;
 
     private McpClient? _client;
     private IList<McpClientTool>? _discoveredTools;
 
     /// <summary>Keşfedilen toplam MCP aracı sayısı. Bağlantı kurulmadan önce sıfırdır; tanılamada raporlanır.</summary>
     public int DiscoveredToolCount { get; private set; }
+
+    /// <summary>
+    /// MCP bağlantısını kurar ve kayıt defterini doğrular. Ajan kurulmadan çağrılabilir; ön ısıtma
+    /// pahalı olan loopback bağlantısını bu yolla üstlenir.
+    /// </summary>
+    /// <param name="cancellationToken">İptal jetonu.</param>
+    public async Task EnsureConnectionReadyAsync(CancellationToken cancellationToken = default) =>
+        await EnsureConnectedAsync(cancellationToken);
 
     /// <summary>
     /// Verilen gruptaki MCP araçlarını izleme sarmalayıcısıyla döner. İlk çağrı MCP bağlantısını kurar.
@@ -57,11 +70,6 @@ public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<
     /// <summary>
     /// Adları verilen MCP araçlarını izleme sarmalayıcısıyla döner. Çalışma zamanında tanımlanan
     /// uzmanlar kapsamlarını grup yerine tek tek araç seçerek belirler.
-    /// <para>
-    /// <b>Bilinmeyen bir araç adı sessizce atlanmaz.</b> Atlanması durumunda uzman, sahip olduğunu
-    /// varsaydığı araç olmadan çalışmaya devam eder ve kullanıcıya nedeni görünmeyen bir yetersizlik
-    /// yanıtı döner.
-    /// </para>
     /// </summary>
     /// <param name="toolNames">Alınacak araçların adları.</param>
     /// <param name="cancellationToken">İptal jetonu.</param>

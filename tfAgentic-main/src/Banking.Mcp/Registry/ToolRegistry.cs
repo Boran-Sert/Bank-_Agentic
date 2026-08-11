@@ -14,7 +14,7 @@ namespace Banking.Mcp.Registry;
 /// araç listesinin uyumu <see cref="ValidateDiscoveredMcpTools"/> ile başlangıçta doğrulanır.
 /// </para>
 /// </summary>
-public sealed class ToolRegistry : IToolRegistry
+public sealed class ToolRegistry
 {
     private static readonly Lazy<ToolRegistry> InstanceLazy = new(() =>
     {
@@ -25,9 +25,15 @@ public sealed class ToolRegistry : IToolRegistry
     });
 
     /// <summary>
-    /// Kayıt defterinin tekil örneği. İlk erişimde derleme taranır ve araçlar keşfedilir.
+    /// Kayıt defterinin tekil örneği ve <b>ona ulaşmanın tek yolu.</b> İlk erişimde derleme taranır
+    /// ve araçlar keşfedilir.
+    /// <para>
+    /// Bağımlılık enjeksiyonuyla dağıtılmaz: tarama tembel ve idempotenttir, kayıt defterine DI
+    /// konteyneri kurulmadan önce de erişilmesi gerekir (araç adları ajan kurulumunda okunur). İki
+    /// erişim yolu bulunması, hangi örneğin okunduğunu çağrı yerine bakarak anlaşılamaz kılar.
+    /// </para>
     /// </summary>
-    public static IToolRegistry Instance => InstanceLazy.Value;
+    public static ToolRegistry Instance => InstanceLazy.Value;
 
     private readonly ConcurrentDictionary<string, ToolDefinition> _definitions = new(StringComparer.OrdinalIgnoreCase);
 

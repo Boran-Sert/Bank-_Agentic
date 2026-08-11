@@ -55,4 +55,7 @@ public static class BankApiPaths
 
     /// <summary>Finansman kataloğu. Gövde: <c>type</c> (opsiyonel).</summary>
     public const string FinancingOptions = "/api/financing-options";
+
+    /// <summary>Ekran kodu (mkCode) kataloğu. Gövde yok; liste müşteriye göre değişmez.</summary>
+    public const string MkCodes = "/api/mkcodes";
 }

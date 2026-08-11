@@ -4,11 +4,11 @@ using System.ComponentModel;
 using System.Linq;
 using System.Text.Json;
 using Banking.BankApi.Client;
-using Banking.Domain.Campaigns;
+using Banking.Domain.Serialization;
 using ModelContextProtocol.Server;
 using Banking.Mcp.Constants;
-using Banking.Domain.Financing;
 using Banking.Mcp.Registry;
+using Banking.Mcp.Semantic;
 
 namespace Banking.Mcp;
 
@@ -21,9 +21,10 @@ namespace Banking.Mcp;
 /// alınır. Analiz hesabı da bankanındır — toplam, oran ve kırılım burada yeniden hesaplanmaz.
 /// </para>
 /// <para>
-/// Bu kuralın <b>tek istisnası semantik aramadır</b> (<see cref="KampanyaVektorelAra"/>,
-/// <see cref="RecommendFinancing"/>): vektör indeksi bu süreçte, yerel gömme modeliyle tutulur ve
-/// bankanın bir ucu değildir.
+/// Bu kuralın <b>tek istisnası semantik aramanın kendisidir</b> (<see cref="KampanyaVektorelAra"/>,
+/// <see cref="RecommendFinancing"/>): banka bir gömme ucu sunmadığı için vektör indeksi bu süreçte,
+/// yerel gömme modeliyle tutulur. <b>İndeksin verisi yine bankadan gelir</b> — süreç içinde kampanya
+/// veya finansman verisi tutan ikinci bir kaynak yoktur.
 /// </para>
 /// </summary>
 [McpServerToolType]
@@ -46,53 +47,57 @@ public sealed class AnalyzeTools
 
     [McpServerTool(Name = AnalyzeToolNames.GetCreditCardStatement)]
     [Description("Tüm ham harcama verilerini JSON formatında çeker. İstisna: Sektör, bonus veya taksit gibi belirli bir analize ihtiyaç duyuluyorsa bu aracı çağırmak yerine doğrudan ilgili özel analiz aracını (Örn: AnalyzeCategoryBreakdown) tetikleyin.")]
-    public Task<object> GetCreditCardStatement(
+    public async Task<string> GetCreditCardStatement(
         [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
         CancellationToken cancellationToken = default) =>
-        _bank.AskBankAsync(BankApiPaths.StatementTransactions, StatementBody(filePath), cancellationToken);
+        (await _bank.AskBankAsync(BankApiPaths.StatementTransactions, StatementBody(filePath), cancellationToken)).ToReadableJson();
 
     [McpServerTool(Name = AnalyzeToolNames.AnalyzeStatementSummary)]
     [Description("Kredi kartı dönem özetini (toplam harcama, kalan limit vb.) verir.")]
-    public Task<object> AnalyzeStatementSummary(
-        [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
+    public async Task<string> AnalyzeStatementSummary(
+        [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")]
+        string? filePath = null,
         CancellationToken cancellationToken = default) =>
-        _bank.AskBankAsync(BankApiPaths.StatementSummary, StatementBody(filePath), cancellationToken);
+        (await _bank.AskBankAsync(BankApiPaths.StatementSummary, StatementBody(filePath), cancellationToken)).ToReadableJson();
 
     [McpServerTool(Name = AnalyzeToolNames.AnalyzeCategoryBreakdown)]
-    [Description("Harcamaları sektör ve kategori bazında (market, gıda, giyim vb.) analiz eder. Tetikleyici niyetler: 'Nereye ne kadar harcamışım?', 'En çok hangi sektöre para gitmiş?'.")]
-    public Task<object> AnalyzeCategoryBreakdown(
-        [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
+    [Description(
+        "Harcamaları sektör ve kategori bazında (market, gıda, giyim vb.) analiz eder. Tetikleyici niyetler: 'Nereye ne kadar harcamışım?', 'En çok hangi sektöre para gitmiş?'.")]
+    public async Task<object> AnalyzeCategoryBreakdown(
+        [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")]
+        string? filePath = null,
         CancellationToken cancellationToken = default) =>
-        _bank.AskBankAsync(BankApiPaths.StatementCategories, StatementBody(filePath), cancellationToken);
+        (await _bank.AskBankAsync(BankApiPaths.StatementCategories, StatementBody(filePath), cancellationToken))
+        .ToReadableJson();
 
     [McpServerTool(Name = AnalyzeToolNames.AnalyzePaymentTypeRatio)]
     [Description("Harcamaları peşin ve taksitli olarak ayırıp oranlarını gösterir. Tetikleyici niyetler: 'Harcamalarımın ne kadarı taksitli?'.")]
-    public Task<object> AnalyzePaymentTypeRatio(
+    public async Task<object> AnalyzePaymentTypeRatio(
         [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
         CancellationToken cancellationToken = default) =>
-        _bank.AskBankAsync(BankApiPaths.StatementPaymentTypes, StatementBody(filePath), cancellationToken);
+        (await _bank.AskBankAsync(BankApiPaths.StatementPaymentTypes, StatementBody(filePath), cancellationToken)).ToReadableJson();
 
     [McpServerTool(Name = AnalyzeToolNames.AnalyzeBonusAndPoints)]
     [Description("Kazanılan puan ve bonus durumlarını analiz eder. Tetikleyici niyetler: 'Ne kadar puan kazandım?', 'Hangi kampanyadan bonus gelmiş?'.")]
-    public Task<object> AnalyzeBonusAndPoints(
+    public async Task<object> AnalyzeBonusAndPoints(
         [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
         CancellationToken cancellationToken = default) =>
-        _bank.AskBankAsync(BankApiPaths.StatementBonus, StatementBody(filePath), cancellationToken);
+        (await _bank.AskBankAsync(BankApiPaths.StatementBonus, StatementBody(filePath), cancellationToken)).ToReadableJson();
 
     [McpServerTool(Name = AnalyzeToolNames.AnalyzeTopMerchants)]
     [Description("En çok alışveriş yapılan marka ve işyerlerini sıralar. Tetikleyici niyetler: 'En çok hangi mağazadan alışveriş yapmışım?'.")]
-    public Task<object> AnalyzeTopMerchants(
+    public async Task<object> AnalyzeTopMerchants(
         [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
         [Description("Dönecek işyeri sayısı.")] int topCount = 5,
         CancellationToken cancellationToken = default) =>
-        _bank.AskBankAsync(
+        (await _bank.AskBankAsync(
             BankApiPaths.StatementTopMerchants,
             new { filePath = NullIfBlank(filePath), topCount },
-            cancellationToken);
+            cancellationToken)).ToReadableJson();
 
     [McpServerTool(Name = AnalyzeToolNames.CompareSpendingPeriods)]
     [Description("İki farklı dönemin veya kategorinin harcamalarını karşılaştırır. Tetikleyici niyetler: 'Geçen aya göre market harcamalarım artmış mı?'.")]
-    public Task<object> CompareSpendingPeriods(
+    public async Task<object> CompareSpendingPeriods(
         [Description("Bu dönemin başlangıcı, ISO tarih (yyyy-MM-dd).")] string currentStartIso,
         [Description("Bu dönemin bitişi, ISO tarih (yyyy-MM-dd).")] string currentEndIso,
         [Description("Karşılaştırılacak önceki dönemin başlangıcı, ISO tarih (yyyy-MM-dd).")] string previousStartIso,
@@ -100,7 +105,7 @@ public sealed class AnalyzeTools
         [Description("Opsiyonel: Yalnızca tek bir sektör kırılımı karşılaştırılacaksa MCC grup adı.")] string? mccGroupType = null,
         [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
         CancellationToken cancellationToken = default) =>
-        _bank.AskBankAsync(
+        (await _bank.AskBankAsync(
             BankApiPaths.StatementCompare,
             new
             {
@@ -111,12 +116,20 @@ public sealed class AnalyzeTools
                 mccGroupType = NullIfBlank(mccGroupType),
                 filePath = NullIfBlank(filePath)
             },
-            cancellationToken);
+            cancellationToken)).ToReadableJson();
 
     [McpServerTool(Name = AnalyzeToolNames.KampanyaVektorelAra)]
     [Description("Kullanıcının profiline uygun kampanyaları arar ve önerir. Tetikleyici niyetler: 'Bana uygun kampanya var mı?', 'Giyim kampanyalarını listele'. İstisna: Kullanıcı doğrudan finansman, limit artırımı veya borç yapılandırması talep ediyorsa bu aracı kullanmayın.")]
-    public object KampanyaVektorelAra(string sorguVektoruMetni, string? mccKategorisi = null, int topK = 3)
+    public async Task<object> KampanyaVektorelAra(
+        string sorguVektoruMetni,
+        string? mccKategorisi = null,
+        int topK = 3,
+        CancellationToken cancellationToken = default)
     {
+        // İndeks açılışta dolmadıysa (banka o an ayakta değildi) burada yeniden denenir; doluysa
+        // bu çağrı etkisizdir.
+        await _campaignSearcher.InitializeAsync(cancellationToken);
+
         var searchResults = _campaignSearcher.Search(sorguVektoruMetni, mccKategorisi, topK);
 
         return new
@@ -140,7 +153,7 @@ public sealed class AnalyzeTools
 
     [McpServerTool(Name = AnalyzeToolNames.GetCampaings)]
     [Description("Sistemdeki tüm aktif kampanyaları listeler veya belirli bir kampanyanın detaylarını (kullanım koşulları dahil) getirir. Tetikleyici niyetler: 'Hangi kampanyalar var?', 'Kampanyaları göster', 'Bu kampanyanın detayları nedir?'. İstisna: Kullanıcı profiline veya spesifik bir isteğe göre kampanya *araması/önerisi* istiyorsa bu aracı değil, KampanyaVektorelAra aracını kullanın.")]
-    public async Task<object> GetCampaings(
+    public async Task<string> GetCampaings(
         [Description("Opsiyonel: Detayını görmek istediğiniz kampanyanın kimliği (örn: CAMP-101). Tüm kampanyaları listelemek için boş bırakın.")] string? campaignId = null,
         CancellationToken cancellationToken = default)
     {
@@ -151,7 +164,7 @@ public sealed class AnalyzeTools
 
         // Tek kampanya istendiğinde bankanın kaydı bütünüyle taşınır: koşul metni sorunun cevabıdır.
         if (!string.IsNullOrWhiteSpace(campaignId) || response is not JsonElement campaigns)
-            return response;
+            return response.ToReadableJson();
 
         // Listede ise koşul metinleri taşınmaz; kullanıcı hangisini soracağını seçebilsin diye
         // yalnızca ayırt edici alanlar döner.
@@ -165,19 +178,19 @@ public sealed class AnalyzeTools
             })
             .ToList();
 
-        return new { Count = summaries.Count, Campaigns = summaries };
+        return new { Count = summaries.Count, Campaigns = summaries }.ToReadableJson();
     }
 
     [McpServerTool(Name = AnalyzeToolNames.RecommendFinancing)]
     [Description("Kullanıcının harcama profilini ve borç durumunu analiz ederek semantik (RAG) vektörel arama ile kişiye özel en uygun finansman, kredi ve borç yapılandırma seçeneklerini önerir. Kullanıcıya özel finansman tavsiyesi veya 'bana uygun krediler/finansmanlar hangileri' taleplerinde bu araç kullanılır.")]
-    public async Task<object> RecommendFinancing(
+    public async Task<string> RecommendFinancing(
         [Description("Müşteri niyeti veya durumu (örn: 'kredi kartı borcumu ödeyemiyorum', 'nakit ihtiyacım var', 'bana uygun finansmanlar')")] string query,
         [Description("Maksimum sonuç sayısı")] int topK = 3,
         CancellationToken cancellationToken = default)
     {
         // Öneri, kullanıcının gerçek harcama profiline dayanır; profil bankadan okunur.
         var response = await _bank.AskBankAsync(BankApiPaths.StatementTransactions, StatementBody(null), cancellationToken);
-        if (response is not JsonElement statement) return response;
+        if (response is not JsonElement statement) return response.ToReadableJson();
 
         var transactions = Items(statement).ToList();
         var totalDebt = transactions.Sum(transaction => transaction.Number("amount"));
@@ -191,9 +204,12 @@ public sealed class AnalyzeTools
 
         var enrichedQuery = $"{query}. Kullanıcının toplam borcu: {totalDebt} TL. En çok harcama yaptığı sektörler: {topCategories}.";
 
+        // İndeks açılışta dolmadıysa burada yeniden denenir; doluysa bu çağrı etkisizdir.
+        await _financingSearcher.InitializeAsync(cancellationToken);
+
         var results = _financingSearcher.Search(enrichedQuery, topK);
         if (results.Count == 0)
-            return new { Message = "Uygun finansman önerisi bulunamadı." };
+            return new { Message = "Uygun finansman önerisi bulunamadı." }.ToReadableJson();
 
         return new
         {
@@ -209,12 +225,12 @@ public sealed class AnalyzeTools
                 r.Option.MaxInstallments,
                 SemanticScore = r.Score
             })
-        };
+        }.ToReadableJson();
     }
 
     [McpServerTool(Name = AnalyzeToolNames.GetFinancingOptions)]
     [Description("Sistemdeki mevcut tüm finansman/kredi seçeneklerini ham liste olarak getirir. SADECE genel kataloğu listelemek için kullanılır. Kişiye özel kredi/finansman tavsiyelerinde bu araç yerine RecommendFinancing kullanılmalıdır.")]
-    public async Task<object> GetFinancingOptions(
+    public async Task<string> GetFinancingOptions(
         [Description("Opsiyonel: Filtrelenecek finansman türü (örn: ConsumerLoan, DebtRestructuring). Belirtilmezse tümü getirilir.")] string? type = null,
         CancellationToken cancellationToken = default)
     {
@@ -223,10 +239,10 @@ public sealed class AnalyzeTools
             new { type = NullIfBlank(type) },
             cancellationToken);
 
-        if (response is not JsonElement options) return response;
+        if (response is not JsonElement options) return response.ToReadableJson();
 
         var financingOptions = Items(options).ToList();
-        return new { Count = financingOptions.Count, FinancingOptions = financingOptions };
+        return new { Count = financingOptions.Count, FinancingOptions = financingOptions }.ToReadableJson();
     }
 
     /// <summary>

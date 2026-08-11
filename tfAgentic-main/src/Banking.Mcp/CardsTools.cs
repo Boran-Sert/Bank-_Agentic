@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Text.Json;
 using Banking.BankApi.Client;
-using Banking.Domain.Services;
+using Banking.Domain.Serialization;
 using ModelContextProtocol.Server;
 using Banking.Mcp.Constants;
 using Banking.Mcp.Registry;
@@ -21,70 +21,82 @@ namespace Banking.Mcp;
 /// <b>Para hareketi bu araç setinde yoktur.</b> Kart borcu ödeme, onay kapısından geçen iş akışı
 /// yoluna aittir; bir okuma aracının tahsilat tetiklemesi, kullanıcı onayının atlanması demektir.
 /// </para>
+/// <para>
+/// <b>Kart kimliği zorunlu değildir.</b> Soruların çoğu tek bir kartı değil "kartlarım"ı sorar ve
+/// kimlik verilmediğinde ya da verilen kimlik bankada karşılık bulmadığında araç boş dönmek yerine
+/// müşterinin kartlarının tamamını döndürür (bkz. <see cref="ProjectCardsAsync"/>). Zorunlu bir
+/// kimlik parametresi, modeli elinde olmayan bir değeri üretmeye zorlar; ortaya çıkan hata da
+/// kimliğin kullanıcıya sorulmasıyla sonuçlanır ki bu ajan talimatlarının açıkça yasakladığı şeydir.
+/// </para>
 /// </summary>
 [McpServerToolType]
 [ToolGroup(ToolGroup.Card)]
 public sealed class CardsTools(IBankApiClient bank, CustomerContext context)
 {
     [McpServerTool(Name = CardToolNames.ListCards)]
-    [Description("Müşterinin tüm kredi kartlarını limit ve borç özetleriyle listeler. Tetikleyici niyetler: 'Hangi kartlarım var?', 'Kartlarımı göster'. İstisna: Detaylı harcama veya kampanya analizi istendiğinde ilgili analiz araçlarına başvurun.")]
-    public Task<object> ListCards(CancellationToken cancellationToken = default) =>
-        bank.AskBankAsync(
+    [Description("Müşterinin tüm kredi kartlarını limit ve borç özetleriyle listeler. Tetikleyici niyetler: " +
+                 "'Hangi kartlarım var?', 'Kartlarımı göster'. İstisna: Detaylı harcama veya kampanya analizi " +
+                 "istendiğinde ilgili analiz araçlarına başvurun.")]
+    public async Task<string> ListCards(CancellationToken cancellationToken = default) =>
+        (await bank.AskBankAsync(
             BankApiPaths.Cards,
             new { customerId = context.CurrentCustomerId },
-            cancellationToken);
+            cancellationToken)).ToReadableJson();
 
     [McpServerTool(Name = CardToolNames.GetCardDebt)]
-    [Description("Belirli bir kredi kartının sadece güncel borç ve asgari ödeme bilgilerini döner. Tetikleyici niyetler: 'Kart borcum ne kadar?', 'Asgari ne kadar ödemeliyim?'. İstisna: Vadesiz hesap bakiyesi veya finansman yapılandırması istendiğinde bu araç kullanılmamalıdır.")]
-    public async Task<object> GetCardDebt(
+    [Description("Belirli bir kredi kartının sadece güncel borç ve asgari ödeme bilgilerini döner. Tetikleyici niyetler: " +
+                 "'Kart borcum ne kadar?', 'Asgari ne kadar ödemeliyim?'. İstisna: Vadesiz hesap bakiyesi veya finansman" +
+                 " yapılandırması istendiğinde bu araç kullanılmamalıdır. Eğer belirli bir kart id verilmemişse bütün " +
+                 "kartları döndürüp kullanıcıdan seçmesini iste")]
+    public async Task<string> GetCardDebt(
         [Description("Kartın dahili kimliği (list_cards'tan elde edilir; kullanıcıya sorulmaz).")] string cardId,
         CancellationToken cancellationToken = default)
     {
-        var response = await FetchCardAsync(cardId, cancellationToken);
+        var response = await FetchCardRawAsync(cardId, cancellationToken);
 
         return response is not JsonElement card
-            ? response
+            ? response.ToReadableJson() 
             : new
             {
-                id = card.Field("id"),
-                maskedNumber = card.Field("maskedNumber"),
-                currentDebt = card.Field("currentDebt"),
-                minimumPayment = card.Field("minimumPayment"),
-                dueDate = card.Field("dueDate")
-            };
+                id = card.GetProperty("id"),
+                maskedNumber = card.GetProperty("maskedNumber"),
+                currentDebt = card.GetProperty("currentDebt"),
+                minimumPayment = card.GetProperty("minimumPayment"),
+                dueDate = card.GetProperty("dueDate")
+            }.ToReadableJson(); 
     }
 
     [McpServerTool(Name = CardToolNames.GetAvailableLimit)]
     [Description("Kredi kartının kullanılabilir limit bilgisini döner. Tetikleyici niyetler: 'Kartımda ne kadar limitim kaldı?', 'Limitim yeterli mi?'. İstisna: Borç yapılandırma gibi konularda diğer araçlara yönelin.")]
-    public async Task<object> GetAvailableLimit(
+    public async Task<string> GetAvailableLimit(
         [Description("Kartın dahili kimliği (list_cards'tan elde edilir; kullanıcıya sorulmaz).")] string cardId,
         CancellationToken cancellationToken = default)
     {
-        var response = await FetchCardAsync(cardId, cancellationToken);
+        var response = await FetchCardRawAsync(cardId, cancellationToken);
 
         return response is not JsonElement card
-            ? response
+            ? response.ToReadableJson()
             : new
             {
-                id = card.Field("id"),
-                maskedNumber = card.Field("maskedNumber"),
-                availableLimit = card.Field("availableLimit"),
-                creditLimit = card.Field("creditLimit")
-            };
+                id = card.GetProperty("id"),
+                maskedNumber = card.GetProperty("maskedNumber"),
+                availableLimit = card.GetProperty("availableLimit"),
+                creditLimit = card.GetProperty("creditLimit")
+            }.ToReadableJson();
     }
 
     [McpServerTool(Name = CardToolNames.GetCardDetails)]
     [Description("Kredi kartının limit, borç ve tarih bilgilerini topluca döner. Kullanıcının kartıyla ilgili genel ve detaylı bir durum özeti istediği senaryolarda kullanılır.")]
-    public Task<object> GetCardDetails(
+    public async Task<string> GetCardDetails(
         [Description("Kartın dahili kimliği (list_cards'tan elde edilir; kullanıcıya sorulmaz).")] string cardId,
         CancellationToken cancellationToken = default) =>
-        FetchCardAsync(cardId, cancellationToken);
+        (await FetchCardRawAsync(cardId, cancellationToken)).ToReadableJson();
 
     /// <summary>
-    /// Kart kaydını bankadan çeker. Üç aracın da tek bir uca gitmesi, kart verisinin bankada tek bir
-    /// kaydı olduğunu yansıtır; araçlar yalnızca o kaydın hangi alanlarını gösterdiğiyle ayrışır.
+    /// Kart kaydını bankadan ham object (JsonElement) olarak çeker. 
+    /// Veriyi string'e çevirmeden döner ki metotlar içinde 'is not JsonElement' kontrolü doğru çalışabilsin.
     /// </summary>
-    private Task<object> FetchCardAsync(string cardId, CancellationToken cancellationToken) =>
+    private Task<object> FetchCardRawAsync(string cardId, CancellationToken cancellationToken) =>
         bank.AskBankAsync(
             BankApiPaths.Card,
             new { customerId = context.CurrentCustomerId, cardId },

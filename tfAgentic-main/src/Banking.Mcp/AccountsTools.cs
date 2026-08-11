@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using Banking.BankApi.Client;
-using Banking.Domain.Services;
 using ModelContextProtocol.Server;
 using Banking.Mcp.Constants;
 using Banking.Mcp.Registry;

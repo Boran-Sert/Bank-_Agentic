@@ -10,8 +10,10 @@
     <PackageReference Include="SmartComponents.LocalEmbeddings" Version="0.1.0-preview10148" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Banking.BankApi\Banking.BankApi.csproj" />
-  </ItemGroup>
+  <!--
+    Bu projenin hiçbir projeye referansı YOKTUR ve olmamalıdır. Bankaya giden her yol
+    Banking.BankApi.Client üzerinden HTTP'dir; bankanın servis veya model tiplerine bağlanmak,
+    sahte banka (Banking.BankApi) kaldırıldığında çözümün tamamını derlenemez hâle getirir.
+  -->
 
 </Project>

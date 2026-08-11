@@ -7,16 +7,13 @@ using Banking.Agents.Workflows;
 using Banking.Agents.Workflows.Actions;
 using Banking.Agents.Workflows.Engine;
 using Banking.BankApi.Client;
-using Banking.Domain.Campaigns;
 using Banking.Domain.Constants;
-using Banking.Domain.Data;
-using Banking.Domain.Financing;
-using Banking.Domain.MkCodes;
-using Banking.Domain.Services;
+using Banking.Domain.Semantic;
 using Banking.Domain.Workflows;
 using Banking.Gateway;
 using Banking.Mcp;
 using Banking.Mcp.Registry;
+using Banking.Mcp.Semantic;
 using Microsoft.Agents.AI.Hosting;
 using SmartComponents.LocalEmbeddings;
 
@@ -48,31 +45,33 @@ public static class ServiceRegistration
         agentOptions.ApiKey ??= Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         builder.Services.AddSingleton(agentOptions);
 
-        // --- Semantik indekslerin beslendiği katalog (kampanya/finansman) ---
-        // Vektör indeksi bu süreçte tutulduğu için katalog da burada okunur. Hesap, kart ve ekstre
-        // verisi buradan GELMEZ: o yolun tamamı bankanın REST uçlarına gider (bkz. AddBankApiClient).
-        builder.Services.AddSingleton<InMemoryBankStore>();
-        builder.Services.AddSingleton<ICampaignSyncService, CampaignSyncService>();
-        builder.Services.AddSingleton<ICampaignCatalogService, CampaignCatalogService>();
-        builder.Services.AddSingleton<IFinancingCatalogService, FinancingCatalogService>();
-
         // İsteği yapan müşterinin kimliği. MCP araçları bunu bankaya gönderdikleri gövdeye yazar;
         // hesabın/kartın o müşteriye ait olup olmadığına banka karar verir.
         builder.Services.AddSingleton<CustomerContext>();
 
         // --- Semantik Arama & Embedding ---
+        // Bu süreçte tutulan tek şey vektör indeksidir; bankanın bir gömme ucu yok. İndekslerin
+        // VERİSİ bankadan HTTP ile okunur — kampanya ve finansman kataloğunun süreç içi bir kopyası
+        // tutulmaz (bkz. SemanticCampaignSearcher.RefreshAsync).
         builder.Services.AddSingleton<LocalEmbedder>();
+
+        // Hesaplanmış vektörlerin deposu. Tek örnekli çalışmada açılış maliyetini değiştirmez;
+        // çok örnekli dağıtımda her örneğin aynı katalogları baştan vektörleştirmesini engelleyecek
+        // paylaşımlı uygulamanın takılacağı yer burasıdır.
+        builder.Services.AddSingleton<ISemanticIndexStore, InMemorySemanticIndexStore>();
+
+        builder.Services.AddSingleton<MkCodeCatalog>();
         builder.Services.AddSingleton<SemanticMkCodeSearcher>();
         builder.Services.AddSingleton<SemanticCampaignSearcher>();
         builder.Services.AddSingleton<SemanticFinancingSearcher>();
         builder.Services.AddSingleton<SemanticWorkflowSearcher>();
+        builder.Services.AddSingleton<ICampaignSyncService, CampaignSyncService>();
 
-        // --- Tool Registry (Merkezi araç haritası & otomatik keşif) ---
-        builder.Services.AddSingleton<IToolRegistry>(ToolRegistry.Instance);
+        // Tool Registry DI'a KAYDEDİLMEZ: ToolRegistry.Instance ona ulaşmanın tek yoludur
+        // (gerekçe ToolRegistry.Instance üzerindedir).
 
         // --- LLM + ajan altyapısı ---
         builder.Services.AddSingleton<TraceHub>();
-        builder.Services.AddSingleton(sp => ChatClientFactory.Create(sp.GetRequiredService<AgentOptions>()));
         builder.Services.AddSingleton<AnalyzeTools>();
 
         // İzleme katmanıyla sarmalanmış chat istemcisi üreteci; ajan kuran her bileşen bunu kullanır.
@@ -93,12 +92,11 @@ public static class ServiceRegistration
             builder.Configuration.GetSection(SessionStoreOptions.SectionName));
         builder.Services.AddMemoryCache();
         builder.Services.AddSingleton<ISessionStore, InMemorySessionStore>();
-        builder.Services.AddSingleton<ISessionAccessor, AmbientSessionAccessor>();
+        builder.Services.AddSingleton<AmbientSessionAccessor>();
 
         // --- İş akışı motoru ---
         builder.Services.AddSingleton<WorkflowAgentFactory>();
         builder.Services.AddSingleton<WorkflowRegistry>();
-        builder.Services.AddSingleton<WorkflowDispatcher>();
 
         // Akış içinden cevaplanamayan sorular orkestratöre devredilir. Delegasyon olarak kaydedilir ki
         // motor orkestratörü tanımak zorunda kalmasın ve döngüsel bağımlılık oluşmasın.
@@ -107,9 +105,9 @@ public static class ServiceRegistration
             ?? string.Empty);
 
         // Orkestratör akış başlatır, akış da konu dışı soruyu orkestratöre devreder: bağımlılık çift
-        // yönlüdür. Lazy, yapıcıda çözülseydi oluşacak döngüyü kırar; bağımlılık yine de tüketicinin
-        // yapıcısında görünür kalır, servis konumlandırıcı kullanılmaz.
-        builder.Services.AddSingleton(sp => new Lazy<WorkflowDispatcher>(sp.GetRequiredService<WorkflowDispatcher>));
+        // yönlüdür. Döngüyü kıran tek nokta budur — orkestratöre giden kenar Lazy'dir, bu sayede
+        // AgentRuntime kayıt defterini doğrudan alabilir. Bağımlılık yine de tüketicinin yapıcısında
+        // görünür kalır, servis konumlandırıcı kullanılmaz.
         builder.Services.AddSingleton(sp => new Lazy<OrchestratorFallback>(sp.GetRequiredService<OrchestratorFallback>));
 
         // --- Banka istemcisi: bu sistemin bankaya açılan tek kapısı ---
@@ -125,7 +123,7 @@ public static class ServiceRegistration
 
         // Onay sonrası bankaya giden TEK bileşen. Durumsuz olduğu için singleton; akışın kimliği ve
         // gideceği yol her çağrıda parametre olarak gelir.
-        builder.Services.AddSingleton<IDeterministicActionExecutor, RestWorkflowExecutor>();
+        builder.Services.AddSingleton<RestWorkflowExecutor>();
 
         // --- MW Gateway (Java MW ↔ .NET iletişimi) ---
         builder.Services.AddSingleton<FlowRouter>();

@@ -4,12 +4,12 @@ using Banking.Host.Composition;
 // adımların hangi sırayla çalıştığıdır.
 var builder = WebApplication.CreateBuilder(args);
 
+var agentOptions = builder.AddBankingAgents();
+
 // Kestrel'i tüm ağ arayüzlerinde dinlet (hem localhost Web UI hem de dış IP'lerden API erişimi).
-builder.WebHost.UseUrls("http://*:5080");
-
-builder.AddBankingAgents();
-
-
+// Port Agents:SelfBaseUrl'den TÜRETİLİR, ikinci kez yazılmaz: süreç kendi MCP ve A2A uçlarına aynı
+// adresten bağlanır, iki değerin ayrışması bu bağlantıları hata vermeden koparır.
+builder.WebHost.UseUrls($"http://*:{new Uri(agentOptions.SelfBaseUrl).Port}");
 
 var app = builder.Build();
 

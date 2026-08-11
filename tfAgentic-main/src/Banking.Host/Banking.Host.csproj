@@ -6,7 +6,11 @@
     <ProjectReference Include="..\Banking.Domain\Banking.Domain.csproj" />
     <ProjectReference Include="..\Banking.Gateway\Banking.Gateway.csproj" />
     <ProjectReference Include="..\Banking.BankApi.Client\Banking.BankApi.Client.csproj" />
-    <ProjectReference Include="..\Banking.BankApi\Banking.BankApi.csproj" />
+    <!--
+      Banking.BankApi'ye referans YOKTUR ve olmamalıdır. Sahte banka ayrı bir süreçtir ve bu süreç
+      ona yalnızca HTTP ile (Banking.BankApi.Client) bağlanır. Referans eklemek, sahte banka
+      kaldırıldığında host'u derlenemez hâle getirir.
+    -->
   </ItemGroup>
 
   <ItemGroup>

@@ -105,6 +105,49 @@ Aynı kavram her yerde tek bir adla anılır.
 **C# tip adları çevrilmez.** `WorkflowEngine`, `SessionContext`, `RequestPort` daima orijinal hâliyle
 ve `<see cref>` veya `<c>` içinde yazılır.
 
+### S11 — Metot açıklaması kısadır
+
+Bir, en çok iki düz cümle: ne yapar ve çağıranın bilmesi gereken tek şey. Metot açıklamasında
+`<para>` kullanılmaz — tasarım kararı, takas veya "neden böyle değil" S12 uyarınca tipin açıklamasına
+gider.
+
+```csharp
+// YANLIŞ — gerekçe metotta birikmiş
+/// <summary>
+/// Kullanıcı mesajını işler.
+/// <para>
+/// <b>Neden aday akış listesi buraya taşınır:</b> semantik benzerlik yalnızca konuyu ölçer, niyeti
+/// ölçmez... [devamında üç paragraf daha]
+/// </para>
+/// </summary>
+
+// DOĞRU
+/// <summary>
+/// Kullanıcı mesajını işler. Mesaja semantik olarak yakın akışlar orkestratöre bağlam olarak
+/// verilir; kararı orkestratör verir.
+/// </summary>
+```
+
+### S12 — Gerekçe tipe aittir
+
+Tasarım kararı, takas, başarısızlık kipi ve "neden böyle değil" tipin (`class`/`record`/`interface`)
+açıklamasında durur. Tip açıklaması uzun ve ayrıntılı olabilir; `<para>` sayısı S8'deki iki sınırına
+bağlı değildir. Bir metodun gerekçesi yalnızca o metoda özgüyse (başka bir üyeyle paylaşılmıyorsa)
+istisnaen metotta kalabilir — ama önce tipe taşımak denenir.
+
+### S13 — Ardışık akışlarda seyrek adım yorumu
+
+Metot birbirini izleyen adımlardan oluşuyorsa, adımı gerçekleştiren satırın üstüne 2–3 kelimelik bir
+`//` yorum konur. **Her satıra değil** — yalnızca bir adımdan diğerine geçişin göze çarpmadığı
+noktalarda. Kendini açıklayan tek satırlık kod (`var x = Foo();`) yorum almaz.
+
+```csharp
+// turun süresi
+var watch = Stopwatch.StartNew();
+var response = await base.GetResponseAsync(msgList, options, cancellationToken);
+watch.Stop();
+```
+
 ---
 
 ## Doğrulama

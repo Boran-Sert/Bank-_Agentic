@@ -9,28 +9,33 @@
 Sistem, kullanıcı sorularını karşılayan bir **Orkestratör Ajan**, uzmanlık alanlarına göre ayrılmış **Uzman Ajanlar** (Hesap, Kredi Kartı, Finansal Analiz), veriye güvenli erişen **MCP Araçları** ve borç ödeme gibi kritik akışları yöneten **MAF Workflows** bileşenlerinden oluşur.
 
 ```
- Tarayıcı (Web UI) ──/api/chat──►  GatewayService (ResponseSanitizer)
+ Tarayıcı (Web UI) ──/api/chat──►  GatewayService (oturum scope'u + ResponseSanitizer)
                                         │
                                    FlowRouter (Deterministik Yönlendirici)
                                    ┌────┴──────────────────────────┐
-                       (Aktif Oturum YOK)                      (Aktif Oturum VAR)
+                       (Aktif Akış YOK)                        (Aktif Akış VAR)
                                │                                   │
                                ▼                                   ▼
-                      Orkestratör Ajan                     MAF Workflow
-                     (AgentRuntime & A2A)             (GenericSlotFillingStep)
+                      Orkestratör Ajan                       WorkflowEngine
+                     (AgentRuntime & A2A)                 (evre durum makinesi)
                                │                                   │
               ┌────────────────┼────────────────┐                  │
               ▼                ▼                ▼                  ▼
-         HesapUzmani    KrediKartiUzmani   FinansalAnaliz   RequestPort (HITL Gate)
+         HesapUzmani    KrediKartiUzmani   AnalizUzmani     RequestPort (HITL Gate)
               │                │                │                  │
               └───────────────►├◄───────────────┘                  ▼
-                               ▼                            Charge() Servisi
-                         Banking.Mcp
-                      (IToolRegistry)
-                               │
-                               ▼
-                        Banking.Domain
+                               ▼                          RestWorkflowExecutor
+                         Banking.Mcp                              │
+                        (ToolRegistry)                            │
+                               │                                  │
+                               └──────────►  IBankApiClient  ◄─────┘
+                                              (HTTP)
+                                                 │
+                                                 ▼
+                                        Banka REST uçları
 ```
+
+> **Not:** `src/Banking.BankApi` bu depodaki **geçici bir vekil bankadır** ve silinecektir. Sistemin amacı var olan bir bankaya agentic katman eklemektir; bankaya giden her yol `IBankApiClient` üzerinden HTTP'dir. Ayrıntı için `CLAUDE.md` → *Target architecture*.
 
 ---
 
@@ -38,12 +43,12 @@ Sistem, kullanıcı sorularını karşılayan bir **Orkestratör Ajan**, uzmanl�
 
 Proje geliştirilirken statik, katı ve hardcoded yapılar yerine **tam dinamik bir mimari** tercih edilmiştir. Bunun temel nedenleri şunlardır:
 
-1. **Dinamik Slot Filling & Workflow Adapte Olabilirliği:** 
-   Ödeme, havale veya kredi başvurusu gibi akışlarda her işlem türü farklı parametreler (`PaymentSlots`, `TransferSlots` vb.) gerektirir. Sınıflar hardcode yazılmak yerine **Reflection tabanlı `GenericSlotFillingStep<TSlots>`** olarak tasarlandı. Bu sayede sisteme yeni bir `record` eklendiğinde hiçbir akış kodunu değiştirmeden sistem dinamik olarak slot doldurabilir.
+1. **Yeniden derleme gerektirmeyen iş akışları:** 
+   Yeni bir akış eklemek bir **YAML dosyası yazmaktan ibarettir** — C# record'u, akışa özel executor, attribute veya DI kaydı yoktur. `WorkflowEngine` sistemdeki tek motordur ve akıştan akışa değişen tek girdi YAML'daki `WorkflowActionDefinition`'dır. Tanım `/api/workflows/register-declarative` ile çalışma zamanında da yüklenebilir ve anında yönlendirilebilir hâle gelir.
 2. **Dynamic Tool Registry & Auto-Discovery:** 
-   MCP araçlarının ve yetki alanlarının elle C# kodlarına gömülmesi yerine `IToolRegistry` ve `ToolGroupAttribute` mimarisi kuruldu. Assembly üzerindeki tüm araçlar uygulama başlarken otomatik taranır ve gruplanır.
-3. **Dinamik Context Enjeksiyonu (TopicContextProvider):** 
-   Sistem prompt'larının sabit metinler olması modelin odak kaybetmesine yol açar. `TopicContextProvider` sayesinde kullanıcının anlık sohbet konusuna göre sistem talimatları dinamik olarak üretilir ve modele aktarılır.
+   MCP araçlarının ve yetki alanlarının elle C# kodlarına gömülmesi yerine `ToolRegistry` ve `ToolGroupAttribute` mimarisi kuruldu. Assembly üzerindeki tüm araçlar uygulama başlarken otomatik taranır ve gruplanır.
+3. **Tek semantik indeks:** 
+   Ekran kodu, iş akışı, kampanya ve finansman aramalarının tamamı tek bir `SemanticIndex<T>` üzerinde çalışır. Benzerlik eşikleri kayıt türüne göre farklıdır ve her biri gerekçesiyle belgelenmiştir; arama kodu kopyalanmaz.
 4. **Runtime Fail-Fast Doğrulama:** 
    MCP Sunucusunda tanımlı olan araçlar ile kod içerisindeki kayıtlar uygulama başlarken (`ValidateDiscoveredMcpTools`) karşılaştırılır. Uyuşmayan veya eksik bir araç varsa sistem runtime anında çökmeden startup'ta anında hata (`InvalidOperationException`) vererek güvenliği garanti eder.
 
@@ -60,7 +65,9 @@ Proje geliştirilirken statik, katı ve hardcoded yapılar yerine **tam dinamik 
 * **Human-in-the-Loop (HITL) Güvenliği:** 
   Finansal etkisi olan işlemler asla LLM tarafından doğrudan çalıştırılmaz. MAF `RequestPort` onay kapısına bağlanarak kullanıcının ekrandan butonla açık onayı (`CONFIRM_PAYMENT`) alınır.
 * **Kolay Genişletilebilirlik:** 
-  Sisteme yeni bir bankacılık aracı, uzman ajan veya iş akışı eklemek yalnızca yeni bir sınıf ve `[ToolGroup]` etiketi eklemek kadar kolaydır.
+  Yeni iş akışı = bir YAML dosyası. Yeni uzman = bir YAML dosyası ya da statik `AgentCard Card` özelliği taşıyan bir sınıf. Yeni MCP aracı = `[McpServerTool]` işaretli bir metot. Üçünde de yönlendirme kodu değişmez.
+* **Tak-Çalıştır Konuşlandırma:** 
+  Gerçek bankaya geçmek için dokunulan yer dörttür: `appsettings.json` içindeki `BankApi` bölümü, `BankApiPaths.cs`, akış YAML'larındaki `action.path` ve semantik özet kayıtlarının alan eşlemesi. Uygulama akışının hiçbir parçası yeniden yazılmaz.
 
 ---
 
@@ -72,10 +79,10 @@ Sistem, Microsoft'un resmi AI ve Agent kütüphanelerinin **yerleşik (built-in)
 - **`AIAgent` & `AgentSession`:** Uzman ajanlar (`HesapUzmani`, `KrediKartiUzmani`, `FinansalAnalizUzmani`) `IChatClient.AsAIAgent()` yerleşik metodu ile MAF ajanlarına dönüştürülür. Konuşma geçmişi ve durum MAF'ın kendi yerleşik `AgentSession` yapısı tarafından yönetilir.
 
 ### 2. `Microsoft.Agents.AI.Workflows` (İş Akışları ve HITL Gates)
-- **`WorkflowBuilder` & `Workflow`:** İş akışları yerleşik `WorkflowBuilder` ile grafik düğümleri (nodes & edges) olarak inşa edilir.
-- **`Executor<TInput, TOutput>`:** Slot toplama adımları (`GenericSlotFillingStep<TSlots>`) MAF'ın yerleşik `Executor` sınıfından türetilmiştir.
-- **`RequestPort.Create<TInput, TOutput>()`:** Onay gerektiren durumlarda insan müdahalesi (HITL) için MAF'ın yerleşik `RequestPort` onay kapıları kullanılır.
-- **`IWorkflowContext`:** Adımlar arası durum aktarımı MAF'ın `QueueStateUpdateAsync` ve yerleşik context API'ları ile sağlanır.
+- **`WorkflowBuilder` & `Workflow`:** Onay grafiği yerleşik `WorkflowBuilder` ile grafik düğümleri (nodes & edges) olarak inşa edilir (`DeterministicActionWorkflow`).
+- **`Executor<TInput, TOutput>`:** Onay sonrası çalışan eylem adımı (`DeterministicActionStep`) MAF'ın yerleşik `Executor` sınıfından türetilmiştir.
+- **`RequestPort.Create<TInput, TOutput>()`:** Onay gerektiren durumlarda insan müdahalesi (HITL) için MAF'ın yerleşik `RequestPort` onay kapıları kullanılır. Kapının kurulup kurulmayacağını YAML'daki `action.path` belirler.
+- **`InProcessExecution` & event akışı:** Grafik tek HTTP isteği içinde çalıştırılır; çıktı ve hata olayları (`WorkflowOutputEvent`, `ExecutorFailedEvent`) yerleşik event akışından okunur. Sunucuda askıda çalıştırma tutulmaz, yapışkan oturum gerekmez.
 
 ### 3. `Microsoft.Agents.AI.A2A` (Agent-to-Agent Protokolü)
 - Orkestratör ajanın uzman ajanlarla konuşması HTTP loopback üzerinde yerleşik A2A (JSON-RPC) protokolü ile gerçekleştirilir (`/a2a/hesap`, `/a2a/kart`).
@@ -90,11 +97,13 @@ Sistem, Microsoft'un resmi AI ve Agent kütüphanelerinin **yerleşik (built-in)
 
 | Proje | Sorumluluk |
 |---|---|
-| `src/Banking.Domain` | Modeller, in-memory banka veri deposu, hesap/kart/tahsilat servisleri ve vektör arama motorları (`SemanticFinancingSearcher`, `SemanticCampaignSearcher`). |
-| `src/Banking.Mcp` | MCP Server araçları (`AccountsTools`, `CardsTools`, `AnalyzeTools`) ve otomatik taranan `ToolRegistry` mimarisi. |
-| `src/Banking.Agents` | MAF Uzman Ajanları (`SpecialistAgents`), `AgentRuntime`, `AgentPrompts`, `TopicContextProvider`, `CollectionWorkflow` ve `TraceHub`. |
-| `src/Banking.Gateway` | REST API Gateway, `FlowRouter`, `GatewaySession` ve 6 katmanlı `ResponseSanitizer` (Output Guard). |
-| `src/Banking.Host` | ASP.NET Core Composition Root (`Program.cs`), MCP/A2A endpoint hostlama ve Markdown destekli Web UI. |
+| `src/Banking.Domain` | Bankadan bağımsız ortak parçalar: sabitler, `MkCodeDefinition` ve `Semantic/` — tek vektör arama uygulaması `SemanticIndex<T>` ile kalıcılık seam'i `ISemanticIndexStore`. **Hiçbir projeye referansı yoktur.** Ekran kodu kaydı burada tutulmaz; kaynağı bankadır (`Banking.Mcp/Semantic/MkCodeCatalog`). |
+| `src/Banking.BankApi.Client` | `IBankApiClient` — sistemin bankaya açılan **tek kapısı**. Idempotency başlığı, hata çıkarımı ve çağrı izleme burada. |
+| `src/Banking.Mcp` | MCP Server araçları (`AccountsTools`, `CardsTools`, `AnalyzeTools`), otomatik taranan `ToolRegistry`, `CustomerContext` ve bankadan beslenen semantik arayıcılar (`Semantic/`: ekran kodu, kampanya, finansman — dördü de `ISemanticIndexStore` ile tekrar vektörleştirmeden kaçınır). |
+| `src/Banking.Agents` | MAF ajan altyapısı: `AgentRuntime`, `SpecialistCatalog`, `WorkflowEngine`/`WorkflowRegistry`, `Sessions/` (oturumun tek kapısı), `AgentPrompts` ve `TraceHub`. |
+| `src/Banking.Gateway` | REST API Gateway, `FlowRouter`, `GatewayService` ve 6 katmanlı `ResponseSanitizer` (Output Guard). |
+| `src/Banking.Host` | ASP.NET Core Composition Root (`Program.cs`, `Composition/`), MCP/A2A endpoint hostlama, deklaratif tanımların disk kalıcılığı ve Web UI. |
+| `src/Banking.BankApi` | **Geçici vekil banka.** Ayrı süreç (port 5001). Başka hiçbir proje ona referans vermez. |
 
 ---
 
@@ -109,11 +118,22 @@ Sistem, Microsoft'un resmi AI ve Agent kütüphanelerinin **yerleşik (built-in)
 # 1. API Anahtarını Tanımlayın (PowerShell)
 $env:OPENAI_API_KEY = "sk-..."
 
-# 2. Uygulamayı Başlatın
+# 2. Vekil bankayı başlatın (ayrı terminal, port 5001)
+dotnet run --project src/Banking.BankApi
+
+# 3. Uygulamayı Başlatın
 dotnet run --project src/Banking.Host
 ```
 
 Tarayıcıdan erişin: **`http://localhost:5080`**
+
+Port `appsettings.json` içindeki `Agents:SelfBaseUrl` değerinden türetilir; başka hiçbir yerde port yazılı değildir.
+
+### LLM'siz doğrulama
+
+```powershell
+dotnet run --project tools/WorkflowTest   # HITL onay/ret/çift tıklama senaryoları
+```
 
 ---
 

@@ -1,5 +1,196 @@
 # Mimari Değişiklik Günlüğü (Changelog)
 
+## Sürüm: [FAZ-0-1-2-3-Olceklenebilirlik-ve-Kaynak-Yonetimi] - 2026-08-10
+
+> Kapsam: `docs/FINAL-PLAN.md`'nin FAZ 0–3'ü ve FAZ 7'si `dev` dalında tamamlandı; FAZ 6.1 uygulanıp
+> ölçüldü ve kazancı yetersiz bulunarak geri alındı. Redis gerektiren FAZ 4/5/8 ve onlara bağımlı
+> FAZ 6.2 bilinçli olarak `main`'e bırakıldı — `dev` yerel geliştirme için Redis'siz kalacak.
+
+### Neden Bu Değişiklikler Yapıldı? (Problem Tanımı)
+
+Ölçüt kullanıcı başına gecikme değil, **model turu başına maliyet**: 2000 eşzamanlı kullanıcı ve
+45 sn'de bir mesajla, dört tur/mesaj 178 model turu/sn gerektiriyordu. Turu ölçmeden azaltmaya
+çalışmak kanıtsız iyileştirme riski taşıyordu; bu yüzden ilk iş ölçümdü.
+
+Ayrıca iki sınırsız büyüme kaynağı vardı: `SpecialistCatalog._agents` ve
+`WorkflowAgentFactory._agentsByName` yalnızca büyüyordu (YAML ile çalışma zamanında ajan
+eklenebiliyor) ve ekran kodu kataloğu (`MkCodesRegistry`) altı aday dosya yolu deneyen, dizin dışına
+tırmanan, sessiz varsayılan kodlarla banka erişilemezken "çalışıyor" görüntüsü veren süreç içi bir
+dosyaydı — tak-çalıştır hedefiyle çelişiyordu.
+
+### Çözüm ve Yeni Yapı
+
+#### FAZ 0 — Model turunun maliyeti ölçülür
+
+`TracingChatClient` artık her tamamlanan tur için ayrı bir `"{etiket} -> Token Maliyeti"` satırı
+yayınlıyor: model adı, girdi/çıktı/toplam token (sağlayıcı döndürdüyse) ve süre. Ölçülen baseline:
+basit soru = **4 tur, 6660 token, ~18 sn** (`llama3.2:latest`). Bu satır olmadan sonraki fazların
+etkisi kanıtlanamazdı.
+
+#### FAZ 1 — Ajan ömrü: ihtiyaç anında kur, boşta kalanı bırak
+
+Uzman ve iş akışı ajanları artık açılışta toplu kurulmuyor; ilk istendiğinde kurulup `IMemoryCache`'te
+kayan süreyle (`AgentOptions.AgentIdleTimeoutMinutes`, varsayılan 20) tutuluyor. Boşta kalan ajan
+tahliye edilip ize düşüyor, sonraki istek yeniden kuruyor.
+
+**Regresyon riski en yüksek nokta çözüldü:** süreç içi modda köprü aracı somut ajanı değil yeni
+`LazySpecialistAgent` vekilini sarıyor — vekil hedefi her çağrıda adına göre çözüyor. Vekil olmadan
+köprü aracı (orkestratörün araç listesinde duran uzun ömürlü bir singleton) somut ajanı canlı tutar
+ve önbellekten tahliye hiçbir şey serbest bırakmazdı; A2A modu zaten yalnızca bir `A2AClient` tuttuğu
+için bu fark iki taşıma modu arasında ölçülemeyen bir davranış ayrışması yaratırdı. Doğrulandı: aynı
+senaryo hem `UseA2AForSpecialists: true` hem `false` ile aynı şekilde çalışıyor.
+
+Tahliye `SpecialistCatalog.Version`'ı **artırmıyor** — artırsaydı boştaki tek bir uzmanın düşmesi
+orkestratör ve tüm akış ajanlarının yeniden kurulmasını tetikleyen bir fırtınaya dönüşürdü.
+
+#### FAZ 2 — Ekran kodu kataloğu bankaya taşındı, indeks kalıcılık seam'i eklendi
+
+`MkCodesRegistry` (altı aday dosya yolu, sessiz varsayılan beş kod) silindi. Katalog artık
+`POST /api/mkcodes` ile bankadan okunuyor (`Banking.Mcp/Semantic/MkCodeCatalog`); banka
+erişilemezken katalog boş kalır ve ilgili araç ilk çağrıldığında yeniden dener — açılış durmaz.
+
+Yeni `ISemanticIndexStore` seam'i (`Banking.Domain/Semantic/`), hesaplanmış vektörleri kayıt
+verisinden ayrı saklar; anahtar indekslenen içeriğin özetidir, banka kataloğu değiştiğinde otomatik
+geçersizleşir. `InMemorySemanticIndexStore` tek örnekli çalışmada açılış maliyetini değiştirmez ama
+aynı içerikle yapılan ikinci bir tazelemede gömme hesabını atlar — ölçüldü: kampanya senkronizasyonu
+tekrarında "gömme hesabı yapılmadı" satırı düşüyor. `SmartComponents.LocalEmbeddings.EmbeddingF32`
+doğrudan serileştirilemiyor (parametresiz kurucusu yok) ama `Buffer` (`ReadOnlyMemory<byte>`) ↔
+`.ctor(ReadOnlyMemory<byte>)` üzerinden kayıpsız gidip geliyor (bulgu yansımayla doğrulandı,
+`docs/MAF-API-NOTES.md`'ye kaydedildi); depo bu yüzden `float[]` değil ham bayt saklıyor.
+
+Bankanın veri dosyasındaki `Keywords` alanı (262/262 kayıtta dolu, önceki registry'de hiç
+kullanılmıyordu) artık gömme metnine giriyor — "ekstre", "nakit avans" gibi bankanın kendi arama
+takma adları. Ayrıca iki para hareketi akışının (`card-payment`, `money-transfer`) YAML'daki
+`mkCode` değerleri bankanın gerçek kataloğunda **karşılığı olmayan** kodlardı (yalnızca silinen
+`AddDefaultCodes` yedeğinde vardı); bankanın gerçek kodlarına bağlandı
+(`CardPaymentSubMenu`, `TransferWithIBAN`).
+
+#### FAZ 3 — Ucuz tur azaltma
+
+`AgentOptions.Models` (etiket → model adı) eklendi; `TracedChatClientFactory` artık model adına göre
+önbellekli istemci üretiyor, `Create(label)` imzası değişmedi. Boş haritada davranış aynı; dolu
+haritada ölçüldü — `Agents:Models:Orkestratör` küçük bir modele ayarlandığında yalnızca orkestratör
+turları o modele gidiyor, uzman turları büyük modelde kalıyor.
+
+`SemanticMkCodeSearcher`'ın varsayılan aday sayısı 5 → **10**. Ölçüm, doğru kodun sıralamada üstte
+çıkmasının değil listeye girmesinin yeterli olduğunu gösterdi: "Hesaplarım ekranını aç" niyetinde
+doğru kod (`MyAccountList`) 5'lik pencerede kayboluyor, 10'lukta modelin seçebileceği yerde duruyordu
+— doğrulandı, model doğru kodu seçti.
+
+Uzman talimatlarına ("tek turda çoklu araç çağrısı") ilke bazlı bir yönerge eklendi
+(`AgentPrompts.SingleTurnToolUse`); araç adı saymaz.
+
+### Denenip Geri Alınan: FAZ 6.1 — Konuşma Geçmişi Kırpma
+
+Eski turlardaki araç çağrısı/sonuç yüklerini düşüren bir uygulama yazılıp ölçüldü: 8 turluk bir
+sohbette son turun girdi token'ı yalnızca **%5,2** azaldı (5906 → 5599). Nedeni mimari: orkestratörün
+araç sonuçları ham banka JSON'u değil, uzmanın zaten özetlenmiş metin cevabı; ham yükler uzmanın
+kendi geçmişinde birikiyor ve uzmanlar her çağrıda yeni oturum açtığı için orada da kalıcı değil.
+Taşıdığı karmaşıklığa (çağrı-sonuç birlikte düşürme zorunluluğu, iki çağıranda imza değişikliği, yeni
+yapılandırma anahtarı) değmediği için kaldırıldı. Bulgu ve ölçüm `docs/MAF-API-NOTES.md`'de — aynı
+işi tekrar yazmadan önce okunmalı.
+
+### FAZ 7 — Çıkarım Katmanı (kod değişikliği yok)
+
+`OLLAMA_CONTEXT_LENGTH` ayarsız bırakıldığında Ollama modelin tam bağlamını (128k) KV cache için
+ayırıyor; ölçüldü (RTX 4060 8 GB, `gemma4:e4b`): modelin yalnızca **%34'ü VRAM'de**, kalanı CPU'ya
+taşıyor. 4k bağlamda model **%100 VRAM'de**. `OLLAMA_NUM_PARALLEL` aynı ayırmayı yuva sayısıyla
+çarpıyor — bir bağlam uzunluğunda sığan değer, daha büyük bağlamda açılışta OOM'a düşebiliyor;
+`context_length × num_parallel` GPU belleğine göre dengelenmeli. `ChatOptions.Reasoning.Effort`
+(`Microsoft.Extensions.AI`) yansımayla doğrulandı ve Ollama'nın OpenAI uyumlu ucu `reasoning_effort`
+parametresini hatasız kabul ediyor; ama tek örneklemde effort seviyesiyle çıktı uzunluğu arasında
+güvenilir bir korelasyon gözlenmedi — `TracedChatClientFactory`'ye bağlanmadan önce çok koşumlu bir
+ölçüm gerekir.
+
+### FAZ 9 — Dokümantasyon (kısmi)
+
+`docs/DOKUMANTASYON-STANDARDI.md`'ye üç kural eklendi: **S11** (metot açıklaması kısa, `<para>` yok),
+**S12** (gerekçe tipe aittir), **S13** (ardışık akışlarda seyrek adım yorumu). Kural, planın kritik
+saydığı 12 metoda uygulandı (iki Redis metodu main'e kaldığı için bu turda atlandı); `CLAUDE.md`,
+`README.md` ve `ANALIZ.md`'deki `MkCodesRegistry` ve toplu-kurulum atıfları güncel mimariye çekildi.
+Kod tabanının tamamının S11–S13'e göre taranması (planın 9.2 adımı) bu turda yapılmadı — Redis
+fazları `main`'de kod değiştirecek, tam tarama onlardan sonra yapılırsa iki kez yazılmaz.
+
+---
+
+> Kapsam: sahte bankaya olan yapısal bağların kesilmesi, bayat onay bağlamı hatasının düzeltilmesi ve karşılığı olmayan soyutlamaların kaldırılması. Davranış değişikliği tek yerdedir (bölüm 2); geri kalanı yapı sadeleştirmesidir.
+
+### Neden Bu Değişiklik Yapıldı? (Problem Tanımı)
+
+Bu sistemin amacı **var olan bir bankaya agentic katman eklemek**. `Banking.BankApi` geçici bir vekildir ve silinecek. Ancak silinemiyordu:
+
+```
+Banking.Domain.csproj → Banking.BankApi.csproj
+```
+
+Bu referans üç dosyadan geliyordu — `SemanticCampaignSearcher`, `SemanticFinancingSearcher`, `CampaignSyncService` — ve üçü de kampanya/finansman verisini bankanın **süreç içi** servislerinden okuyordu. Oysa `AnalyzeTools` aynı veriyi zaten `/api/campaigns` ve `/api/financing-options` uçlarından HTTP ile okuyordu: **aynı veri, iki yol.** Sahte banka silinseydi `Banking.Domain` derlenmez, dolayısıyla çözümün tamamı çökerdi.
+
+İkinci sorun kullanıcı tarafından bildirildi: **onay ekranı onaylandıktan sonra eski bir mesaj tekrar gönderildiğinde sistem hâlâ onay bekliyormuş gibi davranıyordu.**
+
+Üçüncüsü hata ayıklama maliyetiydi: bir isteği takip etmek, karşılığı olmayan soyutlamalar yüzünden gereğinden fazla sıçrama gerektiriyordu.
+
+### Çözüm ve Yeni Yapı
+
+#### 1. Sahte bankaya olan bağlar kesildi
+
+- Kampanya ve finansman semantik indeksleri artık `IBankApiClient` üzerinden **HTTP ile** besleniyor. Bankanın kayıt tipleri yerine bu tarafın kendi görünümleri kullanılıyor (`CampaignSummary`, `FinancingSummary`) — banka yüzeyi değiştiğinde güncellenecek tek yer bunlar.
+- Üç dosya `Banking.Mcp`'ye taşındı; `Banking.Domain.csproj`'den `Banking.BankApi` referansı **tamamen silindi**. `Banking.Domain` artık hiçbir projeye referans vermiyor.
+- `Banking.Host.csproj`'den de `Banking.BankApi` referansı silindi; host sahte bankaya yalnızca HTTP ile bağlanıyor.
+- `CustomerContext` `Banking.Mcp`'ye taşındı ve `InMemoryBankStore.DemoCustomerId` yerine `BankApi:DefaultCustomerId` ayarından besleniyor. **Sessiz varsayılanı yok:** yanlış müşteri kimliği, hata vermeden başka birinin verisini göstermek demektir.
+- `CampaignSyncService` yerel kataloğa yazmayı bıraktı; tek işi semantik indeksi bankanın güncel hâline eşitlemek. `/api/campaigns/sync` sözleşmesi korundu.
+- Dinlenen port artık `Agents:SelfBaseUrl`'den türetiliyor. Önceden `Program.cs` ve `AgentOptions` iki ayrı yerde 5080 yazıyordu; biri değiştirilip diğeri unutulduğunda MCP loopback ve A2A **hata vermeden** kopuyordu.
+
+**Kabul ölçütü artık ikili ve otomatik doğrulanabilir:** `dotnet sln remove src/Banking.BankApi` sonrası `dotnet build src/Banking.Host` derlenmelidir. Derleniyor.
+
+#### 2. Bayat onay bağlamı hatası (davranış değişikliği)
+
+Belirtinin iki kaynağı vardı ve **ikisi de akış bittiğinde temizlenmiyordu**:
+
+| Kaynak | Neden temizlenmiyordu |
+|---|---|
+| `TopicContextProvider` içindeki `LastAssistantResponse` | `ContextResettingTools` yalnızca `start_workflow` ve `open_screen` içeriyordu — akışın *başlangıcı*. Sağlayıcı, akış boyunca yönlendirici orkestratörü baypas ettiği için o turları hiç görmüyordu; dolayısıyla bitişi **göremediği gibi temizleyemiyordu** da. |
+| `SessionState.SerializedOrchestratorSession` | `ResetWorkflow` yalnızca `SerializedWorkflowSession`'ı sıfırlıyordu. Akış bittikten sonra orkestratörün geçmişinde son alışveriş hâlâ *"`start_workflow` çağırdım, araç bana bir soru döndürdü"* olarak duruyordu; bir sonraki mesaj o cevaplanmamış soruya verilmiş yanıt sanılıyordu. |
+
+Düzeltme, temizliği **akışın bittiğini bilen yere** taşıdı: `SessionContext.ResetWorkflow` artık her ikisini de siliyor. Bağlam enjeksiyonu ve saklama `AgentRuntime.AskLanguageModelAsync` içine, metin `AgentPrompts.BuildPreviousTurnContext`'e taşındı; `TopicContextProvider` (110 satır) ve `ContextProviders/` klasörü silindi.
+
+Yan kazanç: sağlayıcı oturum verisini `ProviderSessionState<TopicState>` içinde, yani `SessionState`'ten **ayrı bir depoda** tutuyordu. Projenin "tek oturum, tek kapı" kuralının dışındaki bu ikinci depo da kapandı.
+
+**Takas (bilerek):** tamamlanmış bir işlemin öncesine zamirle gönderme yapan takip cümlesi artık çözülmüyor. Para hareketi içeren bir akışta doğru takas budur — bitmiş bir işlemi sürüyor sanmak, bir zamiri kaçırmaktan çok daha pahalıdır.
+
+#### 3. Karşılığı olmayan soyutlamalar kaldırıldı
+
+**Silinen sahte arayüzler** (dördü de tek uygulamalı, ikinci uygulama mimari olarak mümkün değil):
+`ISessionAccessor` (— `SessionLease` zaten somut `AmbientSessionAccessor` tutuyordu, polimorfizm kırıktı), `IWorkflowEngine`, `IDeterministicActionExecutor`, `IToolRegistry`. Güvenlik gerekçesi taşıyan sözleşme cümleleri somut tiplere taşındı.
+
+`ISessionStore` **korundu**: tek uygulaması var ama gerçek bir seam — Redis geçişinin belgelenmiş tek DI satırı ve tak-çalıştır dağıtımda birden çok örnek bunu gerektirecek.
+
+**Silinen geçiş katmanı:** `WorkflowDispatcher`. Üç üyesinin de tam olarak bir çağıranı vardı ve hiçbiri kendi işini yapmıyordu. Gövdeleri `FlowRouter` ve `AgentRuntime`'a taşındı; `Lazy<WorkflowDispatcher>` DI hilesi tamamen kalktı (`AgentRuntime` artık `WorkflowRegistry`'yi doğrudan alıyor — döngüyü `Lazy<OrchestratorFallback>` zaten kırıyor).
+
+**Birleşen ikizler:**
+- Dört semantik arayıcı → tek `SemanticIndex<T>`. Eşikler (akış `0.5`, mkCode `0.70`, kampanya `0.70`, finansman `0.65`) yapılandırma parametresi olarak korundu ve her biri gerekçesiyle belgelendi.
+- `SlotConstructionResult` → `SlotStatus`. Aynı hesabın iki kayıt tipi vardı; `SlotBinder.Construct` `GetStatus`'u çağırıp sonucu yeniden paketliyordu.
+- `ChatClientFactory` → `TracedChatClientFactory`. İki fabrika tek zincirdi.
+- `SlotSchemaValidator` → `SchemaValidatedSlotWriter`. `update_slot`'un arkasındaki tek kapı iki dosyaya bölünmüştü.
+- `TracingChatClient`'ın iki çağrı yolundaki kopya hazırlık bloğu tek yardımcıya çıktı.
+
+**Kaldırılan reflection:** `HesapUzmaniAgent.Build`, `KartUzmaniAgent.Build` ve `AnalizUzmaniAgent.Build` üçü de birebir aynıydı ve `SpecialistCatalog`'un deklaratif dalıyla aynı çağrıyı üretiyordu; "derlenmiş tipi bul → `Build`'i reflection'la çağır" dalı ölü ağırlıktı. Uzman dosyaları artık yalnızca `AgentCard Card` özelliği taşıyor.
+
+**Düzeltilen performans sorunu:** `SpecialistCatalog.Cards` bir property'ydi ve gövdesi `assembly.GetTypes()` idi. Orkestratör ve **her iş akışı ajanı** kurulumunda tüm derleme yeniden taranıyordu. Derlenmiş kartlar artık statik olarak bir kez önbellekleniyor; deklaratif kartlar çalışma zamanında eklenebildiği için `ConcurrentDictionary`'de kalmaya devam ediyor.
+
+#### 4. Yol boyunca çıkan iki düzeltme
+
+- **Semantik aramada eleme sırası:** dört sınıfın üçünde `Take(topK)` `Where(eşik)`'ten **önce** çalışıyordu; eşiği geçemeyen bir kayıt kotadan yer kapıp eşiği geçen bir kaydı sonuçtan düşürebiliyordu. `SemanticIndex<T>` sırayı `Where → OrderBy → Take` olarak sabitledi.
+- **Çıktı bariyerindeki etiket boşluğu:** `ResponseSanitizer`'ın iç XML etiket listesi elle tutuluyor ve `<candidate_workflows>` orada hiç yer almıyordu. Yeni `<previous_turn>` ile birlikte eksik olan tüm prompt etiketleri (`scope`, `operating_rules`, `output_contract`, `custom_instructions`, `required_parameters`) listeye eklendi.
+
+### Doğrulama
+
+- `dotnet build BankingAgents.sln` — 0 uyarı, 0 hata.
+- Faz A kabul testi — `Banking.BankApi` çözümden çıkarılmış hâlde `Banking.Host` derleniyor.
+- `tools/WorkflowTest` — onay, ret ve çift tıklama idempotency senaryolarının üçü de geçiyor.
+- Çalışan sistem: `/api/diag` (18 MCP aracı, 5 uzman, orkestratör hazır), `/api/tools`, `/api/specialists`, `/api/campaigns/sync` (`syncedCount: 4`). Dört semantik indeks de HTTP'den doluyor.
+
+---
+
 ## Sürüm: [Semantik-Baypasın-Kaldırılması] - 2026-08-07
 
 > Kapsam: `AgentRuntime` (semantik yönlendirme) ve `AgentPrompts` (orkestratörün niyet kuralı, aday listesi bağlamı). Semantik arama kaldırılmadı; **karar verme yetkisi** kaldırıldı. Bu sürüm bir önceki sürümdeki "baypası ilk turla sınırla" düzeltmesinin yerini alır.

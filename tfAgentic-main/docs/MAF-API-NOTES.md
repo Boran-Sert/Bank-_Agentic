@@ -107,3 +107,72 @@ sealed class ChargeExecutor(string id, ICollectionService svc, Slots s) : Execut
 }
 ```
 Checkpoint (HTTP istekleri arası kalıcılık, opsiyonel): `CheckpointManager.CreateInMemory()` + `InProcessExecution.ResumeStreamingAsync(wf, checkpointInfo, cm)`. Bu projede tek süreç olduğundan `StreamingRun` bellekte tutulur.
+
+---
+
+## SmartComponents.LocalEmbeddings — `EmbeddingF32` (yansımayla doğrulandı)
+
+Semantik indeksin vektör tipi. Kalıcılık tasarımı buna bağlı olduğundan yüzeyi burada kayıtlı.
+
+```
+readonly struct EmbeddingF32 : IEmbedding<EmbeddingF32>
+    .ctor(ReadOnlyMemory<byte> buffer)          // public — geri kurma yolu budur
+    ReadOnlyMemory<byte>  Buffer { get; }        // ham bayt gövdesi
+    ReadOnlyMemory<float> Values { get; }        // okunabilir float görünümü
+    float Similarity(EmbeddingF32 other)
+    static EmbeddingF32 FromModelOutput(ReadOnlySpan<float> input, Memory<byte> buffer)
+    static int GetBufferByteLength(int dimensions)
+```
+
+**Doğrudan JSON'a serileştirilemez:** parametresiz kurucusu yoktur ve iki özelliği de
+`ReadOnlyMemory<T>`'dir. Buna karşılık `Buffer` ↔ `.ctor(ReadOnlyMemory<byte>)` üzerinden
+**kayıpsız** gidip gelir; kalıcılık katmanı `float[]` değil **ham baytları** saklamalıdır.
+
+Ölçülen (varsayılan model): `Buffer` 1536 bayt, `Values` 384 boyut. Gidiş-dönüş sonrası
+`restored.Similarity(orijinal) = 1.000000` ve üçüncü bir vektöre karşı benzerlik orijinaliyle
+birebir aynı (`0.671175`) — yani yeniden kurulan vektör arama sonucunu değiştirmez.
+
+---
+
+## Konuşma geçmişine erişim — `AgentSessionExtensions` (yansımayla doğrulandı)
+
+`AgentSession` **abstract** ve üzerinde mesaj koleksiyonu yok
+(`StateBag`, `GetService` ve `ChatClientAgentSession.ConversationId` dışında üye taşımıyor).
+Mesajlara erişim uzantı metotlarındadır:
+
+```csharp
+namespace Microsoft.Agents.AI;
+
+static class AgentSessionExtensions
+{
+    static void SetInMemoryChatHistory(
+        AgentSession session, List<ChatMessage> messages,
+        string? stateKey = null, JsonSerializerOptions? jsonSerializerOptions = null);
+
+    static bool TryGetInMemoryChatHistory(
+        AgentSession session, out List<ChatMessage> messages,
+        string? stateKey = null, JsonSerializerOptions? jsonSerializerOptions = null);
+}
+```
+
+> **`tools/ApiDump` tuzağı:** dökümde bu parametre `ref` görünür — araç byref parametrelerin
+> tamamını `ref` olarak yazıyor. Gerçek imza `out`'tur (`ref` ile derlenmez: CS1620).
+
+`TryGet…` başarısız olursa (ör. sunucu tarafı konuşma kimliğiyle çalışan bir ajan) geçmiş süreçte
+tutulmuyordur ve kırpılacak bir şey yoktur — çağıran sessizce geçmelidir.
+
+**Serileştirilmiş oturum JSON'u elle kesilmez.** İç şema sürümle değişir; bozulan geçmiş hataya değil
+sessizce yanlış cevaba dönüşür. Geçmişe müdahale gerekiyorsa yalnızca bu uzantılarla ve
+`SerializeSessionAsync`'ten **önce** yapılır.
+
+> **Geçmiş kırpma denendi ve kaldırıldı — tekrar yazmadan önce oku.** Eski turlardaki araç
+> çağrısı/sonucu yüklerini düşüren bir uygulama yazılıp ölçüldü: 6 soruluk sohbette son turun girdi
+> token'ı 5906 → 5599, yani **%5,2**. Taşıdığı karmaşıklığa (çağrı ile sonucun birlikte düşürülmesi
+> zorunluluğu, iki çağıranın imza değişikliği, yeni yapılandırma anahtarı) değmediği için geri alındı.
+> Kazancın küçük olmasının nedeni mimaridir: orkestratörün araç sonuçları ham banka JSON'u değil,
+> uzmanın **zaten özetlenmiş** metin cevabıdır; ham yükler uzmanın geçmişindedir ve uzmanlar her
+> çağrıda yeni oturum açtığı için orada zaten birikmez. Bağlamı asıl büyüten kullanıcı/asistan
+> metnidir ve o korunmak zorundadır.
+
+İlgili: `ConversationSplitters.LastTurn` / `.Full` (`IConversationSplitter`) — konuşmayı tur bazında
+bölen hazır yardımcılar; kırpma kuralı tur sayısına göre yazılacaksa incelenmeye değer.

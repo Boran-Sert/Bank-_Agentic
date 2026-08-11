@@ -11,13 +11,22 @@ namespace Banking.Agents.Sessions;
 /// Bir isteğin oturum durumuna açılan tek erişim noktası. Oturum verisine erişen her katman —
 /// orkestratör, iş akışı motoru, slot yazıcı — bu tip üzerinden geçer.
 /// <para>
-/// <b>Değişmez:</b> oturum durumu istek başına bir kez yüklenir (<see cref="ISessionAccessor.OpenAsync"/>)
+/// <b>Değişmez:</b> oturum durumu istek başına bir kez yüklenir (<see cref="AmbientSessionAccessor.OpenAsync"/>)
 /// ve bir kez yazılır (scope kapanışı). Ara okuma veya ara yazma yapılmaz; dağıtık bir depoda her
 /// okuma ayrı bir kopya döndüreceğinden, çok noktalı erişim bir katmanın yazdığını diğerinin
 /// sessizce ezmesine yol açar.
 /// </para>
 /// <para>
 /// Bu nedenle buradaki metotlar senkrondur: veri bellektedir, I/O yapılmaz.
+/// </para>
+/// <para>
+/// <b>Bir akış sona erdiğinde orkestratörün konuşma geçmişi de sıfırlanır</b>
+/// (bkz. özel <c>ResetWorkflow</c>, <see cref="CompleteWorkflow"/> ve <see cref="CancelWorkflow"/>
+/// tarafından çağrılır). Akış boyunca yönlendirici orkestratörü baypas ettiğinden, o geçmişte en son
+/// duran alışveriş "akışı başlattım, araç bana bir soru döndürdü" olarak kalır. Silinmezse, akış
+/// çoktan bittiği hâlde bir sonraki mesaj o cevaplanmamış soruya verilmiş yanıt sanılır ve sistem
+/// onay bekliyormuş gibi davranır. Bedeli, tamamlanmış bir işlemin öncesine zamirle gönderme yapan
+/// takip cümlesinin artık çözülememesidir — para hareketi içeren bir akışta doğru takas budur.
 /// </para>
 /// </summary>
 public sealed class SessionContext
@@ -129,10 +138,6 @@ public sealed class SessionContext
         return status;
     }
 
-    /// <summary>Toplanan değerlerden onaya sunulacak slot kümesini kurar.</summary>
-    public SlotConstructionResult ConstructSlots() =>
-        SlotBinder.Construct(State.SlotValues, State.ExpectedSlots);
-
     /// <summary>
     /// Kurulmuş slot kümesini teklif olarak saklar ve <c>null</c> olmayan değerlerini toplanan
     /// değerlere geri yazar; böylece bir sonraki turda durum özeti aynı değerleri raporlar.
@@ -174,9 +179,6 @@ public sealed class SessionContext
             ? new Dictionary<string, DeclarativePropertyConfig>(expectedSlots, StringComparer.OrdinalIgnoreCase)
             : null;
     }
-
-    /// <summary>Aktif akışın beklenen slot şeması; akış yoksa <c>null</c>.</summary>
-    public IReadOnlyDictionary<string, DeclarativePropertyConfig>? ExpectedSlots => State.ExpectedSlots;
 
     /// <summary>Onaya sunulmuş slot kümesini döner; teklif yoksa <c>null</c>.</summary>
     public Dictionary<string, object?>? ReadProposedSlots() => State.ProposedSlots;
@@ -220,6 +222,7 @@ public sealed class SessionContext
         set => State.SerializedWorkflowSession = value;
     }
 
+    /// <summary>Akışı sonlandırır ve oturumu bir sonraki iş için temizler.</summary>
     private void ResetWorkflow(string finalPhase, string traceMessage)
     {
         State.ActiveWorkflowName = null;
@@ -233,6 +236,11 @@ public sealed class SessionContext
         State.CompletedOutcome = null;
         State.PendingAgentSignal = null;
 
+        // Orkestratörün geçmişi silinince, onun içinde taşınan tur bağlamı da (bkz.
+        // ContextProviders.TopicContextProvider) birlikte gider; ayrıca temizlenecek bir alan yoktur.
+        State.SerializedOrchestratorSession = null;
+
+        _hub.Publish(TraceCategories.Context, $"Akış kapandı → önceki tur bağlamı ve orkestratör geçmişi temizlendi");
         _hub.Publish(TraceCategories.Workflow, $"{traceMessage} → SessionId: {SessionId}");
     }
 }

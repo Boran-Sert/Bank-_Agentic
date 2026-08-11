@@ -3,12 +3,18 @@ using Banking.Agents.Tracing;
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// <see cref="ISessionAccessor"/> arayüzünün <see cref="AsyncLocal{T}"/> tabanlı uygulaması.
+/// Aktif isteğin oturumuna erişim noktası; <see cref="AsyncLocal{T}"/> tabanlıdır.
+/// <para>
+/// <b>Oturum kimliği katmanlar arasında parametre olarak taşınmaz ve LLM araçlarına hiçbir biçimde
+/// verilmez.</b> Verilseydi, hangi oturuma yazılacağını modelin ürettiği bir metin belirlerdi.
+/// </para>
 /// <para>
 /// Üç garantiyi birlikte sağlar:
 /// <list type="number">
-/// <item><b>İzolasyon</b> — aktif oturum asenkron akış boyunca taşınır ve farklı bir oturumla iç içe
-/// scope açmak istisna üretir. Bir isteğin verisi başka bir isteğe sızamaz.</item>
+/// <item><b>İzolasyon</b> — aktif oturum asenkron akış boyunca taşınır. Aynı oturumla iç içe
+/// <see cref="OpenAsync"/> çağrısı (LLM aracı → motor zinciri) zararsızdır ve yeniden yükleme
+/// yapmaz; <b>farklı</b> bir oturumla iç içe açmak istisna fırlatır — aksi hâlde ambient oturum
+/// istek ortasında kayar ve bir isteğin verisi başka bir isteğe sızabilir.</item>
 /// <item><b>Tek okuma / tek yazma</b> — durum scope açılışında yüklenir, kapanışında yazılır. Aradaki
 /// katmanların tamamı aynı nesne üzerinde çalışır ve hiçbiri depoya erişmez.</item>
 /// <item><b>Oturum başına serileştirme</b> — aynı oturuma gelen eşzamanlı istekler sıraya girer.
@@ -17,17 +23,36 @@ namespace Banking.Agents.Sessions;
 /// </list>
 /// </para>
 /// </summary>
-public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub hub) : ISessionAccessor
+public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub hub)
 {
     private readonly AsyncLocal<SessionContext?> _currentSession = new();
     private readonly Dictionary<string, SessionLock> _locksBySessionId = new(StringComparer.Ordinal);
     private readonly Lock _lockTableGate = new();
 
+    /// <summary>Bu isteğin oturumu.</summary>
+    /// <exception cref="InvalidOperationException">
+    /// Aktif bir oturum scope'u yokken çağrıldığında fırlatılır. Sessizce yeni bir oturum üretmek,
+    /// iki kullanıcının verisinin karışmasına açık kapı bırakır.
+    /// </exception>
     public SessionContext Current =>
         _currentSession.Value
         ?? throw new InvalidOperationException(
-            "Aktif oturum scope'u yok. Bu çağrı ISessionAccessor.OpenAsync ile açılmış bir scope içinden yapılmalıdır.");
+            "Aktif oturum scope'u yok. Bu çağrı OpenAsync ile açılmış bir scope içinden yapılmalıdır.");
 
+    /// <summary>
+    /// Oturum scope'unu açar: oturuma özel kilit alınır ve durum depodan <b>bir kez</b> yüklenir.
+    /// Dönen kiralama <see cref="SessionLease.Enter"/> ile ambient hâle getirilir ve
+    /// <c>await using</c> ile kapatılır; kapanışta durum depoya bir kez yazılır.
+    /// <code>
+    /// var lease = await sessionAccessor.OpenAsync(sessionId, cancellationToken);
+    /// await using var session = lease.Enter();
+    /// </code>
+    /// </summary>
+    /// <param name="sessionId">Çalışılacak oturumun kimliği; boş olamaz.</param>
+    /// <param name="cancellationToken">İptal jetonu.</param>
+    /// <exception cref="InvalidOperationException">
+    /// Aktif bir scope varken farklı bir <paramref name="sessionId"/> ile çağrıldığında fırlatılır.
+    /// </exception>
     public async Task<SessionLease> OpenAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);

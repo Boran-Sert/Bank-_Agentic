@@ -1,87 +1,47 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
+using Banking.Domain.Semantic;
 using Microsoft.Extensions.Logging;
 using SmartComponents.LocalEmbeddings;
 
 namespace Banking.Domain.Workflows;
 
-
-
 /// <summary>
-/// Kayıtlı iş akışlarını yerel ONNX gömme modeliyle semantik indekse alan ve kullanıcı niyetine en
-/// yakın akışları skorlayarak döndüren arama bileşeni.
+/// Kayıtlı iş akışlarını semantik indekse alan ve kullanıcı niyetine en yakın akışları döndüren
+/// arama bileşeni.
 /// <para>
-/// İndeks bellekte tutulur ve çalışma zamanında güncellenebilir; yeni kaydedilen bir akış yeniden
-/// başlatma gerektirmeden aranabilir hâle gelir.
+/// İndeks çalışma zamanında güncellenebilir: çalışma anında kaydedilen bir akış, uygulama yeniden
+/// başlatılmadan aranabilir hâle gelir.
 /// </para>
 /// </summary>
-public sealed class SemanticWorkflowSearcher
+public sealed class SemanticWorkflowSearcher(LocalEmbedder embedder, ILogger<SemanticWorkflowSearcher> logger)
 {
-    private readonly LocalEmbedder _embedder;
-    private readonly ILogger<SemanticWorkflowSearcher> _logger;
-    private readonly List<(EmbeddingF32 Vector, WorkflowMetadata Metadata)> _cache = new();
-    private bool _isInitialized;
+    /// <summary>
+    /// Akış eşiği kasıtlı olarak düşüktür. Sonuç bir karar değil, orkestratöre verilen <b>aday
+    /// listesidir</b>; kararı cümleyi okuyan model verir. Yüksek bir eşik, doğru akışı listeden
+    /// tamamen düşürerek modelin onu hiç göremeyeceği bir duruma yol açar.
+    /// </summary>
+    private const float SimilarityThreshold = 0.5f;
 
-    public SemanticWorkflowSearcher(LocalEmbedder embedder, ILogger<SemanticWorkflowSearcher> logger)
-    {
-        _embedder = embedder;
-        _logger = logger;
-    }
+    private readonly SemanticIndex<WorkflowMetadata> _index = new(
+        embedder,
+        keySelector: workflow => workflow.WorkflowName,
+        textSelector: workflow => $"{workflow.WorkflowName}: {workflow.Description}",
+        SimilarityThreshold,
+        logger,
+        label: "Akış");
 
-    /// <summary>Verilen iş akışlarını vektörleştirip indekse ekler.</summary>
+    /// <summary>Verilen iş akışlarını vektörleştirip indekse alır.</summary>
     /// <param name="discoveredWorkflows">İndekslenecek akışların metadatası.</param>
-    public void Initialize(IEnumerable<WorkflowMetadata> discoveredWorkflows)
-    {
-        foreach (var item in discoveredWorkflows)
-        {
-            AddOrUpdate(item);
-        }
-    }
+    public void Initialize(IEnumerable<WorkflowMetadata> discoveredWorkflows) => _index.Replace(discoveredWorkflows);
 
     /// <summary>
-    /// Tek bir iş akışını vektörleştirip indekse ekler veya günceller. Çalışma zamanında kaydedilen
-    /// akışların aramada anında görünmesini sağlayan yol budur.
+    /// Tek bir iş akışını indekse ekler veya günceller. Çalışma zamanında kaydedilen akışların
+    /// aramada anında görünmesini sağlayan yol budur.
     /// </summary>
-    public void AddOrUpdate(WorkflowMetadata item)
-    {
-        var textToEmbed = $"{item.WorkflowName}: {item.Description}";
-        var embedding = _embedder.Embed(textToEmbed);
-        
-        lock (_cache)
-        {
-            _cache.RemoveAll(c => c.Metadata.WorkflowName.Equals(item.WorkflowName, StringComparison.OrdinalIgnoreCase));
-            _cache.Add((embedding, item));
-        }
-
-        _isInitialized = true;
-        _logger.LogInformation("[RAG Vektör İndekslendi] Akış: '{WorkflowName}' · Tanım: '{Description}' (Toplam İndeks: {Count})", 
-            item.WorkflowName, item.Description, _cache.Count);
-    }
+    public void AddOrUpdate(WorkflowMetadata workflow) => _index.AddOrUpdate(workflow);
 
     /// <summary>Kullanıcı mesajına en yakın iş akışlarını benzerlik skorlarıyla birlikte döner.</summary>
     /// <param name="intent">Kullanıcının mesajı veya niyet ifadesi.</param>
     /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
-    public IReadOnlyList<(WorkflowMetadata Metadata, float Score)> Search(string intent, int topK = 5)
-    {
-        if (!_isInitialized || _cache.Count == 0) return Array.Empty<(WorkflowMetadata, float)>();
-
-        var intentEmbedding = _embedder.Embed(intent);
-
-        var results = _cache
-            .Select(c => (c.Metadata, Score: intentEmbedding.Similarity(c.Vector)))
-            .Where(x => x.Score > 0.5f) // 0.5 threshold ile düşük skorları filtrele
-            .OrderByDescending(x => x.Score)
-            .Take(topK)
-            .ToList();
-
-        _logger.LogInformation("[Semantik Akış Araması] Niyet: '{Intent}' · Bulunan Eşleşme Sayısı: {Count}", intent, results.Count);
-        foreach (var res in results)
-        {
-            _logger.LogInformation("  -> Akış: {WorkflowName} · Skor: {Score:F3} · Tanım: '{Description}'", 
-                res.Metadata.WorkflowName, res.Score, res.Metadata.Description);
-        }
-
-        return results;
-    }
+    public IReadOnlyList<(WorkflowMetadata Metadata, float Score)> Search(string intent, int topK = 5) =>
+        _index.Search(intent, topK);
 }

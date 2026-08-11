@@ -1,93 +1,112 @@
-using System.Diagnostics.Eventing.Reader;
-using System.Text;
+using Banking.Domain.MkCodes;
+using Banking.Domain.Semantic;
 using Microsoft.Extensions.Logging;
 using SmartComponents.LocalEmbeddings;
-namespace Banking.Domain.MkCodes
+
+namespace Banking.Mcp.Semantic;
+
+/// <summary>
+/// Bankanın ekran kodlarını (mkCode) anlamsal olarak arayan bileşen.
+/// <para>
+/// <b>Katalog bankadan, vektör hesabı süreç içinden gelir.</b> Kodların kendisi
+/// <see cref="MkCodeCatalog"/> üzerinden bankadan okunur; banka bir gömme ucu sunmadığı için
+/// vektörleştirme burada yapılır. Aramanın dış ağa bağımlılığı yoktur.
+/// </para>
+/// </summary>
+public sealed class SemanticMkCodeSearcher(
+    LocalEmbedder embedder,
+    MkCodeCatalog catalog,
+    ISemanticIndexStore vectorStore,
+    ILogger<SemanticMkCodeSearcher> logger)
 {
     /// <summary>
-    /// Sistemde tanımlı ekran kodlarını (mkCode) anlamsal olarak arayan bileşen. Süreç içinde çalışan
-    /// yerel bir ONNX gömme (embedding) modeli kullanır.
+    /// Ekran kodu eşiği yüksektir: sonuç doğrudan kullanıcıyı bir ekrana götürür. Zayıf bir
+    /// eşleşmeyle yanlış ekran açmak, hiç sonuç bulunamadığını söylemekten daha kötüdür.
+    /// </summary>
+    private const float SimilarityThreshold = 0.70f;
+
+    private readonly SemanticIndex<MkCodeDefinition> _index = new(
+        embedder,
+        keySelector: code => code.Value,
+        textSelector: Describe,
+        SimilarityThreshold,
+        logger,
+        label: "Ekran Kodu",
+        vectorStore);
+
+    /// <summary>
+    /// Ekranın gömülecek metnini üretir: görünen ad ve bankanın tanımladığı arama takma adları.
     /// <para>
-    /// <b>Dış ağa bağımlılığı yoktur;</b> arama, internet erişimi bulunmayan ortamlarda da çalışır.
+    /// <b>Takma adlar olmadan arama ekran adının kelimelerine takılır.</b> "Hesap özeti" arayan bir
+    /// kullanıcıya, adında "Hesap" ve "Ekran" geçtiği için "Günlük Hesap Açılış İnfo Ekranı" gibi
+    /// alakasız bir kayıt "Hesaplarım"dan yüksek skor alabilir. Kullanıcının kullandığı kelimeler
+    /// takma adlarda durur; bankanın kendi verisidir ve burada tahmin üretilmez.
+    /// </para>
+    /// <para>
+    /// Kod değerinin metne girmesi bilinçlidir: modelin ürettiği niyet metni bazen İngilizce teknik
+    /// bir ifade oluyor ve kod adları da İngilizce.
     /// </para>
     /// </summary>
-    public class SemanticMkCodeSearcher
+    private static string Describe(MkCodeDefinition code)
     {
-        private readonly LocalEmbedder _embedder;
-        private readonly ILogger<SemanticMkCodeSearcher> _logger;
-        private readonly List<(EmbeddingF32 Vector, MkCodeDefinition Code)> _cache = new();
-        private bool _isInitialized = false;
-        public SemanticMkCodeSearcher(LocalEmbedder embedder, ILogger<SemanticMkCodeSearcher> logger)
-        {
-            _embedder = embedder;
-            _logger = logger;
-        }
-        /// <summary>
-        /// Kayıtlı tüm ekran kodlarını vektörleştirip bellek içi indekse alır. Uygulama başlangıcında
-        /// çağrılarak ilk sorgudaki soğuk başlangıç gecikmesini önler; ikinci çağrı etkisizdir.
-        /// </summary>
-        public void Initialize()
-        {
-            if (_isInitialized) return;
-            var allCodes = MkCodesRegistry.GetAll();
-            foreach (var code in allCodes)
-            {
-                // Arama kalitesini artırmak için Label ve Value birleştirilir
-                var textToEmbed = $"{code.Label} ({code.Value})";
-                var embedding = _embedder.Embed(textToEmbed);
-                _cache.Add((embedding, code));
-            }
-            _isInitialized = true;
-            _logger.LogInformation("SemanticMkCodeSearcher başlatıldı. Toplam {Count} adet mkCode vektörize edildi.", _cache.Count);
-        }
-        /// <summary>
-        /// Kullanıcı niyetine anlamsal olarak en yakın ekran kodlarını arar ve sonuçları benzerlik
-        /// skorlarıyla birlikte döner.
-        /// </summary>
-        /// <param name="intent">Kullanıcının ekran arama niyeti.</param>
-        /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
-        /// <returns>Skoru en yüksek eşleşmeler, azalan sırada.</returns>
-        public IReadOnlyList<(MkCodeDefinition Code, float Score)> Search(string intent, int topK = 5)
-        {
-            _logger.LogInformation("Semantic Search input: '{Intent}'", intent);
-            if (!_isInitialized)
-            {
-                Initialize();
-            }
+        var aliases = code.Keywords is { Count: > 0 }
+            ? " " + string.Join(", ", code.Keywords.Distinct(StringComparer.OrdinalIgnoreCase))
+            : string.Empty;
 
-            var intentEmbedding = _embedder.Embed(intent);
+        return $"{code.Label} ({code.Value}){aliases}";
+    }
 
-            var results = _cache
-                .Select(c => new
-                {
-                    c.Code,
-                    Score = intentEmbedding.Similarity(c.Vector)
-                })
-                .OrderByDescending(x => x.Score)
-                .Take(topK)
-                .Where(x => x.Score > 0.70f)
-                .Select(x => (x.Code, x.Score))
-                .ToList();
+    /// <summary>
+    /// Kataloğu bankadan yükleyip vektörleştirir. Uygulama başlangıcında çağrılarak ilk sorgudaki
+    /// soğuk başlangıç gecikmesini önler; indeks zaten doluysa etkisizdir.
+    /// </summary>
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        if (_index.Count > 0) return;
+        await RefreshAsync(cancellationToken);
+    }
 
-            var logBuilder = new StringBuilder();
-            logBuilder.AppendLine($"[SemanticSearch] Niyet: '{intent}' araması yapıldı. Bulunan Top {topK}:");
+    /// <summary>
+    /// Kataloğu bankadan tazeleyip indeksi kesintisiz yeniden kurar.
+    /// </summary>
+    /// <returns>İndekslenen kod sayısı; katalog boşsa sıfır.</returns>
+    public async Task<int> RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        await catalog.EnsureLoadedAsync(cancellationToken);
 
-            if (!results.Any())
-            {
-                logBuilder.AppendLine("  -> 0.70 üzeri benzerlikte MkCode bulunamadı.");
-            }
-            else
-            {
-                foreach (var r in results)
-                {
-                    logBuilder.AppendLine(
-                        $"  -> Skor: {r.Score:F4} | Kod: {r.Code.Value} | Etiket: {r.Code.Label}");
-                }
-            }
+        var codes = catalog.All;
+        return codes.Count == 0 ? 0 : await _index.ReplaceAsync(codes, cancellationToken);
+    }
 
-            _logger.LogInformation(logBuilder.ToString());
+    /// <summary>
+    /// Varsayılan olarak modele sunulan aday sayısı.
+    /// <para>
+    /// <b>Aday listesi bilerek geniş tutulur.</b> Gömme benzerliği ekranın <i>konusunu</i> ölçer,
+    /// kullanıcının hangi ekranı kastettiğini değil: adında "Ekranı" geçen uzun etiketli kayıtlar,
+    /// içinde "ekran" geçen her niyette kısa ve doğru etiketi sıralamada aşağı itiyor. Doğru kodun
+    /// listeye <i>girmesi</i> sıralamada birinci olmasından daha belirleyicidir — hangisinin
+    /// kastedildiğini cümleyi okuyan model seçer. Liste dar tutulduğunda o seçim hiç yapılamaz.
+    /// </para>
+    /// <para>
+    /// Eşiği gevşetmek aynı işi yapmaz: eşik alakasız kaydı listeye sokar, kota ise alakalı kaydı
+    /// listeden düşürür. Genişletilen kota, eşiği geçmiş kayıtlar arasından seçim yapar.
+    /// </para>
+    /// </summary>
+    private const int DefaultCandidateCount = 10;
 
-            return results;
-        }
+    /// <summary>
+    /// Kullanıcı niyetine anlamsal olarak en yakın ekran kodlarını benzerlik skorlarıyla döner.
+    /// İndeks boşsa banka yeniden denenir; kalıcı olarak sessiz kalması bu kuralla engellenir.
+    /// </summary>
+    /// <param name="intent">Kullanıcının ekran arama niyeti.</param>
+    /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
+    /// <param name="cancellationToken">İptal jetonu.</param>
+    public async Task<IReadOnlyList<(MkCodeDefinition Code, float Score)>> SearchAsync(
+        string intent, int topK = DefaultCandidateCount, CancellationToken cancellationToken = default)
+    {
+        // Açılışta banka kapalıysa indeks boş kalmıştır; her arama yeniden denenir.
+        if (_index.Count == 0) await RefreshAsync(cancellationToken);
+
+        return _index.Search(intent, topK);
     }
 }

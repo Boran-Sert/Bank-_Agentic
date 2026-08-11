@@ -1,5 +1,5 @@
-using System.Collections.Generic;
-using System.Linq;
+
+using System.Diagnostics;
 using Microsoft.Extensions.AI;
 using Banking.Domain.Constants;
 
@@ -12,44 +12,100 @@ namespace Banking.Agents.Tracing;
 /// Etiket, izlerde hangi ajanın çalıştığını gösterir. Yapılandırılmış sıcaklık, istek kendi değerini
 /// belirtmediğinde varsayılan olarak uygulanır.
 /// </para>
+/// <para>
+/// Her tamamlanan çağrı için ayrıca bir <c>Token Maliyeti</c> satırı yayınlanır. Sistemin donanım
+/// faturasını belirleyen çarpan mesaj başına model turu olduğundan, bir iyileştirmenin etkisi ancak
+/// tur başına token ve süre görünürse kanıtlanabilir. Ölçüm ayrı bir log kanalına değil aynı ize
+/// yazılır: <see cref="TraceHub"/> kaydı hem canlı ize hem <c>ILogger</c>'a düşürür, ikinci bir kanal
+/// aynı veriyi iki yerde bayatlatır.
+/// </para>
+/// <para>
+/// Bazı sağlayıcılar token sayısı döndürmez; bu durumda satır yalnızca süreyi taşır. Ölçümün
+/// kendisinin kaybolmaması, eksik alanla yayınlanmasından daha önemlidir.
+/// </para>
 /// </summary>
-public sealed class TracingChatClient(IChatClient inner, TraceHub hub, string label, float temperature = 0.1f) : DelegatingChatClient(inner)
+public sealed class TracingChatClient(
+    IChatClient inner, TraceHub hub, string label, string model, float temperature = 0.1f)
+    : DelegatingChatClient(inner)
 {
+    private const int RequestSummaryLimit = 300;
+    private const int ResponseSummaryLimit = 500;
+
+    /// <summary>
+    /// Bir model turunu çalıştırır. Turun süresi ve döndüyse token kullanımı ize yayınlanır.
+    /// </summary>
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
     {
-        options ??= new ChatOptions();
-        options.Temperature ??= temperature;
+        var msgList = PrepareTurn(messages, ref options, "Model Çağrısı Başlatıldı");
 
-        var msgList = (messages ?? Enumerable.Empty<ChatMessage>()).ToList();
-        var lastMsgSummary = GetMessageSummary(msgList.LastOrDefault());
-        if (lastMsgSummary.Length > 300) lastMsgSummary = string.Concat(lastMsgSummary.AsSpan(0, 300), "... [Kesildi]");
-
-        hub.Publish(TraceCategories.Llm, $"{label} -> Model Çağrısı Başlatıldı", $"Girdi: \"{lastMsgSummary}\"");
-
+        // turun süresi
+        var watch = Stopwatch.StartNew();
         var response = await base.GetResponseAsync(msgList, options, cancellationToken);
+        watch.Stop();
 
-        var replySummary = GetResponseSummary(response);
-        if (replySummary.Length > 500) replySummary = string.Concat(replySummary.AsSpan(0, 500), "... [Kesildi]");
+        hub.Publish(TraceCategories.Llm, $"{label} -> Model Yanıtı Alındı",
+            $"Çıktı: \"{Truncate(GetResponseSummary(response), ResponseSummaryLimit)}\"");
 
-        hub.Publish(TraceCategories.Llm, $"{label} -> Model Yanıtı Alındı", $"Çıktı: \"{replySummary}\"");
+        PublishTurnCost(response.Usage, watch.ElapsedMilliseconds);
 
         return response;
     }
 
+    /// <summary>
+    /// Tamamlanan bir turun maliyetini ize yazar. Token sayıları yalnızca sağlayıcı döndürdüyse
+    /// satıra girer; model adı ve süre her hâlükârda yazılır.
+    /// <para>
+    /// <b>Model adı satırın parçasıdır.</b> Ajan başına model ataması yapıldığında hangi turun hangi
+    /// modele gittiği yalnızca buradan okunabilir; etiket tek başına ajanı gösterir, maliyeti
+    /// belirleyen ise modeldir.
+    /// </para>
+    /// </summary>
+    private void PublishTurnCost(UsageDetails? usage, long elapsedMilliseconds)
+    {
+        var cost = usage is null
+            ? string.Empty
+            : $"girdi={usage.InputTokenCount} çıktı={usage.OutputTokenCount} " +
+              $"toplam={usage.TotalTokenCount} ";
+
+        hub.Publish(TraceCategories.Llm, $"{label} -> Token Maliyeti",
+            $"model={model} {cost}süre={elapsedMilliseconds} ms");
+    }
+
+    /// <summary>
+    /// Akış hâlinde bir model turu çalıştırır. Sistem akış kullanmadığından maliyet ölçümü bu yolda
+    /// yapılmaz; yalnızca giden istek ize yayınlanır.
+    /// </summary>
     public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        var msgList = PrepareTurn(messages, ref options, "Model Canlı Akış (Streaming) Başlatıldı");
+
+        return base.GetStreamingResponseAsync(msgList, options, cancellationToken);
+    }
+
+    /// <summary>
+    /// İki çağrı yolunun ortak hazırlığı: varsayılan sıcaklığı uygular ve giden isteği ize yayınlar.
+    /// <para>
+    /// Sıcaklık yalnızca istek kendi değerini belirtmediğinde yazılır; akış YAML'ında belirtilmiş bir
+    /// değer ezilmez.
+    /// </para>
+    /// </summary>
+    private List<ChatMessage> PrepareTurn(IEnumerable<ChatMessage> messages, ref ChatOptions? options, string eventName)
     {
         options ??= new ChatOptions();
         options.Temperature ??= temperature;
 
-        var msgList = (messages ?? Enumerable.Empty<ChatMessage>()).ToList();
-        var lastMsgSummary = GetMessageSummary(msgList.LastOrDefault());
-        if (lastMsgSummary.Length > 300) lastMsgSummary = string.Concat(lastMsgSummary.AsSpan(0, 300), "... [Kesildi]");
+        var msgList = (messages ?? []).ToList();
 
-        hub.Publish(TraceCategories.Llm, $"{label} -> Model Canlı Akış (Streaming) Başlatıldı", $"Girdi: \"{lastMsgSummary}\"");
-        return base.GetStreamingResponseAsync(msgList, options, cancellationToken);
+        hub.Publish(TraceCategories.Llm, $"{label} -> {eventName}",
+            $"Girdi: \"{Truncate(GetMessageSummary(msgList.LastOrDefault()), RequestSummaryLimit)}\"");
+
+        return msgList;
     }
+
+    private static string Truncate(string text, int maxLength) =>
+        text.Length <= maxLength ? text : string.Concat(text.AsSpan(0, maxLength), "... [Kesildi]");
 
     private static string GetMessageSummary(ChatMessage? msg)
     {

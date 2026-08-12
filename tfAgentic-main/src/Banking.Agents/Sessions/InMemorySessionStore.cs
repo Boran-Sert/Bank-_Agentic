@@ -7,12 +7,8 @@ namespace Banking.Agents.Sessions;
 
 /// <summary>
 /// <see cref="ISessionStore"/> arayüzünün tek süreçlik bellek içi uygulaması. Oturumlar kayan TTL
-/// ile tutulur; süresi dolan kayıt <see cref="IMemoryCache"/> tarafından tahliye edilir.
-/// <para>
-/// Süre <see cref="SessionStoreOptions.SlidingTimeToLive"/>'dan gelir ve <b>sabit değildir</b>: pencerenin
-/// uzunluğu kullanıcının iki mesajı arasında ne kadar duraklayabileceğini belirler, dolayısıyla
-/// dağıtım ortamına göre ayarlanabilir olmalıdır.
-/// </para>
+/// ile tutulur; süresi dolan kayıt <see cref="IMemoryCache"/> tarafından tahliye edilir. Pencerenin
+/// uzunluğu <see cref="SessionStoreOptions.SlidingTimeToLive"/> ile yapılandırılır.
 /// </summary>
 public sealed class InMemorySessionStore : ISessionStore
 {
@@ -20,6 +16,7 @@ public sealed class InMemorySessionStore : ISessionStore
     private readonly TraceHub _hub;
     private readonly TimeSpan _slidingTimeToLive;
 
+    /// <summary>Oturum deposunu yapılandırılmış kayan yaşam süresiyle kurar.</summary>
     public InMemorySessionStore(IMemoryCache cache, TraceHub hub, IOptions<SessionStoreOptions>? options = null)
     {
         _cache = cache;
@@ -27,6 +24,7 @@ public sealed class InMemorySessionStore : ISessionStore
         _slidingTimeToLive = (options?.Value ?? new SessionStoreOptions()).SlidingTimeToLive;
     }
 
+    /// <inheritdoc />
     public ValueTask<SessionState?> TryGetAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
@@ -35,6 +33,7 @@ public sealed class InMemorySessionStore : ISessionStore
         return ValueTask.FromResult(state);
     }
 
+    /// <inheritdoc />
     public ValueTask SaveAsync(SessionState state, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -50,18 +49,9 @@ public sealed class InMemorySessionStore : ISessionStore
     }
 
     /// <summary>
-    /// Tahliye edilen oturumu ize yazar.
-    /// <para>
-    /// <b>Yarım kalan bir akışın kaybı aksi hâlde hiçbir yerde görünmez.</b> Depo boş döndüğünde
-    /// <see cref="AmbientSessionAccessor"/> sessizce yeni bir durum kurar; süresi dolmuş oturumla
-    /// hiç var olmamış oturum ayırt edilemez. Kullanıcı tarafında da hata yoktur — asistan yalnızca
-    /// az önce topladığı parametreleri unutmuş olur. Bu satır, o anı izde görünür kılan tek kayıttır.
-    /// </para>
-    /// <para>
-    /// Geri çağrım <see cref="IMemoryCache"/>'in kendi zamanlayıcısında, oturum scope'u dışında
-    /// çalışır; bu nedenle burada yalnızca <see cref="TraceHub"/> gibi oturumdan bağımsız bileşenler
-    /// kullanılabilir.
-    /// </para>
+    /// Tahliye edilen oturumu ize yazar; yarım kalan bir akışın kaybı yalnızca bu satırda görünür.
+    /// Geri çağrım oturum scope'u dışında çalışır, bu yüzden burada oturuma bağlı bileşen
+    /// kullanılmaz.
     /// </summary>
     private void PublishEviction(object key, object? value, EvictionReason reason, object? state)
     {

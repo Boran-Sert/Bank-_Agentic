@@ -15,30 +15,11 @@ namespace Banking.Agents.Specialists;
 
 /// <summary>
 /// Uzman ajanların keşfi, kurulumu ve çağıranlara bağlanma biçiminin (A2A veya süreç içi) tek
-/// yönetim noktası.
-/// <para>
-/// <b>Uzman listesi hiçbir yerde sabit yazılmaz</b> ve iki kaynaktan beslenir: statik
-/// <c>AgentCard Card</c> özelliği taşıyan derlenmiş sınıflar ve çalışma zamanında kaydedilen
-/// deklaratif tanımlar. Her ikisi de aynı <see cref="AgentCard"/> tipine dönüşür; bu sınıfın
-/// altındaki katmanlar iki kaynak arasındaki farkı görmez.
-/// </para>
-/// <para>
-/// <b>Ajan nesnesi ihtiyaç anında kurulur ve boşta kalırsa bırakılır.</b> Kart kaydı ile ajan ömrü
-/// birbirinden ayrıdır: kartlar süreç boyunca durur, kurulmuş ajanlar
-/// <see cref="AgentOptions.AgentIdleTimeout"/> penceresi boyunca kullanılmazsa tahliye edilir ve
-/// sonraki çağrıda yeniden kurulur. Sınırsız büyüyen bir ajan sözlüğü, çalışma zamanında YAML ile
-/// uzman eklenebilen bir sistemde kalıcı bir sızıntıdır.
-/// </para>
-/// <para>
-/// <b>Tahliye <see cref="Version"/> değerini artırmaz.</b> Sürüm "katalog içeriği değişti" demektir ve
-/// orkestratör ile tüm iş akışı ajanlarının yeniden kurulmasını tetikler; boştaki tek bir uzmanın
-/// düşmesi bunu tetiklerse sistem kendi kendine yeniden kurulum fırtınası üretir.
-/// </para>
-/// <para>
-/// <see cref="EnsureInitializedAsync"/> sunucu dinlemeye başladıktan sonra çağrılır ve yalnızca
-/// süreç içi MCP sunucusuna loopback bağlantıyı hazırlar — o bağlantı ancak o noktada kurulabilir ve
-/// her istekte kullanılır.
-/// </para>
+/// yönetim noktası. Uzman listesi hiçbir yerde sabit yazılmaz; derlenmiş sınıflar ve çalışma
+/// zamanında kaydedilen deklaratif tanımlar aynı <see cref="AgentCard"/> tipine dönüşür ve alt
+/// katmanlar ikisi arasındaki farkı görmez. Kart kaydı ile ajan ömrü ayrıdır: kartlar süreç boyunca
+/// durur, kurulmuş ajanlar <see cref="AgentOptions.AgentIdleTimeout"/> boyunca kullanılmazsa
+/// tahliye edilir. Tahliye <see cref="Version"/> değerini artırmaz.
 /// </summary>
 public sealed class SpecialistCatalog(
     AgentOptions options,
@@ -49,12 +30,8 @@ public sealed class SpecialistCatalog(
     ILogger<SpecialistCatalog> logger)
 {
     /// <summary>
-    /// Derlemede statik <c>AgentCard Card</c> özelliği taşıyan sınıflardan üretilen kartlar.
-    /// <para>
-    /// <b>Bir kez taranır.</b> Derlenmiş tipler süreç ömrü boyunca değişmez; tarama her
-    /// <see cref="Cards"/> erişiminde tekrarlansaydı, orkestratörün ve her iş akışı ajanının
-    /// kurulumu derlemenin tamamını yeniden gezerdi.
-    /// </para>
+    /// Derlemede statik <c>AgentCard Card</c> özelliği taşıyan sınıflardan üretilen kartlar. Derleme
+    /// bir kez taranır; derlenmiş tipler süreç ömrü boyunca değişmez.
     /// </summary>
     private static readonly IReadOnlyList<AgentCard> CompiledCards = DiscoverCompiledCards();
 
@@ -71,13 +48,8 @@ public sealed class SpecialistCatalog(
     private int _version;
 
     /// <summary>
-    /// Uzman kataloğunun sürümü; her kayıtta artar.
-    /// <para>
-    /// Uzmanlardan köprü aracı üretip önbellekleyen her bileşen (orkestratör ve akış ajanları)
-    /// kurulduğu sürümü saklar ve sürüm değiştiğinde kendini yeniden kurar. <b>Bildirim yerine sürüm
-    /// numarası kullanılır:</b> karşılaştırma abonelik sırasına bağlı değildir ve yeni bir tüketici
-    /// eklendiğinde kayıt tarafında hatırlanması gereken bir adım oluşmaz.
-    /// </para>
+    /// Uzman kataloğunun sürümü; her kayıtta artar. Köprü araçlarını önbellekleyen her bileşen
+    /// kurulduğu sürümü saklar ve sürüm değiştiğinde kendini yeniden kurar.
     /// </summary>
     public int Version => Volatile.Read(ref _version);
 
@@ -86,32 +58,21 @@ public sealed class SpecialistCatalog(
 
     /// <summary>
     /// Derlenmiş ve deklaratif tüm uzmanların kartları. Derlenmiş kartlar önbellekten gelir;
-    /// deklaratif kartlar <b>her erişimde yeniden okunur</b> çünkü çalışma zamanında eklenebilirler.
+    /// deklaratif kartlar çalışma zamanında eklenebildiğinden her erişimde yeniden okunur.
     /// </summary>
     public IReadOnlyList<AgentCard> Cards => [.. CompiledCards, .. _declarativeCards.Values];
 
     /// <summary>Kayıtlı tüm uzmanların adları.</summary>
     public IReadOnlyCollection<string> SpecialistNames => Cards.Select(card => card.Name).ToList();
 
-    // =================================================================================
-    // KURULUM
-    // =================================================================================
+    // --- Kurulum ---
 
     /// <summary>
     /// Kataloğu hizmete hazır duruma getirir: süreç içi MCP sunucusuna loopback bağlantıyı kurar ve
-    /// taşıma katmanını belirler. Uygulama dinlemeye başladıktan sonra çağrılır; sonraki çağrılar
-    /// etkisizdir.
-    /// <para>
-    /// <b>Uzmanlar burada kurulmaz.</b> Toplu kurulum, ilk isteğe kadar hiç kullanılmayacak ajanları da
-    /// üretir ve boşta kalan ajanın tahliye edilebilmesini anlamsız kılardı; ajan
-    /// <see cref="GetSpecialistAsync"/> ile ilk istendiğinde kurulur. Hazırlanan tek şey her uzmanın
-    /// ortak ihtiyacı olan MCP bağlantısıdır — pahalı olan da odur.
-    /// </para>
-    /// <para>
-    /// <b>Başarısız kurulum kalıcı değildir:</b> MCP sunucusuna ilk denemede ulaşılamazsa hazırlık
-    /// tamamlanmış sayılmaz ve sonraki istek yeniden dener. Aksi hâlde tek bir geçici bağlantı
-    /// hatası sistemi kalıcı olarak yanıtsız bırakırdı.
-    /// </para>
+    /// taşıma katmanını belirler. Uygulama dinlemeye başladıktan sonra çağrılır, sonraki çağrılar
+    /// etkisizdir. Uzmanlar burada kurulmaz; ajan <see cref="GetSpecialistAsync"/> ile ilk
+    /// istendiğinde kurulur. MCP sunucusuna ulaşılamazsa hazırlık tamamlanmış sayılmaz ve sonraki
+    /// istek yeniden dener.
     /// </summary>
     public async Task EnsureInitializedAsync(CancellationToken cancellationToken = default)
     {
@@ -137,25 +98,12 @@ public sealed class SpecialistCatalog(
         }
     }
 
-    // =================================================================================
-    // KAYIT
-    // =================================================================================
+    // --- Kayıt ---
 
     /// <summary>
-    /// Deklaratif uzman tanımını kaydeder. Aynı ad ikinci kez gönderildiğinde kayıt üzerine yazılır;
-    /// böylece yeni talimat ve araç kümesi geçerli olur.
-    /// <para>
-    /// <b>Katalog hazırsa ajan burada bir kez kurulur — ertelenmez.</b> Tanımın geçersiz bir araç adı
-    /// listelemesi ancak kurulum sırasında anlaşılır; ertelenirse kayıt başarılı görünür ve hata
-    /// kullanıcının ilk sorusunda ortaya çıkar. Kurulan ajan diğerleriyle aynı önbelleğe yazılır,
-    /// dolayısıyla boşta kalırsa o da tahliye edilir. Katalog henüz hazır değilse (uygulama
-    /// başlangıcında diskten yükleme) yalnızca kart yazılır: süreç içi MCP sunucusu o anda henüz
-    /// dinlemiyordur.
-    /// </para>
-    /// <para>
-    /// Kayıt <see cref="Version"/> değerini artırır; köprü araçlarını önbellekleyen bileşenler
-    /// kendilerini bu sayede yeniler.
-    /// </para>
+    /// Deklaratif uzman tanımını kaydeder ve <see cref="Version"/> değerini artırır. Aynı ad ikinci
+    /// kez gönderildiğinde kayıt üzerine yazılır. Katalog hazırsa ajan burada bir kez kurulur;
+    /// geçersiz araç adı böylece kaydın kendisinde hata verir, kullanıcının ilk sorusunda değil.
     /// </summary>
     /// <param name="definition">Kaydedilecek deklaratif uzman tanımı.</param>
     /// <param name="cancellationToken">İptal jetonu.</param>
@@ -184,13 +132,8 @@ public sealed class SpecialistCatalog(
     }
 
     /// <summary>
-    /// Deklaratif bir tanımın derlenmiş uzmanı gölgelemesini engeller.
-    /// <para>
-    /// <b>Korumanın kapsamı ad ile sınırlı değildir;</b> köprü aracı adı ve A2A yolu da denetlenir.
-    /// Üçü de çağrının hangi uzmana gideceğini belirlediğinden, herhangi birindeki çakışma aynı
-    /// sonucu doğurur: gerçek araçlara bağlı bir uzmanın yerini araçsız bir tanım alır ve sistem,
-    /// nedeni hiçbir yerde görünmeden yanıt veremez duruma gelir.
-    /// </para>
+    /// Deklaratif bir tanımın derlenmiş uzmanı gölgelemesini engeller. Ad, köprü aracı adı ve A2A
+    /// yolu ayrı ayrı denetlenir; üçü de çağrının hangi uzmana gideceğini belirler.
     /// </summary>
     /// <exception cref="InvalidOperationException">Çakışma tespit edildiğinde fırlatılır.</exception>
     private static void GuardAgainstCompiledCollision(AgentCard card)
@@ -211,19 +154,12 @@ public sealed class SpecialistCatalog(
         }
     }
 
-    // =================================================================================
-    // ERİŞİM
-    // =================================================================================
+    // --- Erişim ---
 
     /// <summary>
     /// Adı verilen uzman ajanı döner; önbellekte yoksa kurar. Tam ad eşleşmesi bulunamazsa kısmi ad
-    /// eşleşmesi denenir.
-    /// <para>
-    /// <b>"Böyle bir uzman yok" ile "ajan tahliye edilmiş" karıştırılmaz.</b> Birincisi bir
-    /// yapılandırma hatasıdır ve istisna olarak görünür; ikincisi olağandır ve burada sessizce
-    /// yeniden kurularak çözülür. İkisi aynı yola bağlansaydı, yanlış yazılmış bir uzman adı
-    /// gecikmeli bir kurulum denemesine dönüşür ve nedeni izde görünmezdi.
-    /// </para>
+    /// eşleşmesi denenir. Bilinmeyen ad bir yapılandırma hatasıdır ve istisna fırlatır; tahliye
+    /// edilmiş ajan olağandır ve yeniden kurulur.
     /// </summary>
     /// <param name="specialistName">Aranan uzmanın adı.</param>
     /// <param name="cancellationToken">İptal jetonu.</param>
@@ -241,7 +177,7 @@ public sealed class SpecialistCatalog(
         await gate.WaitAsync(cancellationToken);
         try
         {
-            // Kapıyı beklerken başka bir çağrı kurmuş olabilir.
+            // Kapıyı beklerken kurulmuş olabilir
             if (agentCache.TryGetValue(BuildCacheKey(card.Name), out AIAgent? justBuilt) && justBuilt is not null)
                 return justBuilt;
 
@@ -265,7 +201,7 @@ public sealed class SpecialistCatalog(
             string.Equals(card.Name, specialistName, StringComparison.OrdinalIgnoreCase));
         if (exact is not null) return exact;
 
-        // Esnek eşleştirme: kısmi ad da kabul edilir (A2A çağrılarında ad varyasyonları olabiliyor).
+        // Kısmi ad eşleşmesi
         return cards.FirstOrDefault(card =>
             card.Name.Contains(specialistName, StringComparison.OrdinalIgnoreCase) ||
             specialistName.Contains(card.Name, StringComparison.OrdinalIgnoreCase));
@@ -289,12 +225,9 @@ public sealed class SpecialistCatalog(
 
     /// <summary>
     /// Her uzman için çağıranın kullanabileceği köprü aracını üretir. A2A etkinse araçlar HTTP
-    /// loopback üzerinden, değilse süreç içi vekil üzerinden bağlanır.
-    /// <para>
-    /// <b>Süreç içi dalda somut ajan değil <see cref="LazySpecialistAgent"/> verilir.</b> Köprü
-    /// araçları uzun ömürlü ajanların araç listesinde durduğundan, somut ajanı yakalayan bir köprü
-    /// onu önbellekten bağımsız olarak canlı tutar ve tahliyeyi ölü koda çevirir.
-    /// </para>
+    /// loopback üzerinden, değilse süreç içi vekil üzerinden bağlanır. Süreç içi dalda somut ajan
+    /// değil <see cref="LazySpecialistAgent"/> verilir; köprü araçları uzun ömürlü ajanların araç
+    /// listesinde durduğundan somut bir ajan tahliyeden bağımsız olarak canlı kalır.
     /// </summary>
     public IReadOnlyList<AITool> BuildBridgeTools()
     {
@@ -333,15 +266,9 @@ public sealed class SpecialistCatalog(
             .ToList();
 
     /// <summary>
-    /// Uzman kartını çalışan bir ajana dönüştürür.
-    /// <para>
-    /// <b>Derlenmiş ve deklaratif uzman arasında kurulum farkı yoktur;</b> ikisi de karttaki talimat,
-    /// ad ve araç kümesiyle aynı biçimde üretilir. Fark yalnızca kartın nereden geldiğidir.
-    /// </para>
-    /// <para>
-    /// <b>Araç kapsamı tek noktada belirlenir:</b> kart açıkça araç adı listeliyorsa yalnızca o
-    /// araçlar, listelemiyorsa kartın araç grubunun tamamı verilir.
-    /// </para>
+    /// Uzman kartını çalışan bir ajana dönüştürür. Derlenmiş ve deklaratif uzman arasında kurulum
+    /// farkı yoktur. Araç kapsamı tek noktada belirlenir: kart açıkça araç adı listeliyorsa yalnızca
+    /// o araçlar, listelemiyorsa kartın araç grubunun tamamı verilir.
     /// </summary>
     private async Task<AIAgent> BuildFromCardAsync(AgentCard card, CancellationToken cancellationToken)
     {
@@ -374,12 +301,8 @@ public sealed class SpecialistCatalog(
     }
 
     /// <summary>
-    /// Tahliye edilen uzman ajanı ize yazar.
-    /// <para>
-    /// <b>Tahliye kullanıcıya hata olarak görünmez</b> — yalnızca sonraki istek kurulum süresi kadar
-    /// gecikir. Bu satır olmadan gecikme artışının nedeni hiçbir yerde okunamaz ve boşta kalma
-    /// penceresinin doğru ayarlanıp ayarlanmadığı ölçülemez.
-    /// </para>
+    /// Tahliye edilen uzman ajanı ize yazar; sonraki isteğin kurulum gecikmesinin nedeni yalnızca bu
+    /// satırda okunur.
     /// </summary>
     private void PublishEviction(object key, object? value, EvictionReason reason, object? state)
     {

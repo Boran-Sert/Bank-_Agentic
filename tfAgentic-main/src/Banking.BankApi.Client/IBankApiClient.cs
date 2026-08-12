@@ -4,12 +4,8 @@ namespace Banking.BankApi.Client;
 
 /// <summary>
 /// Bankanın REST yüzeyine açılan tek kapı. Bu arayüz bankacılık bilmez: yol, gövde ve idempotency
-/// anahtarı verilir, ham JSON döner.
-/// <para>
-/// <b>Akışa özel metot içermez.</b> <c>OdemeYap</c> veya <c>TransferEt</c> türü bir üye eklendiğinde
-/// her yeni akış bu arayüzü de değiştirmek zorunda kalır; akış başına C# yazma zorunluluğu tam olarak
-/// böyle geri gelir.
-/// </para>
+/// anahtarı verilir, ham JSON döner. Akışa özel metot (<c>OdemeYap</c>, <c>TransferEt</c>)
+/// eklenmez; yeni bir akış bu arayüzü değiştirmez.
 /// </summary>
 public interface IBankApiClient
 {
@@ -24,9 +20,8 @@ public interface IBankApiClient
     /// <param name="path">Bankadaki hedef yol.</param>
     /// <param name="body">İstek gövdesi; gövde gerekmiyorsa <c>null</c>.</param>
     /// <param name="idempotencyKey">
-    /// Para hareketi uçlarında zorunludur. Aynı anahtarla gelen ikinci istek yeni bir hareket üretmez;
-    /// banka ilk sonucun aynısını döner. Çift tıklamanın çift tahsilata dönüşmesini engelleyen
-    /// mekanizma budur.
+    /// Para hareketi uçlarında zorunludur. Aynı anahtarla gelen ikinci istek yeni bir hareket
+    /// üretmez; banka ilk sonucun aynısını döner.
     /// </param>
     /// <param name="cancellationToken">İptal jetonu.</param>
     /// <exception cref="BankApiException">Banka isteği reddettiğinde veya hata döndürdüğünde fırlatılır.</exception>

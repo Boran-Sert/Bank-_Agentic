@@ -4,11 +4,8 @@ using Banking.Domain.Models;
 namespace Banking.Domain.Services;
 
 /// <summary>
-/// Finansman/kredi ürün kataloğuna erişim sözleşmesi.
-/// <para>
-/// MCP araçları veri katmanına (<see cref="InMemoryBankStore"/>) <b>asla</b> doğrudan
-/// dokunmaz; finansman okuma yolu tek kapıdan, bu saf C# servisinden geçer.
-/// </para>
+/// Finansman ve kredi ürün kataloğuna erişim sözleşmesi. Veri katmanına
+/// (<see cref="InMemoryBankStore"/>) doğrudan dokunulmaz; okuma yolu bu servisten geçer.
 /// </summary>
 public interface IFinancingCatalogService
 {

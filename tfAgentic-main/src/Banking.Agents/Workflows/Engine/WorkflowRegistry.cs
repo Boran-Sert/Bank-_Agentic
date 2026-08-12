@@ -8,18 +8,10 @@ using Banking.Domain.Workflows;
 namespace Banking.Agents.Workflows.Engine;
 
 /// <summary>
-/// Sistemdeki iş akışlarının kataloğu ve motor fabrikası.
-/// <para>
-/// <b>Tek kayıt yolu MAF deklaratif YAML/JSON tanımıdır.</b> Yeni bir akış eklemek bir metin dosyası
-/// yazmaktan ibarettir: C# record'u, akışa özel executor, attribute veya DI kaydı gerekmez.
-/// </para>
-/// <para>
-/// <b>Kayıt defteri davranış değil veri tutar.</b> Sözlükte akış başına bir
-/// <see cref="RegisteredWorkflow"/> saklanır; motoru ondan <see cref="BuildEngineAsync"/> kurar.
-/// Kapanış (closure) saklansaydı kayıtlı akışın yolu, şeması ve talimatı yalnızca o kapanışın içinde
-/// yaşar, hata ayıklarken ne sözlükte görülebilir ne de motorun kurulumuna kesme noktası konabilirdi.
-/// Kayıt hâlâ çalışma zamanında yapılabilir; değişen tek şey saklananın ne olduğudur.
-/// </para>
+/// Sistemdeki iş akışlarının kataloğu ve motor fabrikası. Tek kayıt yolu MAF deklaratif YAML/JSON
+/// tanımıdır; yeni bir akış eklemek bir metin dosyası yazmaktan ibarettir. Kayıt defteri davranış
+/// değil veri tutar — sözlükte akış başına bir <see cref="RegisteredWorkflow"/> saklanır, motoru
+/// ondan <see cref="BuildEngineAsync"/> kurar.
 /// </summary>
 public sealed class WorkflowRegistry(
     WorkflowAgentFactory workflowAgentFactory,
@@ -54,9 +46,7 @@ public sealed class WorkflowRegistry(
     /// <summary>Kayıtlı tüm iş akışlarının metadatasını döner.</summary>
     public IReadOnlyList<WorkflowMetadata> DiscoveredWorkflows => _discoveredWorkflows.Values.ToList();
 
-    // =================================================================================
-    // KAYIT
-    // =================================================================================
+    // --- Kayıt ---
 
     /// <summary>
     /// MAF deklaratif YAML/JSON tanımını çalışma zamanında kaydeder. Aynı ad ikinci kez
@@ -68,7 +58,7 @@ public sealed class WorkflowRegistry(
 
         _discoveredWorkflows[workflowName] = new WorkflowMetadata(workflowName, definition.Description, definition.Instructions);
 
-        // Akışın kimliği ve nereye gideceği: tamamı YAML'dan, dört alan.
+        // Akışın kimliği ve hedefi
         var action = new WorkflowActionDefinition(
             workflowName,
             definition.MkCode,
@@ -82,9 +72,7 @@ public sealed class WorkflowRegistry(
             definition);
     }
 
-    // =================================================================================
-    // MOTOR ÜRETİMİ
-    // =================================================================================
+    // --- Motor üretimi ---
 
     /// <summary>Adı verilen akış için bu isteğe ait motoru üretir.</summary>
     /// <exception cref="KeyNotFoundException">Verilen ad kayıtlı bir akışa karşılık gelmediğinde fırlatılır.</exception>
@@ -106,10 +94,10 @@ public sealed class WorkflowRegistry(
     {
         var session = sessionAccessor.Current;
 
-        // Şema oturuma tanıtılır: motor "ne eksik", update_slot "hangi tip" sorusunu buradan yanıtlar.
+        // Şema oturuma tanıtılır
         session.DeclareExpectedSlots(registered.SlotSchema);
 
-        // Ajan kimliği önce kurulur; talimat metni araç adlarını ondan okur, kendi türetmez.
+        // Ajan kimliği; talimat metni araç adlarını buradan okur
         var agentDefinition = WorkflowAgentDefinition.For(
             registered.Action.WorkflowName,
             slotSchema: registered.SlotSchema,
@@ -122,8 +110,7 @@ public sealed class WorkflowRegistry(
 
         var workflowAgent = await workflowAgentFactory.GetOrCreateAsync(agentDefinition);
 
-        // Orkestratöre devretme kanalı geç çözülür: orkestratör de akış başlatabildiğinden,
-        // kanalın yapıcıda çözülmesi döngüsel bağımlılık oluşturur.
+        // Devretme kanalı geç çözülür (döngüsel bağımlılık)
         return new WorkflowEngine(
             session, registered.Action, workflowAgent, actionExecutor, orchestratorFallback.Value, hub);
     }

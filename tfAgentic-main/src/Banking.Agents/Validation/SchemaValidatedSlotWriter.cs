@@ -7,23 +7,11 @@ using Banking.Domain.Constants;
 namespace Banking.Agents.Validation;
 
 /// <summary>
-/// <c>update_slot</c> aracının arkasındaki tek geçiş noktası. Oturuma yazılan her slot değeri bu
-/// sınıftan geçer.
-/// <para>
-/// Uygulanan tek kural <b>şema uyumudur:</b> değer, akışın YAML tanımındaki tiple uyuşmuyorsa
-/// oturuma yazılmaz ve gerekçe araç sonucu olarak ajana döner. Ajan aynı turda doğru tipi yeniden
-/// sorar ve uyumsuz değer onay ekranına ulaşamaz.
-/// </para>
-/// <para>
-/// <b>Uymayan değer dönüştürülmez, reddedilir.</b> Değeri biçimlendirerek kabul etmek, kullanıcının
-/// söylemediği bir değerin onay ekranına taşınması riskini doğurur; bunun yerine modelden doğru
-/// tipte yeniden göndermesi istenir.
-/// </para>
-/// <para>
-/// <b>Bankacılık kuralı içermez.</b> Yetersiz bakiye, borcu aşan tutar ve geçersiz IBAN denetimleri
-/// bankanın kendi uçlarına aittir. Aynı kuralın burada da tutulması, iki kopyanın birbirinden
-/// habersiz sapmasına yol açar.
-/// </para>
+/// <c>update_slot</c> aracının arkasındaki tek geçiş noktası; oturuma yazılan her slot değeri bu
+/// sınıftan geçer. Uygulanan tek kural şema uyumudur: akışın YAML tanımındaki tiple uyuşmayan değer
+/// dönüştürülmez, reddedilir ve gerekçe araç sonucu olarak ajana döner. Bankacılık kuralı
+/// içermez — yetersiz bakiye, borcu aşan tutar ve geçersiz IBAN denetimleri bankanın uçlarına
+/// aittir.
 /// </summary>
 public sealed class SchemaValidatedSlotWriter(
     AmbientSessionAccessor sessionAccessor,
@@ -38,9 +26,7 @@ public sealed class SchemaValidatedSlotWriter(
     /// <returns>Ajana döndürülecek araç sonucu metni; reddedilen değerlerde gerekçeyi taşır.</returns>
     public string WriteSlotIfSchemaAccepts(string slotName, object? candidateSlotValue)
     {
-        // YAML'daki type: hiçbir araç şemasına girmiyor — update_slot'un value şeması Ollama
-        // uyumluluğu için {}'a indirgeniyor, model tipi yalnızca prompt metninde bir cümle
-        // olarak görüyor. Kısıt olarak dayatıldığı tek yer burasıdır.
+        // Şema uyum kontrolü
         if (FindDeclaredType(slotName) is { } declaredType &&
             !MatchesDeclaredType(declaredType, candidateSlotValue, out var expectedType))
         {
@@ -73,13 +59,9 @@ public sealed class SchemaValidatedSlotWriter(
     }
 
     /// <summary>
-    /// Değerin, YAML'da bildirilen tiple uyuştuğunu belirler.
-    /// <para>
-    /// <b>Bu kontrol araç şemasının yerini tutar.</b> YAML'daki tip bildirimi üretilen araç şemasına
-    /// girmez: <c>update_slot</c>'un değer parametresi, sağlayıcı uyumluluğu için tip kısıtı
-    /// taşımayan boş bir nesneye indirgenir ve tip bilgisi modele yalnızca açıklama metniyle ulaşır.
-    /// Model bunu bir kısıt değil öneri olarak görür; tip zorlaması bu nedenle burada yapılır.
-    /// </para>
+    /// Değerin, YAML'da bildirilen tiple uyuştuğunu belirler. YAML'daki tip üretilen araç şemasına
+    /// girmediğinden — <c>update_slot</c>'un değer parametresi sağlayıcı uyumluluğu için kısıtsız
+    /// bir nesnedir — tip zorlamasının yapıldığı tek yer burasıdır.
     /// </summary>
     /// <param name="declaredType">
     /// YAML'daki tip bildirimi. Tanınmayan bir değer verildiğinde kısıt uygulanmaz.
@@ -115,13 +97,9 @@ public sealed class SchemaValidatedSlotWriter(
     }
 
     /// <summary>
-    /// Değerin JSON türünü çözer.
-    /// <para>
-    /// <c>update_slot</c>'un <c>value</c> parametresi <c>object</c> olduğu için System.Text.Json her
-    /// zaman bir <see cref="JsonElement"/> üretir — <c>GetType()</c> istisnasız <c>JsonElement</c>
-    /// döner ve hiçbir şey ayırt etmez. Ayrım <see cref="JsonElement.ValueKind"/> üzerinden
-    /// yapılmalıdır.
-    /// </para>
+    /// Değerin JSON türünü çözer. <c>value</c> parametresi <c>object</c> olduğundan gelen değer her
+    /// zaman bir <see cref="JsonElement"/>'tir; ayrım <see cref="JsonElement.ValueKind"/> ile
+    /// yapılır, <c>GetType()</c> ile değil.
     /// </summary>
     private static JsonValueKind? ResolveValueKind(object value) => value switch
     {

@@ -28,12 +28,8 @@ public sealed record FlowExecutionResult(
     OrchestratorReply? OrchestratorReply = null);
 
 /// <summary>
-/// Deterministik yönlendirici: isteğin aktif bir iş akışına mı yoksa LLM orkestratörüne mi
-/// gideceğine karar verir.
-/// <para>
-/// <b>Aktif bir akış varken mesaj hiçbir koşulda orkestratöre uğramaz.</b> Bu kural, ödeme
-/// ortasındaki bir kullanıcının LLM akıl yürütmesiyle akıştan çıkarılmasını engeller.
-/// </para>
+/// Deterministik yönlendirici: isteğin aktif bir iş akışına mı yoksa orkestratöre mi gideceğine
+/// karar verir. Aktif bir akış varken mesaj hiçbir koşulda orkestratöre uğramaz.
 /// </summary>
 public sealed class FlowRouter(
     AgentRuntime runtime,
@@ -44,14 +40,13 @@ public sealed class FlowRouter(
 {
     /// <summary>
     /// Mesajı uygun yürütme hattına yönlendirir: oturumda kullanıcı etkileşimi bekleyen bir akış
-    /// varsa iş akışı motoruna, aksi hâlde orkestratöre.
+    /// varsa iş akışı motoruna, yoksa orkestratöre.
     /// </summary>
     public async Task<FlowExecutionResult> RouteUserRequestAsync(string userMessage, CancellationToken cancellationToken = default)
     {
         var session = sessionAccessor.Current;
 
-        // İkinci koşul her zaman doğrudur — HasActiveWorkflow zaten akış adının dolu olmasını
-        // gerektirir — ama adı buradan bağlamak, motoru kurarken null denetimi taşımayı gereksiz kılar.
+        // Aktif akış hattı
         if (session.HasActiveWorkflow && session.ActiveWorkflowName is { } activeWorkflowName)
         {
             hub.Publish(TraceCategories.FlowRouter, "Aktif iş akışı oturumu → mesaj doğrudan workflow ajanına yönlendiriliyor");

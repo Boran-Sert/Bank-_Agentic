@@ -1,13 +1,9 @@
 namespace Banking.Mcp.Constants;
 
 /// <summary>
-/// MCP araçlarının bankada çağırdığı yollar. <b>Yol metni araç gövdesine yazılmaz;</b> bankanın
-/// yüzeyi değiştiğinde tek dosya güncellenir ve hangi aracın hangi ucu kullandığı buradan okunur.
-/// <para>
-/// Yolların hiçbiri parametre taşımaz: kimlikler ve filtreler istek gövdesinde gider
-/// (<c>{"customerId": "CUST-001"}</c>). Yola kimlik eklemek, aynı bilginin iki yerde
-/// (yol ve gövde) tutulması demektir.
-/// </para>
+/// MCP araçlarının bankada çağırdığı yollar. Yol metni araç gövdesine yazılmaz; bankanın yüzeyi
+/// değiştiğinde yalnızca bu dosya güncellenir. Yollar parametre taşımaz — kimlikler ve filtreler
+/// istek gövdesinde gider (<c>{"customerId": "CUST-001"}</c>).
 /// </summary>
 public static class BankApiPaths
 {

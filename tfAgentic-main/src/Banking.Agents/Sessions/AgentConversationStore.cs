@@ -8,28 +8,20 @@ namespace Banking.Agents.Sessions;
 /// </summary>
 /// <param name="Session">Kullanılacak ajan konuşması; geri yükleme başarısızsa yeni açılmış olanı.</param>
 /// <param name="RestoreFailure">
-/// Geri yükleme başarısız olduysa nedeni, aksi hâlde <c>null</c>. <b>Çağıran raporlar:</b> her
-/// çağıranın kendi kanalı vardır (biri günlüğe, diğeri canlı ize yazar) ve bu bilgi sessizce
-/// yutulursa konuşma geçmişinin kaybı hiçbir yerde görünmez.
+/// Geri yükleme başarısız olduysa nedeni; başarılıysa <c>null</c>. Raporlamak çağıranın işidir —
+/// her çağıranın kendi kanalı vardır (günlük veya canlı iz).
 /// </param>
 public readonly record struct AgentConversationRestore(AgentSession Session, Exception? RestoreFailure);
 
 /// <summary>
-/// Ajan konuşma geçmişi ile oturum durumu arasındaki tek dönüşüm noktası.
-/// <para>
-/// Orkestratör ve iş akışı ajanı aynı iki işlemi yapar: turdan önce geçmişi oturumdan geri yükler,
-/// turdan sonra tekrar oturuma yazar.
-/// </para>
+/// Ajan konuşma geçmişi ile oturum durumu arasındaki tek dönüşüm noktası. Orkestratör ve iş akışı
+/// ajanı aynı iki işlemi yapar: turdan önce geçmişi geri yükler, turdan sonra oturuma yazar.
 /// </summary>
 public static class AgentConversationStore
 {
     /// <summary>
     /// Serileştirilmiş geçmişten konuşmayı geri yükler; kayıt yoksa veya okunamıyorsa yeni bir
-    /// konuşma açar.
-    /// <para>
-    /// <b>Okunamayan geçmiş istisnaya dönüşmez.</b> Konuşmayı kaybetmek, yanlış geçmişle devam
-    /// etmekten iyidir; kullanıcının isteği geçmiş yüzünden hata almaz.
-    /// </para>
+    /// konuşma açar. Okunamayan geçmiş istisnaya dönüşmez, nedeni sonuçta taşınır.
     /// </summary>
     /// <param name="agent">Konuşmanın ait olduğu ajan.</param>
     /// <param name="serializedConversation">Oturumda saklanan geçmiş; yoksa <c>null</c>.</param>
@@ -55,12 +47,8 @@ public static class AgentConversationStore
     }
 
     /// <summary>
-    /// Konuşmayı oturumda saklanmaya hazır hâle getirir.
-    /// <para>
-    /// <b><see cref="JsonElement.Clone"/> zorunludur:</b> <see cref="JsonElement"/> altındaki
-    /// <c>JsonDocument</c>'in ömrüne bağlıdır ve değer oturum ömrü boyunca saklanacağından bağımsız
-    /// bir kopya alınır.
-    /// </para>
+    /// Konuşmayı oturumda saklanmaya hazır hâle getirir. <see cref="JsonElement.Clone"/> zorunludur;
+    /// değer, altındaki <c>JsonDocument</c>'ten bağımsız olarak oturum ömrü boyunca saklanır.
     /// </summary>
     /// <param name="agent">Konuşmanın ait olduğu ajan.</param>
     /// <param name="conversation">Serileştirilecek canlı konuşma.</param>

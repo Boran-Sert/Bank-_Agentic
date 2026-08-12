@@ -10,10 +10,8 @@ namespace Banking.Gateway;
 
 /// <summary>
 /// Yönlendirme sonucunu UI protokolüne (<see cref="GatewayResponse"/>) çeviren haritalayıcı.
-/// <para>
-/// <b>Bankacılık metni üretmez;</b> akışın kendi ürettiği <see cref="WorkflowOutcome.UserMessage"/>
-/// değerini olduğu gibi taşır. Yeni bir iş akışı eklenmesi bu sınıfta değişiklik gerektirmez.
-/// </para>
+/// Bankacılık metni üretmez; akışın ürettiği <see cref="WorkflowOutcome.UserMessage"/> değerini
+/// olduğu gibi taşır ve yeni bir akış bu sınıfta değişiklik gerektirmez.
 /// </summary>
 public sealed class GatewayResponseMapper(
     TraceHub hub, MkCodeCatalog mkCodeCatalog, ILogger<GatewayResponseMapper> logger)
@@ -74,9 +72,8 @@ public sealed class GatewayResponseMapper(
     }
 
     /// <summary>
-    /// Onay ekranını akışın kendi bildirdiği ekran koduyla üretir.
-    /// <b>Kod çözülemediğinde tahmin yapılmaz:</b> yanlış ekran göstermek yerine akış adı olduğu gibi
-    /// iletilir ve durum uyarı olarak loglanır.
+    /// Onay ekranını akışın kendi bildirdiği ekran koduyla üretir. Kod çözülemediğinde tahmin
+    /// yapılmaz; akış adı olduğu gibi iletilir ve durum uyarı olarak loglanır.
     /// </summary>
     private GatewayResponse BuildConfirmationScreen(GenericConfirmationView confirmation)
     {

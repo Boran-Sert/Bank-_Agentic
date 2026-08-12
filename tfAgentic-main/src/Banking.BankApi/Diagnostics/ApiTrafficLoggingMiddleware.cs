@@ -6,12 +6,9 @@ namespace Banking.BankApi.Diagnostics;
 /// <summary>
 /// Bankaya gelen her isteğin gövdesini ve dönen yanıtın gövdesini loga yazan ara katman. Banka ayrı
 /// bir süreçte çalıştığından ajan tarafındaki canlı izleme bu süreci görmez; trafiğin bankaya
-/// ulaşan hâli buradan okunur.
-/// <para>
-/// <b>Uç başına log satırı yoktur.</b> Kayıt uç noktalardan değil boru hattından alınır; yeni bir uç
-/// eklendiğinde loglanması için yapılacak bir şey yoktur. Gövde de alan adları elle sayılmadan,
-/// geldiği gibi yazılır: hangi parametrenin hangi değerle geldiği log satırından okunur.
-/// </para>
+/// ulaşan hâli buradan okunur. Kayıt uç noktalardan değil boru hattından alınır; yeni bir uç
+/// eklendiğinde loglanması için yapılacak bir şey yoktur. Gövde, alan adları elle sayılmadan geldiği
+/// gibi yazılır.
 /// </summary>
 public sealed class ApiTrafficLoggingMiddleware(RequestDelegate next, ILogger<ApiTrafficLoggingMiddleware> logger)
 {
@@ -104,7 +101,7 @@ public sealed class ApiTrafficLoggingMiddleware(RequestDelegate next, ILogger<Ap
 public static class ApiTrafficLoggingExtensions
 {
     /// <summary>
-    /// Gelen istek ve giden yanıt loglamasını boru hattına ekler. <b>Boru hattının başına konur:</b>
+    /// Gelen istek ve giden yanıt loglamasını boru hattına ekler. Boru hattının başına konur:
     /// böylece uçlara ulaşmadan reddedilen istekler (model bağlama hatası, 404) de görülür.
     /// </summary>
     public static IApplicationBuilder UseApiTrafficLogging(this IApplicationBuilder app) =>

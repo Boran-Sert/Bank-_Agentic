@@ -9,7 +9,7 @@ namespace Banking.Agents.Workflows.Declarative;
 
 /// <summary>
 /// MAF deklaratif YAML ve JSON tanımlarını çalışma zamanında ayrıştırır ve ajan talimatını üretir.
-/// <b>Yeniden derleme gerektirmez:</b> yeni bir akış eklemek bir metin dosyası yazmaktan ibarettir.
+/// Yeniden derleme gerektirmez; yeni bir akış eklemek bir metin dosyası yazmaktan ibarettir.
 /// </summary>
 public static class DeclarativeWorkflowBuilder
 {
@@ -34,12 +34,8 @@ public static class DeclarativeWorkflowBuilder
         ?? throw new InvalidOperationException("Geçersiz Microsoft Agent Framework JSON şeması.");
 
     /// <summary>
-    /// Deklaratif tanımdan ajanın sistem talimatını üretir.
-    /// <para>
-    /// <b>Araç adları <paramref name="agentDefinition"/>'dan okunur, burada yeniden türetilmez.</b>
-    /// Aynı türetme kuralının iki yerde bulunması, biri değiştiğinde talimattaki adla kayıtlı adın
-    /// ayrışmasına ve akışın hata üretmeden durmasına yol açar.
-    /// </para>
+    /// Deklaratif tanımdan ajanın sistem talimatını üretir. Araç adları
+    /// <paramref name="agentDefinition"/>'dan okunur, burada yeniden türetilmez.
     /// </summary>
     /// <param name="definition">Ayrıştırılmış YAML/JSON tanımı.</param>
     /// <param name="agentDefinition">Ajanın kimliği ve araç adları.</param>
@@ -58,10 +54,8 @@ public static class DeclarativeWorkflowBuilder
 
         if (!string.IsNullOrWhiteSpace(definition.Instructions))
         {
+            // Kimlik guardrail'i burada tekrarlanmaz; BuildSlotFillingRules veriyor
             instructions.AppendLine("<custom_instructions>");
-            // Kimlik guardrail'i buraya eklenmez: BuildSlotFillingRules zaten koruma bloğunda
-            // veriyor. İki kez basılması hem token yakıyor hem de YAML'da 'instructions' yoksa
-            // kuralın bir kopyasının hiç eklenmemesi gibi tutarsız bir davranış üretiyordu.
             instructions.AppendLine(definition.Instructions);
             instructions.AppendLine("</custom_instructions>").AppendLine();
         }

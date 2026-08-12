@@ -7,12 +7,9 @@ using Microsoft.Agents.AI.Workflows;
 namespace Banking.Agents.Workflows.Approval;
 
 /// <summary>
-/// İnsan onayı (human-in-the-loop) gerektiren deterministik eylemin MAF grafiğini kurar. Grafik iki
-/// düğümden oluşur: <c>RequestPort</c> onay kapısı ve ardından gelen eylem adımı.
-/// <para>
-/// <b>Para hareketi üreten hiçbir çağrı bu kapıdan geçmeden çalışmaz.</b> Model eylemi doğrudan
-/// tetikleyemez; yalnızca onay ekranını hazırlayabilir.
-/// </para>
+/// İnsan onayı (HITL) gerektiren deterministik eylemin MAF grafiğini kurar. Grafik iki düğümden
+/// oluşur: <c>RequestPort</c> onay kapısı ve ardından gelen eylem adımı. Para hareketi üreten hiçbir
+/// çağrı bu kapıdan geçmeden çalışmaz; model yalnızca onay ekranını hazırlar.
 /// </summary>
 public static class DeterministicActionWorkflow
 {
@@ -67,6 +64,7 @@ internal sealed class DeterministicActionStep(
     TraceHub hub)
     : Executor<bool, WorkflowOutcome>(id)
 {
+    /// <inheritdoc />
     public override async ValueTask<WorkflowOutcome> HandleAsync(
         bool approved, IWorkflowContext context, CancellationToken cancellationToken = default)
     {

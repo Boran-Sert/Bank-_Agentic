@@ -17,46 +17,16 @@ namespace Banking.Agents.Workflows.Engine;
 public delegate Task<string> OrchestratorFallback(string userMessage, CancellationToken cancellationToken);
 
 /// <summary>
-/// <b>Tüm iş akışlarının tek motoru.</b> Akışa özgü kod veya tip içermez; akıştan akışa değişen
-/// tek girdi YAML'dan gelen <see cref="WorkflowActionDefinition"/>'dır.
-/// <para>
-/// Akış üç evreden oluşur ve tek genel metot olan <see cref="AdvanceWorkflowStepAsync"/> bu evreleri
-/// açık bir <c>switch</c> ile ayırır:
-/// <list type="number">
-/// <item><b>Başlatma</b> — akış oturuma bağlanır ve ilk soru sorulur.</item>
-/// <item><b>Slot doldurma</b> — LLM turu; slotlar doldukça banka ön doğrulaması çalışır.</item>
-/// <item><b>Onay</b> — MAF <c>RequestPort</c> kapısı; eylem yalnızca kullanıcı onaylarsa çalışır.</item>
+/// Tüm iş akışlarının tek motoru. Akışa özgü kod veya tip içermez; akıştan akışa değişen tek girdi
+/// YAML'dan gelen <see cref="WorkflowActionDefinition"/>'dır. Durum tutmaz — her istekte yeniden
+/// yaratılır, evre ve verinin tamamı <see cref="SessionContext"/>'tedir.
+/// <list type="bullet">
+/// <item>Başlatma — akış oturuma bağlanır ve ilk soru sorulur.</item>
+/// <item>Slot doldurma — model turu; ajanın kararı araç sinyallerinden okunur, yanıt metninden
+/// değil.</item>
+/// <item>Onay — MAF <c>RequestPort</c> kapısı; yalnızca bankaya istek gönderen akışlarda kurulur
+/// (<see cref="WorkflowActionDefinition.CallsBank"/>) ve eylem kullanıcı onaylarsa çalışır.</item>
 /// </list>
-/// Hata ayıklarken sorulacak soru <i>hangi evrede</i> olduğudur; cevabı doğrudan ilgili özel metoda
-/// götürür.
-/// </para>
-/// <para>
-/// <b>Durum tutmaz.</b> Her HTTP isteğinde yeniden yaratılır; evre ve verinin tamamı
-/// <see cref="SessionContext"/>'tedir. Bu sayede herhangi bir sunucu örneği herhangi bir isteği
-/// karşılayabilir ve bellekte asılı kalan konuşma nesnesi oluşmaz.
-/// </para>
-/// <para>
-/// <b>Ajanın turu, kontrol sırası bağlayıcı olan bir yorumlamadan geçer</b>
-/// (<see cref="InterpretAgentOutputAsync"/>): iptal her şeyden, devretme teklif kontrollerinden,
-/// teklif de soru üretmekten önce gelir. Karar ajanın araç çağrılarından okunur — oturuma yazılan
-/// sinyal ve slot durumundan, yanıt metninden değil; model araç sonucunu metnine kopyalamaz, kendi
-/// cümlesini kurar ve serbest metinde sinyal aramak bu yüzden güvenilir değildir.
-/// </para>
-/// <para>
-/// <b>Onay kapısı yalnızca bankaya istek gönderen akışlar için kurulur</b>
-/// (<see cref="ConcludeSlotFillingAsync"/>). Gerekçe para hareketidir
-/// (<see cref="WorkflowActionDefinition.CallsBank"/>): hedef yolu tanımlanmamış bir akış bankayı hiç
-/// çağırmaz, onaylanacak bir işlem olmadığı hâlde kullanıcıyı ödeme onayı ekranına götürmek
-/// gerçekleşmeyecek bir işlemi gerçekleşecekmiş gibi gösterir. Onaya çıkan yolda MAF grafiği burada
-/// başlatılmaz; onay gelene kadar sunucuda askıda bir çalıştırma tutulmadığından yapışkan oturum
-/// (sticky session) gerekmez.
-/// </para>
-/// <para>
-/// <b>Anlaşılmayan onay yanıtı onay sayılmaz</b> (<see cref="ApplyApprovalDecisionAsync"/>); akış
-/// onay evresinde bekletilir ve soru tekrarlanır. Aynı teklif için ikinci kez onay geldiğinde eylem
-/// yeniden çalıştırılmaz, saklanan sonuç döner — çift tıklamanın çift tahsilata dönüşmesini engelleyen
-/// idempotency kontrolü budur.
-/// </para>
 /// </summary>
 public sealed class WorkflowEngine(
     SessionContext session,
@@ -80,9 +50,7 @@ public sealed class WorkflowEngine(
             _ => StartAsync(userMessage, cancellationToken)
         };
 
-    // =================================================================================
-    // 1. EVRE — BAŞLATMA
-    // =================================================================================
+    // --- Evre 1: başlatma ---
 
     /// <summary>
     /// Akışı başlatır ve slot doldurma evresine geçirir. Kullanıcının akışı tetikleyen ilk cümlesi
@@ -102,18 +70,12 @@ public sealed class WorkflowEngine(
         return await InterpretAgentOutputAsync(agentText, kickoffMessage, cancellationToken);
     }
 
-    // =================================================================================
-    // 2. EVRE — PARAMETRE TOPLAMA
-    // =================================================================================
+    // --- Evre 2: slot doldurma ---
 
     /// <summary>
-    /// Kullanıcının yanıtını ajana iletir. Toplanan slotların özeti ve tur yönergesi her tura
-    /// eklenir; eksik slot bilgisi ajanın hafızasına değil, oturum durumuna dayanır.
-    /// <para>
-    /// Yönerge (<see cref="AgentPrompts.SlotTurnDirective"/>) her turda tekrarlanır: sistem talimatı
-    /// konuşma uzadıkça bağlamın başında kalırken, mesajın hemen yanındaki satır tek turda birden
-    /// fazla parametre yazma davranışını canlı tutar.
-    /// </para>
+    /// Kullanıcının yanıtını ajana iletir. Toplanan slotların özeti ve tur yönergesi
+    /// (<see cref="AgentPrompts.SlotTurnDirective"/>) her tura yeniden eklenir; eksik slot bilgisi
+    /// ajanın hafızasına değil oturum durumuna dayanır.
     /// </summary>
     private async Task<WorkflowStepResult> CollectSlotsAsync(string? userMessage, CancellationToken cancellationToken)
     {
@@ -125,13 +87,16 @@ public sealed class WorkflowEngine(
         return await InterpretAgentOutputAsync(agentText, answer, cancellationToken);
     }
 
-    /// <summary>Ajanın turunu yorumlar ve akışın bir sonraki adımına karar verir.</summary>
+    /// <summary>
+    /// Ajanın turunu yorumlar ve akışın bir sonraki adımına karar verir. Kontrol sırası bağlayıcıdır:
+    /// iptal her şeyden, devretme teklif kontrollerinden, teklif de soru üretmekten önce gelir.
+    /// </summary>
     private async Task<WorkflowStepResult> InterpretAgentOutputAsync(
         string? agentText, string userMessage, CancellationToken cancellationToken)
     {
         var agentSignal = session.ConsumeAgentSignal();
 
-        // 2.1 — Kullanıcı vazgeçti.
+        // İptal
         if (agentSignal == WorkflowAgentSignals.Cancelled)
         {
             session.CancelWorkflow();
@@ -139,10 +104,7 @@ public sealed class WorkflowEngine(
             return WorkflowStepResult.Ended(session.SessionId, "İşlem iptal edildi.");
         }
 
-        // 2.2 — Konu dışı soru: akış bozulmadan orkestratöre devredilir.
-        // Teklif kontrollerinden ÖNCE gelir: konu dışı bir turda toplanan parametrelere
-        // dokunulmamıştır, o parametrelerle onay ekranı açmak kullanıcıyı istemediği bir
-        // işlemin onayına götürürdü.
+        // Konu dışı soru → orkestratöre devir
         if (agentSignal == WorkflowAgentSignals.Handoff)
         {
             hub.Publish(TraceCategories.Workflow, "Konu dışı soru algılandı → orkestratöre devredildi");
@@ -152,25 +114,23 @@ public sealed class WorkflowEngine(
                 $"{orchestratorReply}\n\n---\n*Son işleminize isterseniz kaldığınız yerden devam edebilirsiniz.*");
         }
 
-        // 2.3 — Parametreler araç çağrılarıyla tamamlandı.
+        // Slotlar araç çağrılarıyla tamamlandı
         if (session.GetSlotStatus().IsComplete && session.ReadProposedSlots() is { } completedSlots)
             return await ConcludeSlotFillingAsync(completedSlots, cancellationToken);
 
-        // 2.4 — Ajan teklif JSON'ı ürettiyse ayrıştırılıp saklanır.
+        // Ajan teklif JSON'ı üretti
         if (Contains(agentText, WorkflowAgentSignals.ProposalReady) && TryParseProposal(agentText!) is { } proposedSlots)
         {
             session.StoreProposedSlots(action.WorkflowName, proposedSlots);
             return await ConcludeSlotFillingAsync(proposedSlots, cancellationToken);
         }
 
-        // 2.5 — Eksik bilgi var; ajanın sorusu kullanıcıya iletilir.
+        // Eksik bilgi → ajanın sorusu kullanıcıya
         return WorkflowStepResult.Ask(session.SessionId,
             string.IsNullOrWhiteSpace(agentText) ? "Devam etmek için lütfen bilgi verir misiniz?" : agentText);
     }
 
-    // =================================================================================
-    // 3. EVRE — ONAY (HITL)
-    // =================================================================================
+    // --- Evre 3: onay kapısı (HITL) ---
 
     /// <summary>Parametreler tamamlandığında akışı sonlandırma yoluna sokar.</summary>
     private async Task<WorkflowStepResult> ConcludeSlotFillingAsync(
@@ -200,7 +160,10 @@ public sealed class WorkflowEngine(
         return WorkflowStepResult.AwaitApproval(session.SessionId, confirmationView);
     }
 
-    /// <summary>Kullanıcının onay yanıtını uygular.</summary>
+    /// <summary>
+    /// Kullanıcının onay yanıtını uygular. Anlaşılmayan yanıt onay sayılmaz, akış onay evresinde
+    /// bekletilir; aynı teklif için ikinci onayda eylem yeniden çalışmaz, saklanan sonuç döner.
+    /// </summary>
     private async Task<WorkflowStepResult> ApplyApprovalDecisionAsync(string? userMessage, CancellationToken cancellationToken)
     {
         var intent = ApprovalIntentParser.Parse(userMessage ?? string.Empty);
@@ -234,17 +197,9 @@ public sealed class WorkflowEngine(
 
     /// <summary>
     /// MAF grafiğini kurar, onay kararını porta aynı istek içinde iletir ve çıktı ile hata
-    /// event'lerinin tamamını işler.
-    /// <para>
-    /// Onay kapısının kurulup kurulmayacağını <see cref="WorkflowActionDefinition.CallsBank"/>
-    /// belirler; kapının girdisi onay ekranı, kapısız grafiğin girdisi ise doğrudan onay kararıdır.
-    /// Kapısız grafikte <see cref="RequestInfoEvent"/> hiç doğmaz, döngünün geri kalanı aynı kalır.
-    /// </para>
-    /// <para>
-    /// Executor içinde oluşan istisnalar çağırana fırlamaz, event akışına düşer. Bu nedenle
-    /// <see cref="ExecutorFailedEvent"/> ve <see cref="WorkflowErrorEvent"/> açıkça ele alınır ve
-    /// hatanın gerekçesi kullanıcıya iletilen mesaja taşınır.
-    /// </para>
+    /// event'lerini işler. Kapısız grafikte <see cref="RequestInfoEvent"/> hiç doğmaz. Executor
+    /// istisnaları çağırana fırlamaz, event akışına düşer; bu yüzden
+    /// <see cref="ExecutorFailedEvent"/> ve <see cref="WorkflowErrorEvent"/> açıkça ele alınır.
     /// </summary>
     /// <returns>Başarılı sonuç, kullanıcı reddi veya gerekçesi taşınmış bir hata sonucu.</returns>
     private async Task<WorkflowOutcome> RunActionGraphAsync(
@@ -309,9 +264,7 @@ public sealed class WorkflowEngine(
         return WorkflowStepResult.Ended(session.SessionId, outcome.UserMessage, outcome);
     }
 
-    // =================================================================================
-    // ORTAK YARDIMCILAR
-    // =================================================================================
+    // --- Ortak yardımcılar ---
 
     /// <summary>
     /// Konuşma geçmişini oturumdan geri yükler, ajanı bir tur çalıştırır ve geçmişi tekrar oturuma

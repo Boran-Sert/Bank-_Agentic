@@ -6,12 +6,8 @@ using SmartComponents.LocalEmbeddings;
 namespace Banking.Mcp.Semantic;
 
 /// <summary>
-/// Bankanın ekran kodlarını (mkCode) anlamsal olarak arayan bileşen.
-/// <para>
-/// <b>Katalog bankadan, vektör hesabı süreç içinden gelir.</b> Kodların kendisi
-/// <see cref="MkCodeCatalog"/> üzerinden bankadan okunur; banka bir gömme ucu sunmadığı için
-/// vektörleştirme burada yapılır. Aramanın dış ağa bağımlılığı yoktur.
-/// </para>
+/// Bankanın ekran kodlarını (mkCode) anlamsal olarak arayan bileşen. Kodlar
+/// <see cref="MkCodeCatalog"/> üzerinden bankadan okunur, vektör hesabı süreç içinde yapılır.
 /// </summary>
 public sealed class SemanticMkCodeSearcher(
     LocalEmbedder embedder,
@@ -20,8 +16,8 @@ public sealed class SemanticMkCodeSearcher(
     ILogger<SemanticMkCodeSearcher> logger)
 {
     /// <summary>
-    /// Ekran kodu eşiği yüksektir: sonuç doğrudan kullanıcıyı bir ekrana götürür. Zayıf bir
-    /// eşleşmeyle yanlış ekran açmak, hiç sonuç bulunamadığını söylemekten daha kötüdür.
+    /// Ekran kodu eşiği yüksektir: sonuç doğrudan kullanıcıyı bir ekrana götürür, zayıf eşleşme
+    /// sonuç sayılmaz.
     /// </summary>
     private const float SimilarityThreshold = 0.70f;
 
@@ -35,17 +31,8 @@ public sealed class SemanticMkCodeSearcher(
         vectorStore);
 
     /// <summary>
-    /// Ekranın gömülecek metnini üretir: görünen ad ve bankanın tanımladığı arama takma adları.
-    /// <para>
-    /// <b>Takma adlar olmadan arama ekran adının kelimelerine takılır.</b> "Hesap özeti" arayan bir
-    /// kullanıcıya, adında "Hesap" ve "Ekran" geçtiği için "Günlük Hesap Açılış İnfo Ekranı" gibi
-    /// alakasız bir kayıt "Hesaplarım"dan yüksek skor alabilir. Kullanıcının kullandığı kelimeler
-    /// takma adlarda durur; bankanın kendi verisidir ve burada tahmin üretilmez.
-    /// </para>
-    /// <para>
-    /// Kod değerinin metne girmesi bilinçlidir: modelin ürettiği niyet metni bazen İngilizce teknik
-    /// bir ifade oluyor ve kod adları da İngilizce.
-    /// </para>
+    /// Ekranın gömülecek metnini üretir: görünen ad, kod değeri ve bankanın tanımladığı arama takma
+    /// adları. Takma adlar bankanın verisidir; burada tahmin üretilmez.
     /// </summary>
     private static string Describe(MkCodeDefinition code)
     {
@@ -79,24 +66,14 @@ public sealed class SemanticMkCodeSearcher(
     }
 
     /// <summary>
-    /// Varsayılan olarak modele sunulan aday sayısı.
-    /// <para>
-    /// <b>Aday listesi bilerek geniş tutulur.</b> Gömme benzerliği ekranın <i>konusunu</i> ölçer,
-    /// kullanıcının hangi ekranı kastettiğini değil: adında "Ekranı" geçen uzun etiketli kayıtlar,
-    /// içinde "ekran" geçen her niyette kısa ve doğru etiketi sıralamada aşağı itiyor. Doğru kodun
-    /// listeye <i>girmesi</i> sıralamada birinci olmasından daha belirleyicidir — hangisinin
-    /// kastedildiğini cümleyi okuyan model seçer. Liste dar tutulduğunda o seçim hiç yapılamaz.
-    /// </para>
-    /// <para>
-    /// Eşiği gevşetmek aynı işi yapmaz: eşik alakasız kaydı listeye sokar, kota ise alakalı kaydı
-    /// listeden düşürür. Genişletilen kota, eşiği geçmiş kayıtlar arasından seçim yapar.
-    /// </para>
+    /// Varsayılan olarak modele sunulan aday sayısı. Liste bilerek geniştir: doğru kodun listeye
+    /// girmesi sıralamada birinci olmasından belirleyicidir, seçimi cümleyi okuyan model yapar.
     /// </summary>
     private const int DefaultCandidateCount = 10;
 
     /// <summary>
     /// Kullanıcı niyetine anlamsal olarak en yakın ekran kodlarını benzerlik skorlarıyla döner.
-    /// İndeks boşsa banka yeniden denenir; kalıcı olarak sessiz kalması bu kuralla engellenir.
+    /// İndeks boşsa banka her aramada yeniden denenir.
     /// </summary>
     /// <param name="intent">Kullanıcının ekran arama niyeti.</param>
     /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
@@ -104,7 +81,7 @@ public sealed class SemanticMkCodeSearcher(
     public async Task<IReadOnlyList<(MkCodeDefinition Code, float Score)>> SearchAsync(
         string intent, int topK = DefaultCandidateCount, CancellationToken cancellationToken = default)
     {
-        // Açılışta banka kapalıysa indeks boş kalmıştır; her arama yeniden denenir.
+        // Boş indeks toparlaması
         if (_index.Count == 0) await RefreshAsync(cancellationToken);
 
         return _index.Search(intent, topK);

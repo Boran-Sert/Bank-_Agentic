@@ -3,12 +3,8 @@ using System.Collections.Concurrent;
 namespace Banking.Domain.Semantic;
 
 /// <summary>
-/// <see cref="ISemanticIndexStore"/> arayüzünün süreç içi uygulaması.
-/// <para>
-/// <b>Tek örnekli çalışmada açılış maliyetini değiştirmez</b> — süreç yeniden başladığında sözlük de
-/// boşalır. Kazancı, aynı içeriğin süreç ömrü boyunca ikinci kez vektörleştirilmemesidir: aynı
-/// katalogla yapılan her tazeleme saklanan vektörleri bulur.
-/// </para>
+/// <see cref="ISemanticIndexStore"/> arayüzünün süreç içi uygulaması. Sözlük süreçle birlikte
+/// boşalır; kazancı, aynı içeriğin süreç ömrü boyunca ikinci kez vektörleştirilmemesidir.
 /// </summary>
 public sealed class InMemorySemanticIndexStore : ISemanticIndexStore
 {

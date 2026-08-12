@@ -7,10 +7,8 @@ namespace Banking.Agents.Tracing;
 /// Banka çağrılarını canlı izleme akışına bağlayan gözlemci. Her çağrı üç kategoriden birine düşer:
 /// <see cref="TraceCategories.ApiRequest"/> (giden gövde), <see cref="TraceCategories.ApiResponse"/>
 /// (dönen alanlar) ve <see cref="TraceCategories.ApiError"/> (bankanın reddi ya da erişim hatası).
-/// <para>
-/// İzin özet satırı yolu ve süreyi taşır; <b>ayrıntı yükü alan adlarını ve değerlerini olduğu gibi
-/// taşır</b>, böylece bir çağrının hangi parametrelerle yapıldığı ekrandan okunabilir.
-/// </para>
+/// Özet satırı yolu ve süreyi, ayrıntı yükü ise alan adlarını ve değerlerini olduğu gibi taşır;
+/// bir çağrının hangi parametrelerle yapıldığı ekrandan okunur.
 /// </summary>
 public sealed class TraceHubBankApiObserver(TraceHub hub) : IBankApiCallObserver
 {

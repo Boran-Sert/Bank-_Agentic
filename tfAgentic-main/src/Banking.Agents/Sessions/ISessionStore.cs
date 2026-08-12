@@ -1,22 +1,12 @@
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// Oturum durumunun kalıcılık soyutlaması. Bu arayüzün tek çağıranı <see cref="AmbientSessionAccessor"/>'dır.
-/// <para>
-/// <b>Uygulama kodundan doğrudan çağrılmaz.</b> Bir istek boyunca durum tam olarak bir kez okunur
-/// (scope açılışında) ve bir kez yazılır (scope kapanışında). Bu kural, aynı isteğin farklı
-/// katmanlarının ayrı kopyalar üzerinde çalışıp birbirinin yazdığını ezmesini engeller.
-/// </para>
-/// <para>
-/// Yürürlükteki uygulama bellek içidir (<see cref="InMemorySessionStore"/>). Redis gibi dağıtık bir
-/// uygulama tek DI kaydıyla devreye alınır ve çağıran kod değişmez; imzaların <see cref="ValueTask"/>
-/// döndürmesinin nedeni bu ileride gelecek asenkron uygulamadır.
-/// </para>
-/// <para>
-/// Bu bir <b>kalıcı depo değildir</b>. Kayan TTL ile yaklaşık bir dakikalık kurtarma penceresi sunar:
-/// bağlantı koptuğunda veya sekme kapatılıp dönüldüğünde akış kaldığı yerden devam eder. Süre
-/// dolduğunda oturum silinir ve kullanıcıya zaman aşımı bildirilir.
-/// </para>
+/// Oturum durumunun kalıcılık soyutlaması; tek çağıranı <see cref="AmbientSessionAccessor"/>'dır ve
+/// uygulama kodundan doğrudan çağrılmaz. Kalıcı bir depo değildir: kayan TTL ile
+/// (<see cref="SessionStoreOptions.SlidingTimeToLive"/>) bir kurtarma penceresi sunar, süre
+/// dolduğunda oturum silinir. Yürürlükteki uygulama bellek içidir
+/// (<see cref="InMemorySessionStore"/>); dağıtık bir uygulama tek DI kaydıyla devreye alınır ve
+/// imzaların <see cref="ValueTask"/> döndürmesinin nedeni budur.
 /// </summary>
 public interface ISessionStore
 {

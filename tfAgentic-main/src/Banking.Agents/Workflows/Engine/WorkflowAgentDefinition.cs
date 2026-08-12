@@ -3,12 +3,9 @@ using Banking.Agents.Workflows.Declarative;
 namespace Banking.Agents.Workflows.Engine;
 
 /// <summary>
-/// Bir iş akışı ajanının kimliği, araç adları ve model ayarları.
-/// <para>
-/// <b>Adların tamamı akış adından tek noktada türetilir</b> (<see cref="For"/>). Ajanın talimatında
-/// geçen araç adı ile gerçekten kaydedilen araç adının ayrışması, akışın hata üretmeden sessizce
-/// durmasına yol açar; tek türetme noktası bu sapmayı yapısal olarak imkânsız kılar.
-/// </para>
+/// Bir iş akışı ajanının kimliği, araç adları ve model ayarları. Adların tamamı akış adından tek
+/// noktada türetilir (<see cref="For"/>); talimattaki araç adı ile kaydedilen araç adı böylece
+/// ayrışamaz.
 /// </summary>
 /// <param name="AgentName">Ajanın adı; aynı zamanda önbellek anahtarıdır.</param>
 /// <param name="Instructions">Ajanın sistem talimatı. Verilmezse slot şemasından üretilir.</param>

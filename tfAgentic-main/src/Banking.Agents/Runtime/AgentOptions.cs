@@ -19,18 +19,9 @@ public sealed class AgentOptions
 
     /// <summary>
     /// Ajan etiketinden model adına eşleme. Anahtar, izlerde görünen ajan etiketidir (örn.
-    /// <c>Orkestratör</c>); karşılığı bulunmayan etiket <see cref="Model"/> değerine düşer.
-    /// <para>
-    /// <b>Her tur aynı zekâyı gerektirmez.</b> Orkestratörün ilk turu bir sınıflandırma işidir —
-    /// hangi uzman, hangi akış. Küçük bir model bunu yapabildiğinde büyük modelin turu yarıya iner
-    /// ve donanım faturasını belirleyen çarpan da odur. Buna karşılık finansal analiz veya slot
-    /// yorumlama aynı modelle bozulur; bu yüzden seçim ajan bazında ve <b>ölçülerek</b> yapılır.
-    /// </para>
-    /// <para>
-    /// <b>Boş bırakıldığında davranış değişmez:</b> haritanın kendisi bir iyileştirme değil, ölçüm
-    /// sonucunu uygulayacak yerdir. Karşılığı olmayan etiketin sessizce varsayılana düşmesi
-    /// bilinçlidir — yanlış yazılmış bir etiket sistemi durdurmaz, yalnızca kazanç oluşmaz.
-    /// </para>
+    /// <c>Orkestratör</c>); karşılığı bulunmayan etiket <see cref="Model"/> değerine düşer. Boş
+    /// bırakıldığında davranış değişmez — harita, ölçülmüş bir model seçiminin kod değişikliği
+    /// olmadan uygulandığı yerdir.
     /// </summary>
     public Dictionary<string, string> Models { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
@@ -77,14 +68,9 @@ public sealed class AgentOptions
     public bool UseA2AForSpecialists { get; set; } = true;
 
     /// <summary>
-    /// Kurulmuş bir ajanın boşta kalabileceği süre (dakika). Süre <b>son kullanımdan itibaren</b>
-    /// işler; her çağrı pencereyi baştan başlatır.
-    /// <para>
-    /// <b>Amaç bellek tasarrufu değil, sınırsız büyümenin durdurulmasıdır.</b> Uzman ve iş akışı
-    /// ajanları çalışma zamanında YAML ile eklenebildiğinden ajan sözlükleri yalnızca büyür; üst sınırı
-    /// olmayan bir önbellek uzun ömürlü bir süreçte er ya da geç sorun üretir. Tahliye edilen ajan
-    /// bir sonraki çağrıda yeniden kurulur, bu yüzden pencerenin kısalığı yalnızca gecikme maliyetidir.
-    /// </para>
+    /// Kurulmuş bir ajanın boşta kalabileceği süre (dakika); süre son kullanımdan itibaren işler.
+    /// Amaç bellek tasarrufu değil, çalışma zamanında büyüyebilen ajan sözlüklerine üst sınır
+    /// koymaktır. Tahliye edilen ajan sonraki çağrıda yeniden kurulur.
     /// </summary>
     public int AgentIdleTimeoutMinutes { get; set; } = 20;
 

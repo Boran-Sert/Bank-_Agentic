@@ -1,13 +1,9 @@
 namespace Banking.Host;
 
 /// <summary>
-/// Deklaratif tanımların (iş akışı ve uzman YAML/JSON dosyaları) disk tarafı.
-/// <para>
-/// İki tanım türü de aynı dosya işlerini yapar: dizini oluştur, üç uzantıyı süz, içeriği oku,
-/// kaydederken adı doğrula ve yaz. <b>Ayrıştırma ve kayıt burada değildir</b> — o adım tanım türüne
-/// göre değişir ve çağıranda kalır; buraya taşınması tür başına bir delege parametresi gerektirir ve
-/// çağrının nereye gittiğini yine görünmez kılardı.
-/// </para>
+/// Deklaratif tanımların (iş akışı ve uzman YAML/JSON dosyaları) disk tarafı: dizini oluşturur,
+/// desteklenen uzantıları süzer, içeriği okur ve kaydederken adı doğrular. Ayrıştırma ve kayıt
+/// burada değildir; o adım tanım türüne göre değişir ve çağıranda kalır.
 /// </summary>
 public static class DeclarativeFileStore
 {
@@ -29,15 +25,12 @@ public static class DeclarativeFileStore
             .Select(filePath => (filePath, File.ReadAllText(filePath)));
     }
 
-    /// <summary>İçeriğin JSON mu (aksi hâlde YAML) olduğunu ilk anlamlı karakterden anlar.</summary>
+    /// <summary>İçeriğin JSON mu YAML mı olduğunu ilk anlamlı karakterden anlar.</summary>
     public static bool IsJson(string content) => content.TrimStart().StartsWith('{');
 
     /// <summary>
-    /// Tanım adının dosya adı olarak kullanılmaya uygun olduğunu doğrular.
-    /// <para>
-    /// <b>Ad doğrudan dosya yoluna giriyor:</b> <c>"../../appsettings"</c> gibi bir değer tanım
-    /// dizininin dışına yazabilirdi. Yalnızca harf, rakam, tire ve alt çizgiye izin verilir.
-    /// </para>
+    /// Tanım adının dosya adı olarak kullanılmaya uygun olduğunu doğrular. Ad doğrudan dosya yoluna
+    /// girdiğinden yalnızca harf, rakam, tire ve alt çizgiye izin verilir.
     /// </summary>
     public static bool IsValidDefinitionName(string? name) =>
         !string.IsNullOrWhiteSpace(name) &&

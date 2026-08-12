@@ -1,12 +1,8 @@
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// Oturum saklamanın yapılandırması. <c>Sessions</c> yapılandırma bölümünden bağlanır.
-/// <para>
-/// Ad <c>SessionOptions</c> değildir: ASP.NET Core'un <c>Microsoft.AspNetCore.Builder.SessionOptions</c>
-/// tipi kompozisyon kökünde aynı isim alanına girer ve iki tip arasındaki belirsizlik derlemeyi
-/// durdurur.
-/// </para>
+/// Oturum saklamanın yapılandırması. <c>Sessions</c> yapılandırma bölümünden bağlanır. Tip adı
+/// <c>SessionOptions</c> olamaz; ASP.NET Core'un aynı adlı tipi kompozisyon kökünde çakışır.
 /// </summary>
 public sealed class SessionStoreOptions
 {
@@ -14,16 +10,9 @@ public sealed class SessionStoreOptions
     public const string SectionName = "Sessions";
 
     /// <summary>
-    /// Oturumun kayan yaşam süresi (dakika). Süre <b>son istekten itibaren</b> işler; her istek
-    /// pencereyi baştan başlatır.
-    /// <para>
-    /// <b>Bu değer bir kurtarma penceresi değil, kullanıcının düşünme süresidir.</b> Aktif bir akışın
-    /// tamamı — eksik parametrelerin sorulması, kullanıcının kart seçmesi, onay ekranını okuyup
-    /// düğmeye basması — bu pencerenin içinde geçer. Pencere kullanıcının iki mesajı arasındaki
-    /// gerçek duraklamadan kısa olduğunda oturum sessizce düşer: toplanmış parametreler kaybolur,
-    /// aktif akış görünmez olur ve bir sonraki mesaj hiç akış başlamamış gibi orkestratöre gider.
-    /// Kullanıcıya hiçbir hata görünmez, yalnızca asistan az önce söylediklerini unutmuş olur.
-    /// </para>
+    /// Oturumun kayan yaşam süresi (dakika); süre son istekten itibaren işler. Pencere, kullanıcının
+    /// iki mesajı arasındaki duraklamayı karşılayacak kadar geniş tutulur — aktif bir akışın tamamı
+    /// bu pencerenin içinde geçer.
     /// </summary>
     public int SlidingTimeToLiveMinutes { get; set; } = 30;
 

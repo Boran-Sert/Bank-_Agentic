@@ -9,10 +9,8 @@ namespace Banking.Agents.Specialists.Declarative;
 
 /// <summary>
 /// Uzman ajan tanımlarını (YAML veya JSON) ayrıştırır ve <see cref="AgentCard"/> tipine dönüştürür.
-/// <para>
-/// Derlenmiş uzmanlarla <b>tek fark tanımın kaynağıdır</b>: her ikisi de aynı karta dönüşür, aynı
-/// katalogdan kurulur ve aynı A2A yolu üzerinden erişilir.
-/// </para>
+/// Derlenmiş uzmanlarla tek fark tanımın kaynağıdır; her ikisi de aynı karta dönüşür ve aynı
+/// katalogdan kurulur.
 /// </summary>
 public static class DeclarativeSpecialistBuilder
 {
@@ -37,8 +35,8 @@ public static class DeclarativeSpecialistBuilder
         ?? throw new InvalidOperationException("Geçersiz uzman ajan JSON şeması.");
 
     /// <summary>
-    /// Uzman tanımını karta dönüştürür. Belirtilmeyen alanlar uzman adından türetilir; <b>ad ile araç
-    /// adı ve A2A yolu arasındaki ilişki yalnızca burada kurulur.</b>
+    /// Uzman tanımını karta dönüştürür. Belirtilmeyen alanlar uzman adından türetilir; ad ile araç
+    /// adı ve A2A yolu arasındaki ilişki yalnızca burada kurulur.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Zorunlu alanlar (<c>name</c>, <c>description</c>) eksik olduğunda veya araç grubu tanınmadığında
@@ -72,9 +70,8 @@ public static class DeclarativeSpecialistBuilder
     }
 
     /// <summary>
-    /// Araç adı listesi verilmediğinde kullanılacak grubu çözer. <b>Tanınmayan grup adı varsayılana
-    /// düşmez;</b> sessiz varsayılan, uzmanın yanlış araç kümesiyle çalışmasına ve bunun fark
-    /// edilmemesine yol açar.
+    /// Araç adı listesi verilmediğinde kullanılacak grubu çözer. Tanınmayan grup adı varsayılana
+    /// düşmez, istisna fırlatır.
     /// </summary>
     /// <exception cref="InvalidOperationException">Grup adı tanınmadığında fırlatılır.</exception>
     private static ToolGroup ResolveToolGroup(SpecialistDefinition definition)
@@ -91,8 +88,7 @@ public static class DeclarativeSpecialistBuilder
 
     /// <summary>
     /// Uzmanın sistem talimatını üretir: kimlik bloğu, tanımdaki talimat, sunum sözleşmesi ve ortak
-    /// koruma kuralları. <b>Koruma bloğu koşulsuz eklenir;</b> talimat alanını boş bırakarak
-    /// korumasız bir uzman tanımlamak mümkün değildir.
+    /// koruma kuralları. Koruma bloğu koşulsuz eklenir.
     /// </summary>
     private static string BuildInstructions(SpecialistDefinition definition)
     {

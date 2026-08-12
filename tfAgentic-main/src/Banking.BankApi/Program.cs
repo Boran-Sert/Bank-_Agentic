@@ -24,7 +24,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.UseUrls("http://127.0.0.1:5001");
 
-// ---------- SINGLETON --------------------------------------------------------
+// --- Singleton ---
 builder.Services.AddSingleton<InMemoryBankStore>();
 builder.Services.AddSingleton<IAccountService, AccountService>();
 builder.Services.AddSingleton<ICardService, CardService>();
@@ -37,18 +37,17 @@ builder.Services.AddSingleton<IMkCodeCatalogService, MkCodeCatalogService>();
 
 var app = builder.Build();
 
-// Gelen isteğin gövdesi ve dönen yanıt, uçlara dokunmadan tek yerden loglanır.
+// İstek ve yanıt gövdeleri tek yerden loglanır
 app.UseApiTrafficLogging();
 
-// Bankanın varsayılan ekstre kaynağı. Gerçek backend'e geçildiğinde bu dosya okuması, müşteri ve
-// kart kimliğiyle yapılan bir ekstre servisi çağrısıyla değiştirilir.
+// Varsayılan ekstre kaynağı; gerçek arka uçta ekstre servisi çağrısıyla değişir
 const string DefaultStatementPath = "Banka_ekstra.json";
 
-// Eksik alan yanıtı tek bir yerden kurulur: "message" anahtarı istemcinin gerekçeyi okuduğu alandır.
+// Eksik alan yanıtı; "message" istemcinin gerekçeyi okuduğu alandır
 static IResult MissingField(string fieldName) =>
     Results.BadRequest(new { message = $"'{fieldName}' alanı istek gövdesinde zorunludur." });
 
-// ---------- HESAPLAR -------------------------------------------------------------
+// --- Hesaplar ---
 app.MapPost("/api/accounts", (CustomerRequest request, IAccountService accountService) =>
 {
     if (string.IsNullOrWhiteSpace(request.CustomerId)) return MissingField("customerId");
@@ -63,8 +62,7 @@ app.MapPost("/api/account", (AccountRequest request, IAccountService accountServ
 
     var account = accountService.GetAccount(request.AccountId);
 
-    // Sahiplik denetimi bankada yapılır. Çağıran katmana bırakılsaydı, kontrolü atlayan her yeni
-    // istemci başkasının hesabını okuyabilirdi.
+    // Sahiplik denetimi bankada yapılır
     return account is null || account.CustomerId != request.CustomerId
         ? Results.NotFound(new { message = $"Hesap bulunamadı: {request.AccountId}" })
         : Results.Ok(account);
@@ -82,7 +80,7 @@ app.MapPost("/api/account-transactions", (AccountTransactionsRequest request, IA
     return Results.Ok(accountService.GetTransactions(request.AccountId, request.FromDate, request.ToDate));
 });
 
-// ---------- KARTLAR -------------------------------------------------------------
+// --- Kartlar ---
 app.MapPost("/api/cards", (CustomerRequest request, ICardService cardService) =>
 {
     if (string.IsNullOrWhiteSpace(request.CustomerId)) return MissingField("customerId");
@@ -109,8 +107,8 @@ app.MapPost("/api/overdue-cards", (CustomerRequest request, ICardService cardSer
     return Results.Ok(cardService.GetOverdueCards(request.CustomerId));
 });
 
-// ---------- EKSTRE ANALİZİ ---------------------------------------------------
-// Analiz bankanın kendi hesaplamasıdır: ajan katmanı ham hareketleri toplamaz, uca sorar.
+// --- Ekstre analizi ---
+// Analiz bankanın kendi hesabıdır; ajan katmanı toplamaz, uca sorar
 app.MapPost("/api/statement/transactions", (StatementRequest? request, IAnalyzeService analyzeService) =>
     Results.Ok(analyzeService.LoadTransactionsFromJson(ResolveStatementPath(request))));
 
@@ -142,7 +140,7 @@ app.MapPost("/api/statement/compare", (StatementCompareRequest request, IAnalyze
         transactions, currentStart, currentEnd, previousStart, previousEnd, request.MccGroupType));
 });
 
-// ---------- KAMPANYA & FİNANSMAN KATALOĞU ------------------------------------
+// --- Kampanya ve finansman kataloğu ---
 app.MapPost("/api/campaigns", (CampaignRequest? request, ICampaignCatalogService campaignCatalog) =>
 {
     if (string.IsNullOrWhiteSpace(request?.CampaignId))
@@ -158,13 +156,12 @@ app.MapPost("/api/financing-options", (FinancingRequest? request, IFinancingCata
         ? financingCatalog.GetAllFinancingOptions()
         : financingCatalog.FindFinancingOptionsByType(request.Type)));
 
-// Ekran kodu kataloğu. Gövde alınmaz: liste müşteriye göre değişmez, bankanın yüzeyini tarif eder.
+// Ekran kodu kataloğu; liste müşteriye göre değişmediğinden gövde alınmaz
 app.MapPost("/api/mkcodes", (IMkCodeCatalogService mkCodeCatalog) =>
     Results.Ok(mkCodeCatalog.GetAllMkCodes()));
 
-// ---------- PARA HAREKETİ ----------------------------------------------------
-// Gövde anahtarları çağıran tarafın topladığı parametre adlarıyla birebir aynıdır; eşleme yok.
-// Yanıt bankanın kendi makbuzudur: çağıran katman onu yorumlamaz, olduğu gibi taşır.
+// --- Para hareketi ---
+// Gövde anahtarları çağıranın parametre adlarıyla birebir aynıdır; yanıt bankanın makbuzudur
 app.MapPut("/api/card-payment", (CardPaymentRequest request, ICollectionService collectionService) =>
 {
     if (string.IsNullOrWhiteSpace(request.CardId)) return MissingField("cardId");
@@ -203,7 +200,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 
 app.Run();
 
-// Ekstre kaynağı istekte verilmediyse bankanın varsayılanına düşülür.
+// Ekstre kaynağı verilmediyse varsayılana düşülür
 string ResolveStatementPath(StatementRequest? request) =>
     request?.FilePath is { Length: > 0 } path ? path : DefaultStatementPath;
 

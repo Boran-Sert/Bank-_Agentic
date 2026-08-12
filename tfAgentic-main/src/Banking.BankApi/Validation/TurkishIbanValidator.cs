@@ -14,12 +14,8 @@ public enum TurkishIbanValidationStatus
 }
 
 /// <summary>
-/// Türkiye IBAN'larının yapı ve kontrol basamağı doğrulaması (ISO 13616 mod-97).
-/// <para>
-/// <b>Bu bir bankacılık kuralıdır ve banka katmanında yaşar;</b> ajan katmanı IBAN biçimi hakkında
-/// hiçbir bilgi taşımaz. Gerçek bir banka arka ucuna geçildiğinde bu sınıfın yerini bankanın kendi
-/// doğrulama yanıtı alır.
-/// </para>
+/// Türkiye IBAN'larının yapı ve kontrol basamağı doğrulaması (ISO 13616 mod-97). Bir bankacılık
+/// kuralıdır ve banka katmanında yaşar; ajan katmanı IBAN biçimi hakkında bilgi taşımaz.
 /// </summary>
 public static class TurkishIbanValidator
 {

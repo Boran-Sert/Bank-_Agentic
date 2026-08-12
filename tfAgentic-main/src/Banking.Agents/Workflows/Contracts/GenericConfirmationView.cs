@@ -4,21 +4,16 @@ using System.Text;
 namespace Banking.Agents.Workflows;
 
 /// <summary>
-/// Toplanan slotlardan türetilen onay ekranı görünümü. Akışa özel görünüm tipi yoktur: gösterilecek
-/// alanlar YAML'da tanımlanır, bu tip yalnızca taşır.
-/// <para>
-/// <b><see cref="ComputeIdempotencyToken"/> tek yerde hesaplanmak zorundadır.</b> Motor bu değeri
-/// oturuma yazarak ikinci onay isteğini tanır, executor ise aynı değeri bankaya
-/// <c>Idempotency-Key</c> olarak gönderir. İki tarafın ayrı hesaplaması, çift tıklama korumasını
-/// sessizce devre dışı bırakır.
-/// </para>
+/// Toplanan slotlardan türetilen onay ekranı görünümü. Akışa özel görünüm tipi yoktur; gösterilecek
+/// alanlar YAML'da tanımlanır. <see cref="ComputeIdempotencyToken"/> tek yerde hesaplanır: motor bu
+/// değeri oturuma yazarak ikinci onayı tanır, executor aynı değeri bankaya <c>Idempotency-Key</c>
+/// olarak gönderir.
 /// </summary>
 /// <param name="WorkflowName">Akışın kanonik adı (örn. <c>card-payment</c>).</param>
 /// <param name="Parameters">Onay ekranında gösterilecek slotlar; adlar YAML'dakiyle birebir aynıdır.</param>
 /// <param name="ScreenMkCode">
 /// Onay ekranını üretecek UI ekran kodu. YAML'ın <c>mkCode</c> alanından gelir, bilinmiyorsa
-/// <c>null</c>'dır. <b>Gateway bu kodu tahmin etmez:</b> yanlış ekran göstermek yerine kod
-/// çözülemez olarak raporlanır.
+/// <c>null</c>'dır; gateway bu kodu tahmin etmez, çözülemez olarak raporlar.
 /// </param>
 public sealed record GenericConfirmationView(
     string WorkflowName,

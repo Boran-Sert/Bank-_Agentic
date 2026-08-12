@@ -1,20 +1,11 @@
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// Açılmış bir oturum scope'u: kilit alınmış, durum depodan bir kez okunmuştur.
-/// <para>
-/// İki adımda kullanılır — <see cref="AmbientSessionAccessor.OpenAsync"/> kilidi alıp durumu yükler
-/// (asenkron), <see cref="Enter"/> oturumu ambient hâle getirir. Adımların ayrı olmasının nedeni
-/// <see cref="AsyncLocal{T}"/> semantiğidir: bir <c>async</c> metot içinde yazılan ambient değer
-/// çağırana geri yayılmaz, bu yüzden yazma işlemi çağıranın kendi bağlamında yapılmak zorundadır —
-/// <see cref="Enter"/> bu nedenle asla <c>async</c> olamaz; yapılırsa yazım metodun kendi bağlamında
-/// kalır ve <see cref="AmbientSessionAccessor.Current"/> çağrının devamında istisna fırlatır.
-/// </para>
-/// <para>
-/// <c>await using</c> ile kullanılır; kapanışta durum depoya bir kez yazılır, ambient oturum
-/// temizlenir ve kilit bırakılır. <b>İstek iptal edilse veya hata alsa bile yazma yapılır</b> —
-/// aksi hâlde kullanıcı yarım kalan akışını kaybederdi.
-/// </para>
+/// Açılmış bir oturum scope'u: kilit alınmış, durum depodan bir kez okunmuştur. İki adımda
+/// kullanılır — <see cref="AmbientSessionAccessor.OpenAsync"/> kilidi alıp durumu yükler,
+/// <see cref="Enter"/> oturumu ambient hâle getirir. <c>await using</c> ile kapatılır; kapanışta
+/// durum depoya bir kez yazılır, ambient oturum temizlenir ve kilit bırakılır. Yazma, istek iptal
+/// edilse veya hata alsa da yapılır.
 /// </summary>
 public sealed class SessionLease : IAsyncDisposable
 {
@@ -50,13 +41,17 @@ public sealed class SessionLease : IAsyncDisposable
     /// </summary>
     internal bool IsNested { get; }
 
-    /// <summary>Oturumu ambient hâle getirir ve <c>await using</c> için kendini döner.</summary>
+    /// <summary>
+    /// Oturumu ambient hâle getirir ve <c>await using</c> için kendini döner. Bu metot asla
+    /// <c>async</c> yapılmaz; <see cref="AsyncLocal{T}"/> ataması çağırana yayılmaz.
+    /// </summary>
     public SessionLease Enter()
     {
         if (!IsNested) _accessor.SetAmbientSession(Context);
         return this;
     }
 
+    /// <summary>Scope'u kapatır: durumu yazar, ambient oturumu temizler ve kilidi bırakır.</summary>
     public async ValueTask DisposeAsync()
     {
         if (_closed) return;

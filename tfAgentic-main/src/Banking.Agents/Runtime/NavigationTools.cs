@@ -58,8 +58,8 @@ public sealed class NavigationTools(
     }
 
     /// <summary>
-    /// Hedef ekranı açar. <b>Parametre adı <see cref="ToolNames.OpenScreenTargetParameter"/> ile
-    /// birebir aynı olmalıdır;</b> gateway yönlendirme hedefini bu anahtarla okur.
+    /// Hedef ekranı açar. Parametre adı <see cref="ToolNames.OpenScreenTargetParameter"/> ile birebir
+    /// aynı olmalıdır; gateway yönlendirme hedefini bu anahtarla okur.
     /// </summary>
     [Description("Kullanıcı belirli bir menüye veya ekrana GİTMEK/AÇMAK istediğinde çağrılır. Parametre olarak SADECE 'ekran_kodu_ara' aracından bulduğunuz en uygun targetMkCode değerini verin.")]
     private string OpenScreen(string targetMkCode)
@@ -70,8 +70,7 @@ public sealed class NavigationTools(
 
     /// <summary>
     /// Araç parametre adının gateway'in okuduğu anahtarla eşleştiğini doğrular ve eşleşmiyorsa
-    /// istisna fırlatır. <b>Doğrulama başlangıçta yapılır:</b> ayrışma çalışma zamanında hata
-    /// üretmez, ekran yönlendirmesi yalnızca sessizce çalışmaz.
+    /// istisna fırlatır. Doğrulama açılışta yapılır; ayrışma çalışma zamanında hata üretmez.
     /// </summary>
     /// <exception cref="InvalidOperationException">Parametre adı beklenen anahtarla eşleşmediğinde fırlatılır.</exception>
     private static void EnsureOpenScreenParameterName()

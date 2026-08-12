@@ -4,12 +4,8 @@ using Banking.Domain.Models;
 namespace Banking.Domain.Services;
 
 /// <summary>
-/// Bankanın desteklediği ekran kodu (mkCode) kataloğuna erişim sözleşmesi.
-/// <para>
-/// Ekran kodları bankanın mobil uygulamasının yüzeyidir: hangi ekranın var olduğunu ve nasıl
-/// adlandırıldığını banka bilir. Ajan katmanı bu listeyi kendi içinde tutamaz — tuttuğunda banka
-/// yeni bir ekran eklediğinde ajan onu göremez ve kaldırdığında var olmayan bir ekrana yönlendirir.
-/// </para>
+/// Bankanın desteklediği ekran kodu (mkCode) kataloğuna erişim sözleşmesi. Ekran kodları bankanın
+/// mobil uygulamasının yüzeyidir ve listeyi banka bilir; ajan katmanı kendi kopyasını tutmaz.
 /// </summary>
 public interface IMkCodeCatalogService
 {
@@ -18,12 +14,8 @@ public interface IMkCodeCatalogService
 }
 
 /// <summary>
-/// Ekran kodu kataloğunu bankanın veri dosyasından okuyan uygulama.
-/// <para>
-/// Dosya <b>tek bir yolda</b> aranır: derleme çıktısına kopyalanan <c>Data/mkcodes.json</c>. Dizin
-/// dışına tırmanan aday yol listesi, çalıştığı makineye göre farklı veri okuyan bir servis üretir;
-/// dosya bulunamadığında katalog boş kalır ve bu durum çağıranda görünür.
-/// </para>
+/// Ekran kodu kataloğunu bankanın veri dosyasından okuyan uygulama. Dosya tek bir yolda aranır:
+/// derleme çıktısına kopyalanan <c>Data/mkcodes.json</c>. Dosya bulunamadığında katalog boş kalır.
 /// </summary>
 public sealed class MkCodeCatalogService(ILogger<MkCodeCatalogService> logger) : IMkCodeCatalogService
 {
@@ -78,8 +70,8 @@ public sealed class MkCodeCatalogService(ILogger<MkCodeCatalogService> logger) :
     }
 
     /// <summary>
-    /// Bir kaydın arama takma adlarını okur. Kaynak dosyada liste boş dizeyle başlıyor; boş girdiler
-    /// elenir, aksi hâlde gömme metnine anlamsız boşluk girer.
+    /// Bir kaydın arama takma adlarını okur. Kaynak dosyadaki boş girdiler elenir; gömme metnine
+    /// yalnızca anlamlı takma adlar girer.
     /// </summary>
     private static IReadOnlyList<string> ReadKeywords(JsonElement item)
     {

@@ -4,16 +4,9 @@ using Banking.Domain.Models;
 namespace Banking.Domain.Data;
 
 /// <summary>
-/// Bankacılık verisinin in-memory simülasyonu — <b>yalnızca veri</b>. Tek bir demo müşterisi
-/// (CUST-001) için hesaplar, kartlar, kampanyalar, finansman ürünleri ve hareketler tutar.
-/// Singleton olarak kullanılır.
-/// <para>
-/// <b>Burada iş mantığı yoktur.</b> Sorgulama (kime ait, hangi tarih aralığı) ve mutasyon
-/// (tahsilat, transfer) ilgili servisin dosyasındadır: <c>AccountService</c>, <c>CardService</c>,
-/// <c>CollectionService</c>, <c>TransferService</c>, <c>CampaignCatalogService</c>,
-/// <c>FinancingCatalogService</c>. Aynı kuralın hem burada hem serviste bulunması, birinin
-/// diğerinden habersiz değişmesine ve iki yolun farklı sonuç üretmesine yol açar.
-/// </para>
+/// Bankacılık verisinin bellek içi simülasyonu — yalnızca veri. Tek bir demo müşterisi (CUST-001)
+/// için hesaplar, kartlar, kampanyalar, finansman ürünleri ve hareketler tutar. Burada iş mantığı
+/// yoktur; sorgulama ve mutasyon ilgili servisin dosyasındadır.
 /// </summary>
 public sealed class InMemoryBankStore
 {
@@ -27,7 +20,7 @@ public sealed class InMemoryBankStore
     /// <summary>
     /// Para hareketi kilidi. Birden fazla kaydı (hesap, kart ve hareket satırı) tek atomik adımda
     /// değiştiren her servis bu kilidi alır. <see cref="Transactions"/> eşzamanlı olmayan düz bir
-    /// liste olduğundan <b>okuma da kilit altında yapılmalıdır</b>.
+    /// liste olduğundan okuma da kilit altında yapılmalıdır.
     /// </summary>
     public object MoneyGate { get; } = new();
 
@@ -37,7 +30,7 @@ public sealed class InMemoryBankStore
     public ConcurrentDictionary<string, Campaign> Campaigns { get; } = new();
     public ConcurrentDictionary<string, FinancingOption> FinancingOptions { get; } = new();
 
-    /// <summary>Hesap hareketleri. <b>Okuma dâhil her erişim <see cref="MoneyGate"/> altında yapılmalıdır.</b></summary>
+    /// <summary>Hesap hareketleri. Okuma dâhil her erişim <see cref="MoneyGate"/> altında yapılmalıdır.</summary>
     public List<Transaction> Transactions { get; } = new();
 
     private void Seed()
@@ -45,8 +38,7 @@ public sealed class InMemoryBankStore
         var customer = new Customer(DemoCustomerId, "Yusuf Efe Mayda");
         Customers[customer.Id] = customer;
 
-        // IBAN'lar ISO 13616 mod-97 kontrol basamağı geçerli olacak şekilde üretilmiştir;
-        // aksi hâlde bankanın kendi ön-doğrulaması demo hesaplarını reddederdi.
+        // IBAN'lar mod-97 kontrol basamağı geçerli olacak şekilde üretilmiştir
         var acc1 = new Account("ACC-1001", customer.Id, "TR82 0001 0000 0000 0000 1233 44", "Vadesiz", "TRY", 48_750.00m);
         var acc2 = new Account("ACC-1002", customer.Id, "TR76 0001 0000 0000 0000 9988 77", "Vadeli", "TRY", 125_000.00m);
         Accounts[acc1.Id] = acc1;

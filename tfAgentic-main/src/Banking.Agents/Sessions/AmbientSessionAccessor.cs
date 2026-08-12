@@ -3,25 +3,16 @@ using Banking.Agents.Tracing;
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// Aktif isteğin oturumuna erişim noktası; <see cref="AsyncLocal{T}"/> tabanlıdır.
-/// <para>
-/// <b>Oturum kimliği katmanlar arasında parametre olarak taşınmaz ve LLM araçlarına hiçbir biçimde
-/// verilmez.</b> Verilseydi, hangi oturuma yazılacağını modelin ürettiği bir metin belirlerdi.
-/// </para>
-/// <para>
-/// Üç garantiyi birlikte sağlar:
-/// <list type="number">
-/// <item><b>İzolasyon</b> — aktif oturum asenkron akış boyunca taşınır. Aynı oturumla iç içe
-/// <see cref="OpenAsync"/> çağrısı (LLM aracı → motor zinciri) zararsızdır ve yeniden yükleme
-/// yapmaz; <b>farklı</b> bir oturumla iç içe açmak istisna fırlatır — aksi hâlde ambient oturum
-/// istek ortasında kayar ve bir isteğin verisi başka bir isteğe sızabilir.</item>
-/// <item><b>Tek okuma / tek yazma</b> — durum scope açılışında yüklenir, kapanışında yazılır. Aradaki
-/// katmanların tamamı aynı nesne üzerinde çalışır ve hiçbiri depoya erişmez.</item>
-/// <item><b>Oturum başına serileştirme</b> — aynı oturuma gelen eşzamanlı istekler sıraya girer.
-/// Onay düğmesine çift tıklamanın iki paralel yükleme ve karşılıklı üzerine yazma üretmesi bu
-/// kilitle engellenir.</item>
+/// Aktif isteğin oturumuna erişim noktası; <see cref="AsyncLocal{T}"/> tabanlıdır. Oturum kimliği
+/// katmanlar arasında parametre olarak taşınmaz ve araçlara verilmez. Üç garantiyi birlikte sağlar:
+/// <list type="bullet">
+/// <item>İzolasyon — aynı oturumla iç içe <see cref="OpenAsync"/> zararsızdır, farklı bir oturumla
+/// iç içe açmak istisna fırlatır.</item>
+/// <item>Tek okuma / tek yazma — durum scope açılışında yüklenir, kapanışında yazılır; aradaki
+/// katmanların hiçbiri depoya erişmez.</item>
+/// <item>Oturum başına serileştirme — aynı oturuma gelen eşzamanlı istekler sıraya girer; onaya
+/// çift tıklamayı güvenli kılan kilit budur.</item>
 /// </list>
-/// </para>
 /// </summary>
 public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub hub)
 {
@@ -31,8 +22,7 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
 
     /// <summary>Bu isteğin oturumu.</summary>
     /// <exception cref="InvalidOperationException">
-    /// Aktif bir oturum scope'u yokken çağrıldığında fırlatılır. Sessizce yeni bir oturum üretmek,
-    /// iki kullanıcının verisinin karışmasına açık kapı bırakır.
+    /// Aktif bir oturum scope'u yokken çağrıldığında fırlatılır; burada yeni oturum üretilmez.
     /// </exception>
     public SessionContext Current =>
         _currentSession.Value
@@ -40,9 +30,9 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
             "Aktif oturum scope'u yok. Bu çağrı OpenAsync ile açılmış bir scope içinden yapılmalıdır.");
 
     /// <summary>
-    /// Oturum scope'unu açar: oturuma özel kilit alınır ve durum depodan <b>bir kez</b> yüklenir.
-    /// Dönen kiralama <see cref="SessionLease.Enter"/> ile ambient hâle getirilir ve
-    /// <c>await using</c> ile kapatılır; kapanışta durum depoya bir kez yazılır.
+    /// Oturum scope'unu açar: oturuma özel kilit alınır ve durum depodan bir kez yüklenir. Dönen
+    /// kiralama <see cref="SessionLease.Enter"/> ile ambient hâle getirilir ve <c>await using</c>
+    /// ile kapatılır; kapanışta durum depoya bir kez yazılır.
     /// <code>
     /// var lease = await sessionAccessor.OpenAsync(sessionId, cancellationToken);
     /// await using var session = lease.Enter();
@@ -59,8 +49,7 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
 
         if (_currentSession.Value is { } activeSession)
         {
-            // Aynı oturumla iç içe geçmek zararsızdır (LLM aracı → dispatcher zinciri).
-            // FARKLI bir oturuma geçmek ise istek ortasında ambient oturumun kayması demektir.
+            // İç içe scope kontrolü
             if (activeSession.SessionId != sessionId)
                 throw new InvalidOperationException(
                     $"Aktif oturum '{activeSession.SessionId}' iken farklı bir oturum ('{sessionId}') scope'u açılamaz. " +
@@ -77,7 +66,7 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
         }
         catch
         {
-            // Kilit alınamadan sayaç artırılmıştı; bekleyen kaydı geri al.
+            // Bekleyen kaydını geri al
             ReleaseLockHandle(sessionId, sessionLock);
             throw;
         }
@@ -91,8 +80,7 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
         }
         catch
         {
-            // Yükleme başarısızsa scope hiç açılmamıştır; kilit burada bırakılır çünkü
-            // çağırana dönecek bir SessionLease yok, dolayısıyla DisposeAsync da çalışmayacak.
+            // Kiralama üretilemedi; kilidi burası bırakır
             sessionLock.Gate.Release();
             ReleaseLockHandle(sessionId, sessionLock);
             throw;
@@ -100,8 +88,7 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
     }
 
     /// <summary>
-    /// Ambient oturumu yazar. <see cref="SessionLease.Enter"/> tarafından <b>senkron</b> çağrılır;
-    /// gerekçesi orada belgelidir.
+    /// Ambient oturumu yazar. <see cref="SessionLease.Enter"/> tarafından senkron çağrılır.
     /// </summary>
     internal void SetAmbientSession(SessionContext? session) => _currentSession.Value = session;
 
@@ -115,8 +102,7 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
 
         try
         {
-            // İstek iptal edilse veya hata alsa bile o ana kadarki ilerleme yazılır;
-            // aksi hâlde kullanıcı yarım kalan akışını kaybederdi.
+            // İptal ve hata durumunda da yazılır
             await sessionStore.SaveAsync(lease.State!, CancellationToken.None);
         }
         finally

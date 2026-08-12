@@ -4,18 +4,16 @@ namespace Banking.Mcp;
 
 /// <summary>
 /// İsteği yapan müşterinin kimliğini taşır. MCP araçları bu değeri bankaya gönderdikleri gövdeye
-/// yazar; hesabın veya kartın o müşteriye ait olup olmadığına banka karar verir.
-/// <para>
-/// <b>Sessiz varsayılanı yoktur.</b> Yapılandırmada kimlik bulunmadığında istisna fırlatılır: yanlış
-/// bir müşteri kimliğiyle çalışmak, hata üretmeden başka birinin verisini göstermek demektir.
-/// Kimlik doğrulama katmanı bağlandığında değer istek başına buradan yazılır.
-/// </para>
+/// yazar; hesabın veya kartın o müşteriye ait olup olmadığına banka karar verir. Kimliğin sessiz
+/// varsayılanı yoktur — yapılandırmada bulunmazsa istisna fırlatılır.
 /// </summary>
 public sealed class CustomerContext
 {
     /// <summary>Varsayılan müşteri kimliğinin okunduğu yapılandırma anahtarı.</summary>
     private const string ConfigurationKey = "BankApi:DefaultCustomerId";
 
+    /// <summary>Müşteri kimliğini yapılandırmadan okur.</summary>
+    /// <exception cref="InvalidOperationException">Kimlik yapılandırmada tanımlı değilse fırlatılır.</exception>
     public CustomerContext(IConfiguration configuration)
     {
         CurrentCustomerId = configuration[ConfigurationKey] is { Length: > 0 } customerId

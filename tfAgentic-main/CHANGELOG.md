@@ -1,5 +1,61 @@
 # Mimari Değişiklik Günlüğü (Changelog)
 
+## Sürüm: [Dokumantasyon-Standardi-K1-K10] - 2026-08-12
+
+> Kapsam: yalnızca yorum metni. Hiçbir kod satırı, prompt metni, trace mesajı veya YAML tanımı
+> değişmedi; her aşamada `git diff` filtresiyle doğrulandı.
+
+### Standart sıfırdan yazıldı
+
+`docs/DOKUMANTASYON-STANDARDI.md` S1–S13 yerine **K1–K10**'u taşıyor. Kaldırılan iki kural,
+şişkinliği üreten kurallardı:
+
+- **S3** ("gerekçe, kuralın kendisi olarak yazılır") ve **S12** ("gerekçe tipe aittir; tip açıklaması
+  uzun ve ayrıntılı olabilir, `<para>` sayısı sınırlı değildir") birlikte, tip başlıklarında sınırsız
+  gerekçe paragrafını meşru kılıyordu.
+
+Yerlerine gelen kısıtlar: **K1** satır bütçesi (üye 2, tip 6; `<para>` hiç kullanılmaz), **K3**
+ikinci cümle yalnızca çağıranı bağlayan kısıt varsa, **K4** karşı-olgusal anlatı yasağı, **K7**
+satır içi yorum 2–4 kelimelik adım etiketidir, **K9** gerekçenin yeri tablosu.
+
+### Koddaki uygulama
+
+93 dosya, **net −907 satır**. Kalıp sayaçları `src/` genelinde sıfırlandı:
+
+| Ölçü | Önce | Sonra |
+|---|---|---|
+| `<para>` | 195 | 0 |
+| `<b>` / `<i>` | 222 | 0 |
+| Karşı-olgusal kalıp (`-saydı…-ırdı`, `sessizce`, `aksi hâlde`, `daha kötüdür`) | 91 | 0 |
+| Üç satırlık `// ====` banner | 48 satır | 0 (tek satıra indirildi) |
+
+Baskın kalıp, aynı retorik şekliyle ~40 dosyada tekrarlanıyordu: *"Aksi hâlde tek bir açılış hatası,
+aramayı süreç ömrü boyunca sessizce sonuçsuz bırakırdı."* Bazıları birebir kopyaydı
+(`MkCodeCatalog` ile `SemanticCampaignSearcher` aynı cümleyi taşıyordu). Kural korundu, anlatı
+gitti: *"Banka o an ayakta değilse indeks boş kalır ve sonraki çağrı yeniden dener."*
+
+Kırılabilir değişmezler silinmedi, tek cümlelik kurala indirildi ve bozacak kişinin göreceği yere
+taşındı — örneğin `SessionLease` sınıf başlığındaki yedi satırlık `AsyncLocal` anlatısı,
+`Enter()` metodunun üstünde iki satır oldu.
+
+### Yan bulgular (kod değişmeden düzeltildi)
+
+- `CardsTools` içinde var olmayan bir üyeye atıf: `<see cref="ProjectCardsAsync"/>` — `CS1574`
+  üretiyordu, kaldırıldı.
+- `WorkflowMetadata.Instructions` için eksik `<param>` — `CS1573` üretiyordu, eklendi.
+- `ISessionStore` "yaklaşık bir dakikalık kurtarma penceresi" diyordu; gerçek varsayılan **30
+  dakika**. Sabit sayı yerine `SessionStoreOptions.SlidingTimeToLive`'a atıf verildi.
+- `Banking.Gateway/Models/*` (istemci protokol sözleşmesi) tamamen dokümansızdı; 11 `CS1591`
+  kapatıldı.
+- `CLAUDE.md` md.9 ve `ANALIZ.md` §4.4, var olmayan `SessionState.LastAssistantReply` ile
+  `AgentPrompts.BuildPreviousTurnContext`'i anlatıyordu. Yürürlükteki mekanizma
+  `ContextProviders/TopicContextProvider`'dır; iki doküman da ona göre yazıldı.
+- 2026-08-10 girdisindeki "`TopicContextProvider` ve `ContextProviders/` klasörü silindi" ifadesi
+  gerçekleşmemiş bir değişikliği anlatıyordu; o girdiye geri alma notu eklendi. Sağlayıcı sistemde
+  kalmaya devam ediyor.
+
+`GenerateDocumentationFile` derlemesinde `CS1574`, `CS1584`, `CS1573` ve `CS1587` sayısı **sıfır**.
+
 ## Sürüm: [FAZ-0-1-2-3-Olceklenebilirlik-ve-Kaynak-Yonetimi] - 2026-08-10
 
 > Kapsam: `docs/FINAL-PLAN.md`'nin FAZ 0–3'ü ve FAZ 7'si `dev` dalında tamamlandı; FAZ 6.1 uygulanıp
@@ -143,6 +199,17 @@ Bu referans üç dosyadan geliyordu — `SemanticCampaignSearcher`, `SemanticFin
 **Kabul ölçütü artık ikili ve otomatik doğrulanabilir:** `dotnet sln remove src/Banking.BankApi` sonrası `dotnet build src/Banking.Host` derlenmelidir. Derleniyor.
 
 #### 2. Bayat onay bağlamı hatası (davranış değişikliği)
+
+> **⚠️ Bu maddenin ikinci yarısı geri alındı (2026-08-12).** `TopicContextProvider` ve
+> `ContextProviders/` klasörü **silinmedi, sistemde kalmaya devam ediyor**; bağlam enjeksiyonu ve
+> saklama hâlâ sağlayıcının içindedir. `AgentPrompts.BuildPreviousTurnContext` ve
+> `SessionState.LastAssistantReply` hiç var olmadı. Aşağıdaki "Düzeltme" ve "Yan kazanç"
+> paragraflarını buna göre okuyun.
+>
+> **Yürürlükteki durum:** hatanın asıl kaynağı olan `SerializedOrchestratorSession`'ı
+> `SessionContext.ResetWorkflow` temizliyor ve düzeltme bu haliyle geçerli — sağlayıcının tuttuğu
+> tur bağlamı o serileştirilmiş geçmişin içinde taşındığı için ayrıca silinecek bir alan yok.
+> Sağlayıcının `ProviderSessionState<TopicState>` deposu da duruyor.
 
 Belirtinin iki kaynağı vardı ve **ikisi de akış bittiğinde temizlenmiyordu**:
 

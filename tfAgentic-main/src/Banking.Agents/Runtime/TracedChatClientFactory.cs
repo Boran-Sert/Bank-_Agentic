@@ -8,18 +8,9 @@ namespace Banking.Agents.Runtime;
 
 /// <summary>
 /// Ajan kuran her bileşenin sohbet istemcisini aldığı tek nokta. Üretilen istemci
-/// <see cref="TracingChatClient"/> ile sarılıdır; böylece hiçbir model çağrısı canlı izin dışında
-/// kalmaz.
-/// <para>
-/// <b>Delege yerine tip olmasının nedeni izlenebilirliktir:</b> DI'a kaydedilmiş bir
-/// <c>Func&lt;string, IChatClient&gt;</c> hata ayıklarken adsız bir lambda'ya çıkar ve yığın izinde
-/// görünmez. İsimli tip, çağrı yerinden buraya doğrudan gidilmesini sağlar.
-/// </para>
-/// <para>
-/// <b>Ajan etiketi hangi modelin kullanılacağını belirler</b> (<see cref="AgentOptions.Models"/>).
-/// Ham istemciler model adına göre önbelleklenir: aynı modeli kullanan ajanlar tek bağlantıyı
-/// paylaşır, farklı model isteyen ajan kendi istemcisini alır.
-/// </para>
+/// <see cref="TracingChatClient"/> ile sarılıdır; hiçbir model çağrısı canlı izin dışında kalmaz.
+/// Ajan etiketi hangi modelin kullanılacağını belirler (<see cref="AgentOptions.Models"/>) ve ham
+/// istemciler model adına göre önbelleklenir, aynı modeli kullanan ajanlar tek bağlantıyı paylaşır.
 /// </summary>
 /// <param name="options">Sağlayıcı, model, endpoint ve varsayılan sıcaklık ayarlarının kaynağı.</param>
 /// <param name="hub">Model çağrılarının yayınlanacağı canlı iz kanalı.</param>
@@ -55,8 +46,7 @@ public sealed class TracedChatClientFactory(AgentOptions options, TraceHub hub)
         if (!isSupported)
             throw new NotSupportedException($"Desteklenmeyen sağlayıcı: {options.Provider}");
 
-        // Anahtar yoksa, ajan grafiğinin LLM çağrısı yapmadan kurulabilmesi (wiring testi)
-        // için 'dummy' kullanılır. Gerçek istek (RunAsync) için geçerli bir anahtar gerekir.
+        // Anahtarsız kurulum için yer tutucu; gerçek çağrı geçerli anahtar ister
         var credential = new ApiKeyCredential(
             string.IsNullOrWhiteSpace(options.ApiKey) ? "dummy" : options.ApiKey);
 

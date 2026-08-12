@@ -8,21 +8,9 @@ namespace Banking.Agents.Tracing;
 /// <summary>
 /// Bir ajanın sohbet istemcisini saran dekoratör. Her model çağrısını, isteme giden mesajları ve
 /// modelden dönen yanıtı veya araç çağrısı kararını <see cref="TraceHub"/> üzerinden yayınlar.
-/// <para>
-/// Etiket, izlerde hangi ajanın çalıştığını gösterir. Yapılandırılmış sıcaklık, istek kendi değerini
-/// belirtmediğinde varsayılan olarak uygulanır.
-/// </para>
-/// <para>
-/// Her tamamlanan çağrı için ayrıca bir <c>Token Maliyeti</c> satırı yayınlanır. Sistemin donanım
-/// faturasını belirleyen çarpan mesaj başına model turu olduğundan, bir iyileştirmenin etkisi ancak
-/// tur başına token ve süre görünürse kanıtlanabilir. Ölçüm ayrı bir log kanalına değil aynı ize
-/// yazılır: <see cref="TraceHub"/> kaydı hem canlı ize hem <c>ILogger</c>'a düşürür, ikinci bir kanal
-/// aynı veriyi iki yerde bayatlatır.
-/// </para>
-/// <para>
-/// Bazı sağlayıcılar token sayısı döndürmez; bu durumda satır yalnızca süreyi taşır. Ölçümün
-/// kendisinin kaybolmaması, eksik alanla yayınlanmasından daha önemlidir.
-/// </para>
+/// Etiket izlerde hangi ajanın çalıştığını gösterir; yapılandırılmış sıcaklık, istek kendi değerini
+/// belirtmediğinde uygulanır. Her tamamlanan çağrı için ayrıca bir <c>Token Maliyeti</c> satırı
+/// yayınlanır — sağlayıcı token sayısı döndürmezse satır yalnızca süreyi taşır.
 /// </summary>
 public sealed class TracingChatClient(
     IChatClient inner, TraceHub hub, string label, string model, float temperature = 0.1f)
@@ -54,12 +42,8 @@ public sealed class TracingChatClient(
 
     /// <summary>
     /// Tamamlanan bir turun maliyetini ize yazar. Token sayıları yalnızca sağlayıcı döndürdüyse
-    /// satıra girer; model adı ve süre her hâlükârda yazılır.
-    /// <para>
-    /// <b>Model adı satırın parçasıdır.</b> Ajan başına model ataması yapıldığında hangi turun hangi
-    /// modele gittiği yalnızca buradan okunabilir; etiket tek başına ajanı gösterir, maliyeti
-    /// belirleyen ise modeldir.
-    /// </para>
+    /// satıra girer; model adı ve süre her hâlükârda yazılır. Ajan başına model ataması yapıldığında
+    /// hangi turun hangi modele gittiği yalnızca buradan okunur.
     /// </summary>
     private void PublishTurnCost(UsageDetails? usage, long elapsedMilliseconds)
     {
@@ -86,10 +70,7 @@ public sealed class TracingChatClient(
 
     /// <summary>
     /// İki çağrı yolunun ortak hazırlığı: varsayılan sıcaklığı uygular ve giden isteği ize yayınlar.
-    /// <para>
-    /// Sıcaklık yalnızca istek kendi değerini belirtmediğinde yazılır; akış YAML'ında belirtilmiş bir
-    /// değer ezilmez.
-    /// </para>
+    /// Sıcaklık yalnızca istek kendi değerini belirtmediğinde yazılır; YAML'daki değer ezilmez.
     /// </summary>
     private List<ChatMessage> PrepareTurn(IEnumerable<ChatMessage> messages, ref ChatOptions? options, string eventName)
     {

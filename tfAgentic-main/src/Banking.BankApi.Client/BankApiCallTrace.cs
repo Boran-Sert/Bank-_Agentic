@@ -3,9 +3,8 @@ using System.Text.Json;
 namespace Banking.BankApi.Client;
 
 /// <summary>
-/// Bankaya giden bir isteğin gözlemlenebilir hâli. <b>İsteğin gövdesi metin olarak değil, alan alan
-/// taşınır:</b> izleme ekranında "istek gönderildi" gibi sabit bir cümle değil, o çağrının gerçek
-/// parametreleri (<c>customerId = CUST-001</c>) okunur.
+/// Bankaya giden bir isteğin gözlemlenebilir hâli. Gövde metin olarak değil alan alan taşınır;
+/// izleme ekranında çağrının gerçek parametreleri (<c>customerId = CUST-001</c>) okunur.
 /// </summary>
 /// <param name="CallId">İstek ile yanıtı eşleyen kısa kimlik.</param>
 /// <param name="Method">İsteğin HTTP metodu.</param>
@@ -68,10 +67,8 @@ public sealed record BankApiField(string Name, string Value)
 
 /// <summary>
 /// Banka çağrılarının istek ve yanıt içeriğini alan bileşen. İstemci bu arayüzün ne yaptığını
-/// bilmez: canlı izleme, dosya logu veya metrik toplayıcı — hepsi aynı kapıdan beslenir.
-/// <para>
-/// Uygulamalar <b>hata fırlatmamalıdır</b>; gözlem yolu bankaya giden yolu düşüremez.
-/// </para>
+/// bilmez: canlı izleme, dosya logu veya metrik toplayıcı hepsi aynı kapıdan beslenir. Uygulamalar
+/// hata fırlatmaz; gözlem yolu bankaya giden yolu düşürmez.
 /// </summary>
 public interface IBankApiCallObserver
 {
@@ -102,9 +99,8 @@ public sealed class NullBankApiCallObserver : IBankApiCallObserver
 }
 
 /// <summary>
-/// Bir istek ya da yanıt gövdesini alanlarına ayıran okuyucu. Alan adları <b>gövdenin kendisinden</b>
-/// gelir; hiçbir yol ya da sözleşme için ad listesi tutulmaz, dolayısıyla bankanın sözleşmesi
-/// değiştiğinde burada güncellenecek bir şey yoktur.
+/// Bir istek ya da yanıt gövdesini alanlarına ayıran okuyucu. Alan adları gövdenin kendisinden
+/// gelir; hiçbir yol ya da sözleşme için ad listesi tutulmaz.
 /// </summary>
 public static class BankApiPayloadReader
 {

@@ -7,16 +7,11 @@ using Microsoft.Extensions.Logging;
 namespace Banking.Gateway;
 
 /// <summary>
-/// Kullanıcı isteklerinin giriş noktası ve yanıtların tek çıkış noktası.
-/// <para>
-/// Üç sorumluluğu vardır: oturum scope'unu açmak, isteği <see cref="FlowRouter"/>'a devretmek ve
-/// dönen sonucu <see cref="GatewayResponseMapper"/> ile UI protokolüne çevirip
-/// <see cref="ResponseSanitizer"/>'dan geçirmek.
-/// </para>
-/// <para>
-/// <b>Oturum scope'u burada açılır ve burada kapanır:</b> durum bir kez yüklenir, istek bittiğinde
-/// bir kez yazılır. Aradaki hiçbir katman oturum deposuna erişmez.
-/// </para>
+/// Kullanıcı isteklerinin giriş noktası ve yanıtların tek çıkış noktası. Üç sorumluluğu vardır:
+/// oturum scope'unu açmak, isteği <see cref="FlowRouter"/>'a devretmek, dönen sonucu
+/// <see cref="GatewayResponseMapper"/> ile UI protokolüne çevirip <see cref="ResponseSanitizer"/>'dan
+/// geçirmek. Oturum scope'u burada açılır ve burada kapanır; aradaki hiçbir katman oturum deposuna
+/// erişmez.
 /// </summary>
 public sealed class GatewayService(
     FlowRouter router,
@@ -38,8 +33,7 @@ public sealed class GatewayService(
 
         var sessionToken = NormalizeSessionToken(request.SessionToken);
 
-        // Scope'un içindeki hiçbir katman sessionId taşımak zorunda değildir; oturum kimliği
-        // LLM araçlarına parametre olarak da verilmez (oturum izolasyonu).
+        // Oturum scope'u
         var lease = await sessionAccessor.OpenAsync(sessionToken, cancellationToken);
         await using var session = lease.Enter();
 
@@ -65,8 +59,8 @@ public sealed class GatewayService(
     }
 
     /// <summary>
-    /// Yanıta oturum jetonunu ekler ve çıktı güvenlik bariyerinden geçirir.
-    /// <b>Tüm yanıtların tek çıkış noktasıdır:</b> temizlenmemiş hiçbir metin istemciye ulaşmaz.
+    /// Yanıta oturum jetonunu ekler ve çıktı güvenlik bariyerinden geçirir. Tüm yanıtların tek çıkış
+    /// noktasıdır; temizlenmemiş hiçbir metin istemciye ulaşmaz.
     /// </summary>
     private GatewayResponse FinalizeResponse(GatewayResponse response, string sessionToken)
     {

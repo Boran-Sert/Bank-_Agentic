@@ -5,13 +5,9 @@ using Microsoft.Extensions.Logging;
 namespace Banking.Mcp;
 
 /// <summary>
-/// MCP araçlarının bankaya çıkış noktası. Her araç bankayı <b>gövdeli tek bir POST</b> ile çağırır;
-/// gövde anahtarları bankanın istek sözleşmesindeki alan adlarının birebir aynısıdır.
-/// <para>
-/// <b>Banka hatası istisnaya dönüşmez.</b> Bir aracın istisna fırlatması, uzman ajanın soruyu
-/// yanıtsız bırakması ve kullanıcının açıklamasız bir hata görmesi demektir; bunun yerine bankanın
-/// kendi gerekçesi <c>error</c> alanında modele taşınır ve model kullanıcıya bunu anlatır.
-/// </para>
+/// MCP araçlarının bankaya çıkış noktası. Her araç bankayı gövdeli tek bir POST ile çağırır; gövde
+/// anahtarları bankanın istek sözleşmesindeki alan adlarının birebir aynısıdır. Banka hatası
+/// istisnaya dönüşmez; bankanın gerekçesi <c>error</c> alanında modele taşınır.
 /// </summary>
 internal static class BankApiToolGateway
 {
@@ -24,10 +20,9 @@ internal static class BankApiToolGateway
     /// <param name="body">İstek gövdesi. Yol parametresi olmadığı için tüm girdiler burada taşınır.</param>
     /// <param name="cancellationToken">İptal jetonu.</param>
     /// <returns>
-    /// Başarılı yanıtta bankanın ham <see cref="JsonElement"/> gövdesi, aksi hâlde <c>error</c>
-    /// alanını taşıyan bir nesne. Yanıtın alanlarını daraltacak araçlar dönen değeri
-    /// <see cref="JsonElement"/> olarak sınayıp öyle projekte eder; sınama başarısızsa değer zaten
-    /// hata nesnesidir ve olduğu gibi geri verilir.
+    /// Başarılı yanıtta bankanın ham <see cref="JsonElement"/> gövdesi, hata durumunda <c>error</c>
+    /// alanını taşıyan bir nesne. Çağıran, dönen değeri <see cref="JsonElement"/> olarak sınayarak
+    /// ikisini ayırt eder.
     /// </returns>
     public static async Task<object> AskBankAsync(
         this IBankApiClient bank,
@@ -41,7 +36,7 @@ internal static class BankApiToolGateway
         }
         catch (BankApiException exception)
         {
-            // Bankanın gerekçesi ("Hesap bulunamadı: ACC-9") yutulmaz; modele olduğu gibi taşınır.
+            // Bankanın gerekçesi modele taşınır
             return new { error = exception.Message };
         }
         catch (HttpRequestException)

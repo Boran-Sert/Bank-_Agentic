@@ -9,22 +9,11 @@ using ModelContextProtocol.Client;
 namespace Banking.Agents.Mcp;
 
 /// <summary>
-/// Süreç içi MCP sunucusuna loopback HTTP üzerinden bağlanan tek istemci.
-/// <para>
-/// <b>Bağlantı tembel ve tek seferlik kurulur.</b> Erken bağlanma denemesi, sunucu henüz
-/// dinlemediğinden bağlantı hatasıyla sonuçlanır. Bağlantı kurulduğu anda kayıt defteri ile canlı
-/// araç listesi karşılaştırılır ve uyuşmazlık hâlinde başlangıçta istisna üretilir.
-/// </para>
-/// <para>
-/// Araçlar ajanlara grup bazında ve izleme sarmalayıcısıyla dağıtılır; bir ajan yalnızca kendi
-/// <see cref="ToolGroup"/> grubundaki araçları görür. Bu sınırlama hem hatanın etki alanını hem de
-/// talimat maliyetini küçültür.
-/// </para>
-/// <para>
-/// <b><see cref="GetTracedToolsByNamesAsync"/> bilinmeyen bir araç adını sessizce atlamaz.</b>
-/// Atlanması durumunda, ada göre araç seçen deklaratif bir uzman sahip olduğunu varsaydığı araç
-/// olmadan çalışmaya devam eder ve kullanıcıya nedeni görünmeyen bir yetersizlik yanıtı döner.
-/// </para>
+/// Süreç içi MCP sunucusuna loopback HTTP üzerinden bağlanan tek istemci. Bağlantı tembel ve tek
+/// seferlik kurulur; sunucu ancak dinlemeye başladıktan sonra erişilebilir olur. Bağlantı anında
+/// kayıt defteri ile canlı araç listesi karşılaştırılır, uyuşmazlıkta istisna fırlatılır. Araçlar
+/// ajanlara grup bazında dağıtılır ve <see cref="GetTracedToolsByNamesAsync"/> bilinmeyen bir araç
+/// adını atlamaz, hata verir.
 /// </summary>
 public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<McpToolProvider> logger)
     : IAsyncDisposable
@@ -118,8 +107,7 @@ public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<
             _client = await McpClient.CreateAsync(transport, cancellationToken: cancellationToken);
             var tools = await _client.ListToolsAsync(cancellationToken: cancellationToken);
 
-            // Fail-fast: registry ile canlı MCP server'ın araç listesi ayrışırsa burada patlar.
-            // Sessizce eksik araçla çalışan bir ajan, kullanıcıya "yapamıyorum" der ve sebebi görünmez.
+            // Kayıt defteri ↔ canlı araç listesi doğrulaması
             _registry.ValidateDiscoveredMcpTools(tools.Select(tool => tool.Name));
 
             DiscoveredToolCount = tools.Count;
@@ -134,6 +122,7 @@ public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<
         }
     }
 
+    /// <summary>MCP bağlantısını kapatır.</summary>
     public async ValueTask DisposeAsync()
     {
         if (_client is not null) await _client.DisposeAsync();

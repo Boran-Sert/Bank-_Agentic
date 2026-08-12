@@ -9,25 +9,11 @@ namespace Banking.Agents.Sessions;
 
 /// <summary>
 /// Bir isteğin oturum durumuna açılan tek erişim noktası. Oturum verisine erişen her katman —
-/// orkestratör, iş akışı motoru, slot yazıcı — bu tip üzerinden geçer.
-/// <para>
-/// <b>Değişmez:</b> oturum durumu istek başına bir kez yüklenir (<see cref="AmbientSessionAccessor.OpenAsync"/>)
-/// ve bir kez yazılır (scope kapanışı). Ara okuma veya ara yazma yapılmaz; dağıtık bir depoda her
-/// okuma ayrı bir kopya döndüreceğinden, çok noktalı erişim bir katmanın yazdığını diğerinin
-/// sessizce ezmesine yol açar.
-/// </para>
-/// <para>
-/// Bu nedenle buradaki metotlar senkrondur: veri bellektedir, I/O yapılmaz.
-/// </para>
-/// <para>
-/// <b>Bir akış sona erdiğinde orkestratörün konuşma geçmişi de sıfırlanır</b>
-/// (bkz. özel <c>ResetWorkflow</c>, <see cref="CompleteWorkflow"/> ve <see cref="CancelWorkflow"/>
-/// tarafından çağrılır). Akış boyunca yönlendirici orkestratörü baypas ettiğinden, o geçmişte en son
-/// duran alışveriş "akışı başlattım, araç bana bir soru döndürdü" olarak kalır. Silinmezse, akış
-/// çoktan bittiği hâlde bir sonraki mesaj o cevaplanmamış soruya verilmiş yanıt sanılır ve sistem
-/// onay bekliyormuş gibi davranır. Bedeli, tamamlanmış bir işlemin öncesine zamirle gönderme yapan
-/// takip cümlesinin artık çözülememesidir — para hareketi içeren bir akışta doğru takas budur.
-/// </para>
+/// orkestratör, iş akışı motoru, slot yazıcı — bu tip üzerinden geçer. Durum istek başına bir kez
+/// yüklenir (<see cref="AmbientSessionAccessor.OpenAsync"/>) ve scope kapanışında bir kez yazılır;
+/// ara okuma veya ara yazma yapılmaz. Veri bellekte olduğundan buradaki metotlar senkrondur.
+/// Akış sona erdiğinde orkestratörün konuşma geçmişi de sıfırlanır (<see cref="CompleteWorkflow"/>,
+/// <see cref="CancelWorkflow"/>).
 /// </summary>
 public sealed class SessionContext
 {
@@ -42,11 +28,10 @@ public sealed class SessionContext
     /// <summary>Ham oturum durumu. Yalnızca kalıcılık katmanının (<see cref="ISessionStore"/>) kullanımı içindir.</summary>
     internal SessionState State { get; }
 
+    /// <summary>Bu scope'un oturum kimliği.</summary>
     public string SessionId => State.SessionId;
 
-    // =================================================================================
-    // 1. AKIŞ DURUMU
-    // =================================================================================
+    // --- Akış durumu ---
 
     /// <summary>Aktif iş akışının adı; akış yoksa <c>null</c>.</summary>
     public string? ActiveWorkflowName => State.ActiveWorkflowName;
@@ -90,12 +75,8 @@ public sealed class SessionContext
         ResetWorkflow(WorkflowPhases.Cancelled, "StateBag İptal Edildi & Temizlendi");
 
     /// <summary>
-    /// İş akışı ajanının bir araç çağrısıyla bıraktığı denetim sinyalini (iptal veya devretme) kaydeder.
-    /// <para>
-    /// <b>Sinyal ajanın yanıt metninden okunmaz.</b> Model araç sonucunu olduğu gibi aktarmaz, kendi
-    /// cümlesini kurar; dolayısıyla serbest metinde sinyal aramak güvenilir değildir. Araç kararı
-    /// doğrudan oturuma yazar — teklif aracının slotları oturuma yazması gibi.
-    /// </para>
+    /// İş akışı ajanının bir araç çağrısıyla bıraktığı denetim sinyalini (iptal veya devretme)
+    /// kaydeder. Sinyal ajanın yanıt metninden okunmaz; kararı aracın kendisi oturuma yazar.
     /// </summary>
     /// <param name="signal">Sinyal sabiti; geçerli değerler <see cref="Workflows.Engine.WorkflowAgentSignals"/> içindedir.</param>
     public void RaiseAgentSignal(string signal)
@@ -113,9 +94,7 @@ public sealed class SessionContext
         return signal;
     }
 
-    // =================================================================================
-    // 2. SLOTLAR
-    // =================================================================================
+    // --- Slotlar ---
 
     /// <summary>Tek bir slot değerini oturuma yazar. Aynı ada ikinci yazma önceki değeri değiştirir.</summary>
     /// <param name="slotName">Slot adı; büyük/küçük harf duyarsızdır ve boş olamaz.</param>
@@ -165,12 +144,8 @@ public sealed class SessionContext
     }
 
     /// <summary>
-    /// Akışın YAML şemasını oturuma tanıtır: hangi slotlar beklenir, tipleri nedir, hangileri zorunludur.
-    /// <para>
-    /// Şema akış her başladığında yeniden yazılır. Böylece güncellenmiş bir YAML tanımı her zaman
-    /// yürürlükteki şemayla çalışır; eski şemanın kalması, hata üretmeden yanlış slot toplanmasına
-    /// yol açar.
-    /// </para>
+    /// Akışın YAML şemasını oturuma tanıtır: hangi slotlar beklenir, tipleri nedir, hangileri
+    /// zorunludur. Şema akış her başladığında yeniden yazılır; yürürlükteki tanım geçerlidir.
     /// </summary>
     /// <param name="expectedSlots">Slot adı → tip ve zorunluluk. Boş veya <c>null</c> ise şema kaldırılır.</param>
     public void DeclareExpectedSlots(IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
@@ -183,16 +158,16 @@ public sealed class SessionContext
     /// <summary>Onaya sunulmuş slot kümesini döner; teklif yoksa <c>null</c>.</summary>
     public Dictionary<string, object?>? ReadProposedSlots() => State.ProposedSlots;
 
-    // =================================================================================
-    // 3. ONAY VE İDEMPOTENSİ
-    // =================================================================================
+    // --- Onay ve idempotency ---
 
+    /// <summary>Kullanıcının kararını bekleyen onay ekranı; bekleyen onay yoksa <c>null</c>.</summary>
     public GenericConfirmationView? PendingConfirmation
     {
         get => State.PendingConfirmation;
         set => State.PendingConfirmation = value;
     }
 
+    /// <summary>Bu onayın tekrar koruma anahtarı; bankaya gönderilen istekle birlikte gider.</summary>
     public string? IdempotencyToken
     {
         get => State.IdempotencyToken;
@@ -206,16 +181,16 @@ public sealed class SessionContext
         set => State.CompletedOutcome = value;
     }
 
-    // =================================================================================
-    // 4. AJAN KONUŞMA GEÇMİŞLERİ
-    // =================================================================================
+    // --- Ajan konuşma geçmişleri ---
 
+    /// <summary>Orkestratörün serileştirilmiş konuşma geçmişi; akış kapandığında sıfırlanır.</summary>
     public JsonElement? OrchestratorConversation
     {
         get => State.SerializedOrchestratorSession;
         set => State.SerializedOrchestratorSession = value;
     }
 
+    /// <summary>Aktif akış ajanının serileştirilmiş konuşma geçmişi.</summary>
     public JsonElement? WorkflowConversation
     {
         get => State.SerializedWorkflowSession;
@@ -236,8 +211,7 @@ public sealed class SessionContext
         State.CompletedOutcome = null;
         State.PendingAgentSignal = null;
 
-        // Orkestratörün geçmişi silinince, onun içinde taşınan tur bağlamı da (bkz.
-        // ContextProviders.TopicContextProvider) birlikte gider; ayrıca temizlenecek bir alan yoktur.
+        // Tur bağlamı geçmişin içinde taşınır
         State.SerializedOrchestratorSession = null;
 
         _hub.Publish(TraceCategories.Context, $"Akış kapandı → önceki tur bağlamı ve orkestratör geçmişi temizlendi");

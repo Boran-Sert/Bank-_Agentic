@@ -25,17 +25,10 @@ public sealed record OrchestratorReply(
     IDictionary<string, object?>? TriggeredToolArguments);
 
 /// <summary>
-/// Orkestratör ajanının yaşam döngüsü ve tek giriş noktası.
-/// <para>
-/// Sorumluluğu iki başlıkla sınırlıdır: niyet analizi ve iş akışı başlatma. Uzman kurulumu
-/// <see cref="SpecialistCatalog"/>'a, iş akışı ajanları <see cref="WorkflowAgentFactory"/>'ye,
-/// MCP bağlantısı <see cref="McpToolProvider"/>'a, ekran araçları <see cref="NavigationTools"/>'a
-/// aittir.
-/// </para>
-/// <para>
-/// Ajan singleton ve stateless'tır; kullanıcıya özel konuşma geçmişi oturumda serileştirilmiş olarak
-/// tutulur.
-/// </para>
+/// Orkestratör ajanının yaşam döngüsü ve tek giriş noktası. Sorumluluğu niyet analizi ve iş akışı
+/// başlatma ile sınırlıdır; uzman kurulumu <see cref="SpecialistCatalog"/>'a, iş akışı ajanları
+/// <see cref="WorkflowAgentFactory"/>'ye, MCP bağlantısı <see cref="McpToolProvider"/>'a aittir.
+/// Ajan singleton ve stateless'tır; konuşma geçmişi oturumda serileştirilmiş olarak tutulur.
 /// </summary>
 public sealed class AgentRuntime(
     AgentOptions options,
@@ -59,23 +52,13 @@ public sealed class AgentRuntime(
         _orchestrator ?? throw new InvalidOperationException(
             "Orkestratör henüz kurulmadı. Bu çağrıdan önce EnsureReadyAsync çağrılmalıdır.");
 
-    // =================================================================================
-    // 1. KURULUM
-    // =================================================================================
+    // --- Kurulum ---
 
     /// <summary>
     /// Uzmanları ve orkestratörü kurar. Uygulama dinlemeye başladığında ön ısıtma olarak, ayrıca her
-    /// isteğin başında güvence olarak çağrılır; kurulu ve güncelse etkisizdir.
-    /// <para>
-    /// <b>Yeniden kurulumun tek nedeni uzman kataloğunun değişmesidir.</b> Hem köprü araçları hem de
-    /// yönlendirme kuralları uzman kartlarından üretilir; katalog değiştiğinde orkestratör yeniden
-    /// kurulmazsa yeni uzman hiç tanımlanmamış gibi davranır.
-    /// </para>
-    /// <para>
-    /// <b>Başarısız kurulum kalıcı değildir:</b> ön ısıtma sırasında MCP sunucusuna ulaşılamazsa
-    /// kurulum tamamlanmış sayılmaz ve ilk istek yeniden dener. Tek bir geçici bağlantı hatasının
-    /// sistemi kalıcı olarak yanıtsız bırakmaması için gereklidir.
-    /// </para>
+    /// isteğin başında güvence olarak çağrılır; kurulu ve güncelse etkisizdir. Yeniden kurulumun tek
+    /// nedeni uzman kataloğunun değişmesidir. MCP sunucusuna ulaşılamazsa kurulum tamamlanmış
+    /// sayılmaz ve sonraki istek yeniden dener.
     /// </summary>
     public async Task EnsureReadyAsync(CancellationToken cancellationToken = default)
     {
@@ -103,13 +86,8 @@ public sealed class AgentRuntime(
     /// <summary>
     /// Orkestratör ajanını kartlardan ve araçlardan kurar. Sistem talimatı kullanıcıya veya isteğe
     /// özel bilgi içermediğinden tek örnek tüm istekleri karşılar; aday akışlar çalışma anında mesaj
-    /// olarak iletilir.
-    /// <para>
-    /// <b>Önceki turun bağlamı bu metotta değil, ajanın kendi bağlam sağlayıcısında yönetilir</b>
-    /// (<see cref="ContextProviders.TopicContextProvider"/>). Sağlayıcı bağlamı konuşmanın kendisiyle
-    /// aynı yerde saklar; turdan önce ekleme ve turdan sonra saklama tek tipin içinde kalır ve iki
-    /// yarının ayrışması mümkün olmaz.
-    /// </para>
+    /// olarak iletilir. Önceki turun bağlamı burada değil
+    /// <see cref="ContextProviders.TopicContextProvider"/> içinde yönetilir.
     /// </summary>
     private ChatClientAgent BuildOrchestrator()
     {
@@ -131,16 +109,12 @@ public sealed class AgentRuntime(
         });
     }
 
-    // =================================================================================
-    // 2. GİRİŞ NOKTALARI
-    // =================================================================================
+    // --- Giriş noktaları ---
 
     /// <summary>
-    /// Kullanıcı mesajını işler. Mesaja semantik olarak yakın akışlar orkestratöre <b>bağlam</b>
-    /// olarak verilir; kararı orkestratör verir.
-    /// <para>
-    /// Oturum ambient scope'tan okunur; parametre olarak taşınmaz.
-    /// </para>
+    /// Kullanıcı mesajını işler. Mesaja semantik olarak yakın akışlar orkestratöre bağlam olarak
+    /// verilir; kararı orkestratör verir. Oturum ambient scope'tan okunur, parametre olarak
+    /// taşınmaz.
     /// </summary>
     public async Task<OrchestratorReply> AskOrchestratorAsync(string userMessage, CancellationToken cancellationToken = default)
     {
@@ -151,13 +125,10 @@ public sealed class AgentRuntime(
         logger.LogInformation("Kullanıcı sorusu işleniyor.");
         hub.Publish(TraceCategories.System, $"Kullanıcı sorusu alındı → '{userMessage}'");
 
-        // Akış başlatma aracı bu mesaja ihtiyaç duyar; singleton alan yerine oturuma yazılır.
+        // Akış başlatma aracı bu mesajı okur
         session.LastUserMessage = userMessage;
 
-        // Aktif akış varken buraya yalnızca konu dışı bir sorunun devredilmesiyle gelinir
-        // (normal yolda FlowRouter orkestratöre hiç uğramaz). Böyle bir turda aday listesi
-        // verilseydi, kullanıcının sorusu devam eden işlemi sessizce başka bir akışla
-        // değiştirmeye davet ederdi; burada yalnızca soru cevaplanır.
+        // Devam eden işlem varken aday listesi verilmez
         var candidates = session.HasActiveWorkflow ? [] : SearchCandidateWorkflows(userMessage);
 
         return await AskLanguageModelAsync(session, userMessage, candidates, cancellationToken);
@@ -172,8 +143,7 @@ public sealed class AgentRuntime(
         }
         catch (Exception exception)
         {
-            // Tanılama ekranı, kurulum başarısız olduğunda da açılabilmelidir; asıl bilgi
-            // zaten aşağıdaki alanlarda görünür.
+            // Tanılama ekranı kurulum başarısızken de açılır
             logger.LogWarning(exception, "Tanılama sırasında kurulum başarısız.");
         }
 
@@ -189,9 +159,7 @@ public sealed class AgentRuntime(
         };
     }
 
-    // =================================================================================
-    // 3. MODEL TURU
-    // =================================================================================
+    // --- Model turu ---
 
     private async Task<OrchestratorReply> AskLanguageModelAsync(
         SessionContext session,
@@ -226,28 +194,13 @@ public sealed class AgentRuntime(
         return new OrchestratorReply(response.Text, lastFunctionCall?.Name, lastFunctionCall?.Arguments);
     }
 
-    // =================================================================================
-    // 4. SEMANTİK ADAY ARAMA VE AKIŞ BAŞLATMA
-    // =================================================================================
+    // --- Semantik aday arama ve akış başlatma ---
 
     /// <summary>
-    /// Kullanıcının mesajına semantik olarak en yakın akışları döner. Bu liste orkestratöre
-    /// <b>bağlam</b> olarak verilir; kararı orkestratör verir.
-    /// <para>
-    /// <b>Arama akış başlatmaz.</b> Vektör benzerliği <i>konu</i> yakınlığını ölçer, <i>niyeti</i>
-    /// değil: bir konuya ait bilgi sorusu ile o konudaki işlem talebi aynı sözcükleri taşır ve
-    /// birbirine yakın skor alır. "Kartımın kullanılabilir limiti nedir?" — bir bilgi sorusu —
-    /// limit artırım akışıyla yüksek skor eşleşir; "Diğerini de yap sana zahmet" ise indekste
-    /// karşılığı olmayan bir isteği anlatır ama açıklamayla işlev sözcükleri örtüştüğü için yine
-    /// yüksek skor alır. Eşik veya rakiple fark koşulu bu ayrımı üretemez; ikisi de aynı ölçünün
-    /// türevidir. Bilgi sorusu ile iş talebi ayrımı orkestratörün talimatındaki kuraldır ve o kural
-    /// yalnızca cümlenin kendisini okuyarak uygulanabilir.
-    /// </para>
-    /// <para>
-    /// Aramanın kazandırdığı şey bu nedenle karar değil, <b>kapsam daraltmadır</b>: orkestratör
-    /// akışların tamamı yerine bir avuç adayı görür ve akış adları sistem talimatına gömülmediği
-    /// için çalışma zamanında eklenen akışlar da anında yönlendirilebilir olur.
-    /// </para>
+    /// Kullanıcının mesajına semantik olarak en yakın akışları döner. Arama akış başlatmaz; liste
+    /// orkestratöre bağlam olarak verilir, kararı orkestratör verir. Kazandırdığı şey karar değil
+    /// kapsam daraltmadır: akış adları sistem talimatına gömülmediğinden çalışma zamanında eklenen
+    /// akışlar da anında yönlendirilebilir olur.
     /// </summary>
     private List<WorkflowMetadata> SearchCandidateWorkflows(string userMessage) =>
         workflowSearcher.Search(userMessage, topK: 3).Select(match => match.Metadata).ToList();
@@ -265,15 +218,13 @@ public sealed class AgentRuntime(
 
     /// <summary>
     /// Adı verilen iş akışını aktif oturumda başlatır ve ilk soruyu döner. Oturumda zaten bir akış
-    /// varsa yeni akış başlatılmaz; yarım kalmış bir işlemin sessizce düşürülmesi engellenir.
+    /// varsa yeni akış başlatılmaz; yarım kalmış bir işlemin düşürülmesi engellenir.
     /// </summary>
     private async Task<string> StartWorkflowAsync(string workflowName, CancellationToken cancellationToken)
     {
         logger.LogInformation("Jenerik iş akışının başlatılması istendi: {WorkflowName}", workflowName);
-
-        // Devam eden bir işlem varken yeni akış başlatmak, kullanıcının yarım kalan
-        // parametrelerini sessizce çöpe atardı. Araç sonucu olarak LLM'e durum bildirilir;
-        // LLM de kullanıcıya önce mevcut işlemi bitirmesi/iptal etmesi gerektiğini söyler.
+        
+        // Aktif iş akışı kontrolü
         if (sessionAccessor.Current.HasActiveWorkflow)
         {
             hub.Publish(TraceCategories.Workflow,
@@ -286,11 +237,10 @@ public sealed class AgentRuntime(
         var initialMessage = sessionAccessor.Current.LastUserMessage is { Length: > 0 } message
             ? message
             : "İş akışı başlatılıyor";
-
-        // Boş ad sessizce bir akışa (örn. ödemeye) düşürülmez: yanlış akış başlatmak, hata
-        // vermekten çok daha tehlikelidir. Denetimi BeginWorkflow yapar ve istisna fırlatır.
+        
         sessionAccessor.Current.BeginWorkflow(workflowName);
 
+        // Akış üretimi
         var engine = await workflowRegistry.CreateEngineAsync(workflowName);
         var stepResult = await engine.AdvanceWorkflowStepAsync(initialMessage, cancellationToken);
 

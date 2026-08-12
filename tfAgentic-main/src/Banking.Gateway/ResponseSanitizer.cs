@@ -8,28 +8,12 @@ namespace Banking.Gateway;
 
 /// <summary>
 /// Deterministik çıktı güvenlik bariyeri (output guard). Kullanıcıya gönderilecek her yanıt metnini
-/// altı kategoride tarar ve tespit ettiği iç bilgi sızıntılarını temizler.
-/// <para>
-/// <b>Katmanlı savunmanın üçüncü katmanıdır ve modelin talimatlara uyup uymamasından bağımsız çalışır.</b>
-/// Tek uygulama noktası <see cref="GatewayService"/> içindeki yanıt sonlandırma adımıdır; her yanıt
-/// tipi bu adımdan geçer.
-/// </para>
-/// <para>
-/// Tarama kategorileri:
-/// <list type="number">
-///   <item>Dahili araç ve fonksiyon adları</item>
-///   <item>Düşünce süreci ve planlama ifadeleri (chain-of-thought)</item>
-///   <item>Dahili XML prompt etiketleri ve blokları</item>
-///   <item>Sistem talimatlarından kopyalanmış metin parçaları</item>
-///   <item>Dahili endpoint ve URL'ler (localhost, MCP, A2A)</item>
-///   <item>Oturum jetonu biçimleri</item>
-/// </list>
-/// </para>
-/// <para>
-/// Sızıntı içeren cümleler metinden çıkarılır, oturum jetonları maskelenir ve her tespit için
-/// bir uyarı logu ile güvenlik izi yayınlanır. Temizlik sonrası metin tamamen boşalırsa
+/// altı kategoride tarar: dahili araç adları, düşünce süreci ifadeleri, dahili XML prompt etiketleri
+/// ve blokları, sistem talimatından kopyalanmış parçalar, dahili endpoint'ler ve oturum jetonları.
+/// Modelin talimatlara uyup uymamasından bağımsız çalışır; tek uygulama noktası
+/// <see cref="GatewayService"/>'in yanıt sonlandırma adımıdır. Sızıntılı cümleler çıkarılır, jetonlar
+/// maskelenir, her tespit için güvenlik izi yayınlanır; metin tamamen boşalırsa
 /// <see cref="FallbackMessage"/> döner.
-/// </para>
 /// </summary>
 public sealed class ResponseSanitizer
 {
@@ -40,6 +24,9 @@ public sealed class ResponseSanitizer
     /// <summary>Temizlik sonrası metin tamamen boşaldığında kullanıcıya döndürülen güvenli varsayılan yanıt.</summary>
     private const string FallbackMessage = "Talebiniz işleniyor. Lütfen sorunuzu tekrar yazınız.";
 
+    /// <summary>
+    /// Bariyeri kurar ve maskelenecek araç adlarını kayıt defterinden okur (Kategori 1).
+    /// </summary>
     public ResponseSanitizer(ILogger<ResponseSanitizer> logger, TraceHub hub)
     {
         _logger = logger;
@@ -47,9 +34,7 @@ public sealed class ResponseSanitizer
         _toolNamePattern = BuildToolNameRegex(ToolRegistry.Instance.GetAllSanitizableToolNames());
     }
 
-    // ════════════════════════════════════════════════════════════════════
-    //  KATEGORİ 2: Düşünce süreci / planlama ifadesi sızıntısı
-    // ════════════════════════════════════════════════════════════════════
+    // --- Kategori 2: düşünce süreci / planlama ifadesi sızıntısı ---
 
     /// <summary>
     /// Modelin iç düşünce sürecini, araç çağırma kararını veya planlama adımlarını doğal dilde ifade
@@ -87,9 +72,7 @@ public sealed class ResponseSanitizer
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant
     );
 
-    // ════════════════════════════════════════════════════════════════════
-    //  KATEGORİ 3: Dahili XML tag ve yapı sızıntısı
-    // ════════════════════════════════════════════════════════════════════
+    // --- Kategori 3: dahili XML tag ve yapı sızıntısı ---
 
     /// <summary>
     /// Sistem talimatlarında kullanılan dahili XML etiketlerini yakalar; açılış ve kapanış
@@ -120,9 +103,7 @@ public sealed class ResponseSanitizer
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant
     );
 
-    // ════════════════════════════════════════════════════════════════════
-    //  KATEGORİ 4: Sistem prompt içerik parçası sızıntısı
-    // ════════════════════════════════════════════════════════════════════
+    // --- Kategori 4: sistem prompt içerik parçası sızıntısı ---
 
     /// <summary>
     /// Orkestratör veya uzman talimatlarından birebir kopyalanmış ifade kalıplarını yakalar.
@@ -141,9 +122,7 @@ public sealed class ResponseSanitizer
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant
     );
 
-    // ════════════════════════════════════════════════════════════════════
-    //  KATEGORİ 5: Dahili endpoint ve URL sızıntısı
-    // ════════════════════════════════════════════════════════════════════
+    // --- Kategori 5: dahili endpoint ve URL sızıntısı ---
 
     /// <summary>
     /// Dahili servis URL'lerini, MCP ve A2A endpoint yollarını ve loopback adreslerini yakalar.
@@ -160,9 +139,7 @@ public sealed class ResponseSanitizer
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant
     );
 
-    // ════════════════════════════════════════════════════════════════════
-    //  KATEGORİ 6: Session token format sızıntısı
-    // ════════════════════════════════════════════════════════════════════
+    // --- Kategori 6: session token format sızıntısı ---
 
     /// <summary>
     /// Dahili oturum jetonu biçimlerini (<c>gw-…</c>, <c>cs-…</c>) yanıt metni içinde yakalar.
@@ -174,12 +151,8 @@ public sealed class ResponseSanitizer
     );
 
     /// <summary>
-    /// Yanıt metnini altı güvenlik kategorisinde tarar ve tespit edilen iç bilgi sızıntılarını temizler.
-    /// <para>
-    /// Sıra bağlayıcıdır: XML blokları → XML etiketleri → araç adları → düşünce kalıpları →
-    /// sistem talimatı parçaları → endpoint'ler → oturum jetonları → boşluk normalizasyonu.
-    /// Blok yapıları satır bazlı kalıplardan önce temizlenmezse blok içeriği metinde kalır.
-    /// </para>
+    /// Yanıt metnini altı güvenlik kategorisinde tarar ve tespit edilen iç bilgi sızıntılarını
+    /// temizler. Sıra bağlayıcıdır: blok yapıları satır bazlı kalıplardan önce temizlenir.
     /// </summary>
     /// <param name="text">Taranacak ham yanıt metni.</param>
     /// <returns>
@@ -194,7 +167,7 @@ public sealed class ResponseSanitizer
         var sanitized = text;
         var totalViolations = 0;
 
-        // Sıra önemlidir: önce blok yapılarını, sonra satır bazlı kalıpları temizle.
+        // Önce blok yapıları, sonra satır bazlı kalıplar
         sanitized = StripXmlBlocks(sanitized, ref totalViolations);
         sanitized = StripXmlTags(sanitized, ref totalViolations);
         sanitized = StripToolNames(sanitized, ref totalViolations);
@@ -218,9 +191,7 @@ public sealed class ResponseSanitizer
         return string.IsNullOrWhiteSpace(sanitized) ? FallbackMessage : sanitized;
     }
 
-    // ────────────────────────────────────────────────────────────────
-    //  Kategori işlemleri
-    // ────────────────────────────────────────────────────────────────
+    // --- Kategori işlemleri ---
 
     /// <summary>Açılış-kapanış etiket çiftlerini ve aralarındaki içeriği kaldırır.</summary>
     private string StripXmlBlocks(string text, ref int violations)
@@ -273,9 +244,7 @@ public sealed class ResponseSanitizer
         return SessionTokenPattern.Replace(text, "[GİZLİ]");
     }
 
-    // ────────────────────────────────────────────────────────────────
-    //  Yardımcı metodlar
-    // ────────────────────────────────────────────────────────────────
+    // --- Yardımcı metodlar ---
 
     /// <summary>
     /// Eşleşmeleri metinden çıkarır ve her birini güvenlik ihlali olarak raporlar. Cümle bütünlüğü
@@ -299,12 +268,11 @@ public sealed class ResponseSanitizer
     }
 
     /// <summary>
-    /// Kalıbın eşleştiği satırı bütünüyle metinden çıkarır. <b>Yalnızca eşleşen parça değil, satırın
-    /// tamamı silinir:</b> sızdıran ifadenin çevresindeki bağlam da genellikle iç bilgi taşır.
+    /// Kalıbın eşleştiği satırı bütünüyle metinden çıkarır. Yalnızca eşleşen parça değil satırın
+    /// tamamı silinir; sızdıran ifadenin çevresindeki bağlam da iç bilgi taşır.
     /// </summary>
     private string StripSentencesContaining(string text, Regex pattern, string category, ref int violations)
     {
-        // Satır bazlı tarama — her satırda pattern varsa tüm satırı kaldır.
         var lines = text.Split('\n');
         var cleanLines = new List<string>(lines.Length);
 

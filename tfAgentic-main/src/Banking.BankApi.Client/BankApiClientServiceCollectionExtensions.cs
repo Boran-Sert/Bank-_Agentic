@@ -23,8 +23,8 @@ public static class BankApiClientServiceCollectionExtensions
     private const string ApiKeyHeaderName = "X-Api-Key";
 
     /// <summary>
-    /// Banka istemcisini tipli <see cref="System.Net.Http.HttpClient"/> olarak kaydeder. <b>Taban adres
-    /// ve erişim anahtarı yalnızca burada yapılandırılır;</b> çağıran katmanlar hedef yolun dışında
+    /// Banka istemcisini tipli <see cref="System.Net.Http.HttpClient"/> olarak kaydeder. Taban adres
+    /// ve erişim anahtarı yalnızca burada yapılandırılır; çağıran katmanlar hedef yolun dışında
     /// bağlantı ayrıntısı taşımaz.
     /// </summary>
     public static IServiceCollection AddBankApiClient(this IServiceCollection services, IConfiguration configuration)
@@ -33,8 +33,7 @@ public static class BankApiClientServiceCollectionExtensions
         configuration.GetSection(BankApiOptions.SectionName).Bind(options);
         services.AddSingleton(options);
 
-        // Gözlemci bağlanmamış uygulamalarda (ör. tools/WorkflowTest) istemci yine ayağa kalkar.
-        // Canlı izlemeyi besleyen bir gözlemci kaydedildiğinde bu varsayılan devre dışı kalır.
+        // Gözlemci varsayılanı — gerçek bir gözlemci kayıtlıysa devreye girmez
         services.TryAddSingleton<IBankApiCallObserver, NullBankApiCallObserver>();
 
         services.AddHttpClient<IBankApiClient, BankApiClient>(http =>

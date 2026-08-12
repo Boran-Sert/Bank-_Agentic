@@ -6,22 +6,12 @@ using Banking.Domain.Constants;
 namespace Banking.Agents.Workflows.Actions;
 
 /// <summary>
-/// <b>Sistemdeki tek executor.</b> Durumsuzdur ve singleton olarak kaydedilir: akışın kimliği,
-/// ekran kodu ve hedef yolu her çağrıda <see cref="WorkflowActionDefinition"/> ile parametre olarak
-/// gelir. Yeni bir akış eklemek bu sınıfta değişiklik gerektirmez.
-/// <para>
-/// Üç iş yapar: YAML'da tanımlı slotlardan onay ekranını kurar, kullanıcı onaylarsa bankaya tek bir
-/// istek gönderir ve bankanın yanıtını olduğu gibi taşır.
-/// </para>
-/// <para>
-/// <b>Bankacılık kuralı içermez.</b> Tutar karşılaştırması, limit denetimi ve IBAN doğrulaması
-/// bankanın kendi uçlarına aittir; buraya taşınmaları kuralın iki yerde tutulması anlamına gelir.
-/// </para>
-/// <para>
-/// <b><see cref="ExecuteAsync"/> hiçbir koşulda istisna sızdırmaz.</b> Banka reddi ve ağ hatası dâhil
-/// tüm başarısızlıklar <see cref="WorkflowOutcome.Failure"/> olarak döner. Bu zorunludur: eylem MAF
-/// grafiğinin içinde çalışır ve oradan fırlayan bir istisna çağırana ulaşmaz, event akışına düşer.
-/// </para>
+/// Sistemdeki tek executor; durumsuzdur ve singleton olarak kaydedilir. Akışın kimliği, ekran kodu
+/// ve hedef yolu her çağrıda <see cref="WorkflowActionDefinition"/> ile gelir, yeni bir akış bu
+/// sınıfta değişiklik gerektirmez. Üç iş yapar: onay ekranını kurar, onaylanırsa bankaya tek istek
+/// gönderir, yanıtı olduğu gibi taşır. Bankacılık kuralı içermez ve
+/// <see cref="ExecuteAsync"/> hiçbir koşulda istisna sızdırmaz — MAF grafiğinin içinde çalıştığı
+/// için başarısızlıklar <see cref="WorkflowOutcome.Failure"/> olarak döner.
 /// </summary>
 public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
 {
@@ -51,8 +41,7 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
             return WorkflowOutcome.RejectedByUser(action.WorkflowName, "İşlem iptal edildi.");
         }
 
-        // Yol tanımlanmamış akışlar bankayı hiç çağırmaz ve makbuz üretmez — aksi hâlde
-        // kullanıcıya olmamış bir işlem bildirilmiş olurdu.
+        // Banka çağrısı olmayan akış
         if (!action.CallsBank)
         {
             hub.Publish(TraceCategories.Workflow, $"{action.WorkflowName} onaylandı → talep kaydedildi (banka çağrısı tanımlı değil)");
@@ -63,7 +52,7 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
                 details: BuildConfirmationView(action, slots).Parameters);
         }
 
-        // Gövde anahtarları YAML'daki adların birebir aynısı: eşleme, camelCase çevirisi yok.
+        // Gövde anahtarları YAML'daki adların birebir aynısı
         var requestBody = BuildConfirmationView(action, slots).Parameters;
         var idempotencyKey = GenericConfirmationView.ComputeIdempotencyToken(BuildConfirmationView(action, slots));
 
@@ -79,7 +68,7 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
         }
         catch (BankApiException exception)
         {
-            // Bankanın gerekçesi yutulmaz; doğrudan kullanıcıya taşınır.
+            // Bankanın gerekçesi kullanıcıya taşınır
             hub.Publish(TraceCategories.Service, $"{action.Method.Method} {action.Path}", $"Reddedildi: {exception.Message}");
             return WorkflowOutcome.Failure(action.WorkflowName, $"{action.Label} gerçekleştirilemedi: {exception.Message}");
         }
@@ -113,8 +102,8 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
             : null;
 
     /// <summary>
-    /// Bankanın döndürdüğü tüm alanları sonuç detayına aktarır. <b>İçerik yorumlanmaz:</b> hangi
-    /// alanların geleceğini banka belirler, bu katman yalnızca taşır.
+    /// Bankanın döndürdüğü tüm alanları sonuç detayına aktarır. İçerik yorumlanmaz; hangi alanların
+    /// geleceğini banka belirler.
     /// </summary>
     private static IReadOnlyDictionary<string, object?> ReadAllFields(JsonElement response)
     {

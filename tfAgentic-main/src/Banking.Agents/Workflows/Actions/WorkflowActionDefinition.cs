@@ -9,7 +9,7 @@ namespace Banking.Agents.Workflows.Actions;
 /// <param name="Method">Banka çağrısının HTTP metodu (YAML'daki <c>action.method</c>).</param>
 /// <param name="Path">
 /// Bankadaki hedef yol (YAML'daki <c>action.path</c>). <c>null</c> olduğunda akış bankayı hiç
-/// çağırmaz: onay yalnızca kayda geçer ve <b>makbuz üretilmez</b>.
+/// çağırmaz; onay yalnızca kayda geçer ve makbuz üretilmez.
 /// </param>
 /// <param name="DisplayName">Kullanıcıya gösterilen ad; boş bırakılırsa akış adı kullanılır.</param>
 public sealed record WorkflowActionDefinition(

@@ -10,18 +10,22 @@ namespace Banking.Gateway.Models;
 /// </summary>
 public sealed record GatewayResponse
 {
+    /// <summary>İstemcinin yanıtı nasıl işleyeceğini belirleyen tip.</summary>
     [JsonPropertyName("type")]
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public required GatewayResponseType Type { get; init; }
 
+    /// <summary>Kullanıcıya gösterilecek metin; metin taşımayan yanıtlarda <c>null</c>.</summary>
     [JsonPropertyName("text")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Text { get; init; }
 
+    /// <summary>Açılacak ekranın kodu; ekran yönlendirmesi olmayan yanıtlarda <c>null</c>.</summary>
     [JsonPropertyName("mkCodeValue")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? MkCodeValue { get; init; }
 
+    /// <summary>İstemcinin sonraki isteğinde geri göndereceği oturum jetonu.</summary>
     [JsonPropertyName("sessionToken")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? SessionToken { get; init; }

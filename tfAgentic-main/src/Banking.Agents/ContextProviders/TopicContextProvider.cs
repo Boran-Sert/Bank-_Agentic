@@ -15,16 +15,9 @@ public sealed class TopicState
 
 /// <summary>
 /// Orkestratöre bir önceki turun bağlamını enjekte eden sağlayıcı. Kullanıcı zamirle konuştuğunda
-/// isteğin doğru uzmana yönlendirilebilmesini sağlar.
-/// <para>
-/// <b>Bağlam, orkestratör bir eylem aracı tetiklediğinde silinir</b> (bkz.
-/// <see cref="ContextResettingTools"/>). Eylem noktasında konu değişmiştir ve önceki yanıt artık
-/// geçerli bir gönderge değildir.
-/// </para>
-/// <para>
-/// Karar araç adı sabitlerinden okunur, yanıt metninden değil. Metinde anahtar sözcük aramak,
-/// kullanıcının olağan bir cümlesinde de eşleşir ve bağlamı gereksiz yere siler.
-/// </para>
+/// isteğin doğru uzmana yönlendirilebilmesini sağlar. Bağlam, orkestratör bir eylem aracı
+/// tetiklediğinde silinir (<see cref="ContextResettingTools"/>); karar araç adı sabitlerinden
+/// okunur, yanıt metninden değil.
 /// </summary>
 public sealed class TopicContextProvider : AIContextProvider
 {
@@ -43,6 +36,7 @@ public sealed class TopicContextProvider : AIContextProvider
     private readonly TraceHub? _hub;
     private readonly ILogger<TopicContextProvider>? _logger;
 
+    /// <summary>Sağlayıcıyı kurar. İzleme ve günlük bağımlılıkları isteğe bağlıdır.</summary>
     public TopicContextProvider(TraceHub? hub = null, ILogger<TopicContextProvider>? logger = null)
         : base(null, null)
     {

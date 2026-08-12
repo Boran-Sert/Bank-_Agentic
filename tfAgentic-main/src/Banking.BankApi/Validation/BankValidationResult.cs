@@ -1,12 +1,9 @@
 namespace Banking.Domain.Validation;
 
 /// <summary>
-/// Bankanın ön doğrulama çağrısına verdiği yanıt.
-/// <para>
-/// <b>Bu tip bankanın sözleşmesidir.</b> Ajan katmanı yanıtı yalnızca taşır ve
-/// <see cref="UserFacingMessage"/> alanını kullanıcıya iletir; içeriği yorumlamaz ve kendi kuralını
+/// Bankanın ön doğrulama çağrısına verdiği yanıt ve bankanın sözleşmesi. Ajan katmanı yanıtı
+/// yalnızca taşır, <see cref="UserFacingMessage"/> alanını kullanıcıya iletir ve kendi kuralını
 /// eklemez.
-/// </para>
 /// </summary>
 /// <param name="IsAcceptable">Bankanın işlemi verilen bilgilerle kabul edilebilir bulduğunu belirtir.</param>
 /// <param name="RejectionCode">

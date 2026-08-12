@@ -9,10 +9,8 @@ namespace Banking.Mcp.Registry;
 
 /// <summary>
 /// Sistemdeki araçların otomatik keşfini ve grup bazlı erişimini sağlayan merkezi kayıt defteri.
-/// <para>
-/// Araçlar derlemenin taranmasıyla bulunur; kayıt listesi elle tutulmaz. Kayıt defteri ile canlı MCP
-/// araç listesinin uyumu <see cref="ValidateDiscoveredMcpTools"/> ile başlangıçta doğrulanır.
-/// </para>
+/// Araçlar derlemenin taranmasıyla bulunur; kayıt listesi elle tutulmaz. Canlı MCP araç listesiyle
+/// uyum <see cref="ValidateDiscoveredMcpTools"/> ile açılışta doğrulanır.
 /// </summary>
 public sealed class ToolRegistry
 {
@@ -25,13 +23,9 @@ public sealed class ToolRegistry
     });
 
     /// <summary>
-    /// Kayıt defterinin tekil örneği ve <b>ona ulaşmanın tek yolu.</b> İlk erişimde derleme taranır
-    /// ve araçlar keşfedilir.
-    /// <para>
-    /// Bağımlılık enjeksiyonuyla dağıtılmaz: tarama tembel ve idempotenttir, kayıt defterine DI
-    /// konteyneri kurulmadan önce de erişilmesi gerekir (araç adları ajan kurulumunda okunur). İki
-    /// erişim yolu bulunması, hangi örneğin okunduğunu çağrı yerine bakarak anlaşılamaz kılar.
-    /// </para>
+    /// Kayıt defterinin tekil örneği ve ona ulaşmanın tek yolu; ilk erişimde derleme taranır.
+    /// Bağımlılık enjeksiyonuyla dağıtılmaz — araç adları DI konteyneri kurulmadan önce, ajan
+    /// kurulumu sırasında okunur.
     /// </summary>
     public static ToolRegistry Instance => InstanceLazy.Value;
 
@@ -99,9 +93,8 @@ public sealed class ToolRegistry
     }
 
     /// <summary>
-    /// Çıktı güvenlik bariyerinin maskeleyeceği araç adlarını döner. <b>Sistemdeki her araç dahilidir;</b>
-    /// hiçbir araç adının kullanıcı yanıtında görünmemesi gerekir, bu nedenle liste kayıt defterinin
-    /// tamamını kapsar.
+    /// Çıktı güvenlik bariyerinin maskeleyeceği araç adlarını döner. Hiçbir araç adı kullanıcı
+    /// yanıtında görünmez; liste kayıt defterinin tamamını kapsar.
     /// </summary>
     public IReadOnlyList<string> GetAllSanitizableToolNames()
     {
@@ -110,11 +103,7 @@ public sealed class ToolRegistry
 
     /// <summary>
     /// Kayıt defterindeki MCP araçlarının canlı sunucuda da tanımlı olduğunu doğrular ve uyuşmazlıkta
-    /// istisna fırlatır.
-    /// <para>
-    /// <b>Uyuşmazlık sessizce geçilmez.</b> Kayıtlı ama sunucuda bulunmayan bir araç, çağrıldığı anda
-    /// açıklanamayan bir çalışma zamanı hatasına dönüşür; bu kontrol hatayı bağlantı kurulumuna çeker.
-    /// </para>
+    /// istisna fırlatır. Uyuşmazlık bağlantı kurulumunda yakalanır; bu kontrol bastırılmaz.
     /// </summary>
     /// <param name="discoveredToolNames">MCP sunucusundan bildirilen canlı araç adları.</param>
     /// <exception cref="InvalidOperationException">Kayıtlı bir araç sunucuda bulunamadığında fırlatılır.</exception>

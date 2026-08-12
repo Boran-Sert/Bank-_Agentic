@@ -7,14 +7,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Banking.BankApi.Client;
 
 /// <summary>
-/// <see cref="IBankApiClient"/>'ın HTTP implementasyonu. Taban adres, API anahtarı gibi ayarlar
-/// <c>AddBankApiClient</c> içinde <see cref="HttpClient"/>'a bir kez yazılır; burada yalnızca
-/// istek kurulur ve yanıt çözülür.
-/// <para>
-/// <b>Her çağrı gözlemlenir:</b> giden gövdenin ve dönen yanıtın alanları hem yapılandırılmış loga
-/// yazılır hem de <see cref="IBankApiCallObserver"/> üzerinden canlı izlemeye taşınır. Gözlem yolu
-/// çağrının kendisini etkilemez.
-/// </para>
+/// <see cref="IBankApiClient"/>'ın HTTP implementasyonu. Taban adres ve API anahtarı gibi ayarlar
+/// <c>AddBankApiClient</c> içinde <see cref="HttpClient"/>'a bir kez yazılır; burada yalnızca istek
+/// kurulur ve yanıt çözülür. Her çağrının giden gövdesi ve dönen yanıtı hem loga hem de
+/// <see cref="IBankApiCallObserver"/> üzerinden canlı izlemeye yazılır.
 /// </summary>
 public sealed class BankApiClient(
     HttpClient http,
@@ -26,9 +22,11 @@ public sealed class BankApiClient(
     private readonly IBankApiCallObserver _observer = observer ?? new NullBankApiCallObserver();
     private readonly ILogger<BankApiClient> _logger = logger ?? NullLogger<BankApiClient>.Instance;
 
+    /// <inheritdoc />
     public Task<JsonElement> GetAsync(string path, CancellationToken cancellationToken = default) =>
         SendAsync(HttpMethod.Get, path, body: null, idempotencyKey: null, cancellationToken);
 
+    /// <inheritdoc />
     public async Task<JsonElement> SendAsync(
         HttpMethod method,
         string path,
@@ -60,8 +58,7 @@ public sealed class BankApiClient(
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
         {
-            // Bankaya hiç ulaşılamadı: çağrı izde kayıp kalmasın diye hata da gönderilen
-            // parametrelerle birlikte raporlanır.
+            // Bankaya ulaşılamadı
             ReportError(new BankApiErrorTrace(
                 callId, method.Method, path, StatusCode: null, Elapsed(startedAt), exception.Message, parameters));
             throw;
@@ -130,8 +127,7 @@ public sealed class BankApiClient(
     }
 
     /// <summary>
-    /// Gözlemciyi çağırır ve hatasını yutar. <b>İzleme yolu banka yolunu düşüremez:</b> log
-    /// yayınında oluşan bir arıza kullanıcının işlemini iptal etmemelidir.
+    /// Gözlemciyi çağırır ve hatasını yutar. İzleme yolu banka yolunu düşürmez.
     /// </summary>
     private void Observe(Action publish)
     {
@@ -149,8 +145,8 @@ public sealed class BankApiClient(
         Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds;
 
     /// <summary>
-    /// Hata yanıtının gövdesinden bankanın gerekçesini çıkarır. <b>Gerekçe genel bir hata metnine
-    /// indirgenmez;</b> bankanın kendi açıklaması kullanıcıya olduğu gibi taşınır.
+    /// Hata yanıtının gövdesinden bankanın gerekçesini çıkarır. Bankanın kendi açıklaması genel bir
+    /// hata metnine indirgenmeden kullanıcıya taşınır.
     /// </summary>
     private static string ExtractUserFacingMessage(string payload, string? fallbackReason)
     {

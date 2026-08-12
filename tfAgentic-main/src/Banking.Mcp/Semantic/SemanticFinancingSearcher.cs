@@ -8,9 +8,9 @@ using SmartComponents.LocalEmbeddings;
 namespace Banking.Mcp.Semantic;
 
 /// <summary>
-/// Semantik aramanın finansman ürünü hakkında ihtiyaç duyduğu alanlar. <b>Bankanın kayıt tipi
-/// değildir:</b> yalnızca gömme metnine giren ve kullanıcıya sunulan alanları taşır. Banka yüzeyi
-/// değiştiğinde güncellenecek yer burasıdır.
+/// Semantik aramanın finansman ürünü hakkında ihtiyaç duyduğu alanlar. Bankanın kayıt tipi değildir;
+/// yalnızca gömme metnine giren ve kullanıcıya sunulan alanları taşır. Banka yüzeyi değiştiğinde
+/// güncellenecek yer burasıdır.
 /// </summary>
 public sealed record FinancingSummary(
     string Id,
@@ -21,10 +21,8 @@ public sealed record FinancingSummary(
     int MaxInstallments);
 
 /// <summary>
-/// Finansman ve kredi ürünlerini anlamsal olarak arayan bileşen.
-/// <para>
-/// <b>Katalog bankadan okunur;</b> bu süreçte finansman verisi tutan ikinci bir kaynak yoktur.
-/// </para>
+/// Finansman ve kredi ürünlerini anlamsal olarak arayan bileşen. Katalog bankadan okunur; bu
+/// süreçte tutulan tek şey vektör indeksidir.
 /// </summary>
 public sealed class SemanticFinancingSearcher(
     LocalEmbedder embedder,
@@ -48,11 +46,8 @@ public sealed class SemanticFinancingSearcher(
         vectorStore);
 
     /// <summary>
-    /// İndeksi bir kez doldurur. İndeks zaten doluysa etkisizdir.
-    /// <para>
-    /// <b>Başarısız yükleme kalıcı değildir:</b> banka o an ayakta değilse indeks boş kalır ve bir
-    /// sonraki çağrı yeniden dener.
-    /// </para>
+    /// İndeksi bir kez doldurur; indeks zaten doluysa etkisizdir. Banka o an ayakta değilse indeks
+    /// boş kalır ve sonraki çağrı yeniden dener.
     /// </summary>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {

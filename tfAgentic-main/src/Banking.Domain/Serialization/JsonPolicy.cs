@@ -4,24 +4,26 @@ using System.Text.Unicode;
 
 namespace Banking.Domain.Serialization;
 
+/// <summary>
+/// Araç sonuçlarının modele giden JSON biçimi. Türkçe karakterler kaçışsız yazılır ve çıktı
+/// girintisizdir.
+/// </summary>
 public static class JsonFormatExtensions
 {
-    // Encoder'ı statik tutuyoruz, her istekte yeniden yaratmıyoruz (Performans)
     private static readonly JsonSerializerOptions ReadableOptions = new()
     {
         Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        WriteIndented = false // Token tasarrufu için boşluksuz
+        WriteIndented = false // token tasarrufu
     };
 
     /// <summary>
-    /// JsonElement, DTO veya herhangi bir nesneyi alıp, MCP'nin bozmasına fırsat vermeden
-    /// Türkçe uyumlu, UTF-8 temiz bir String'e çevirir.
+    /// <c>JsonElement</c>, DTO veya herhangi bir nesneyi Türkçe uyumlu, UTF-8 temiz bir metne
+    /// çevirir. <c>null</c> girdi boş metin döner.
     /// </summary>
     public static string ToReadableJson(this object data)
     {
         if (data is null) return string.Empty;
 
-        // Nesneyi (JsonElement dahil) kendi temiz ayarlarımızla serialize ediyoruz
         return JsonSerializer.Serialize(data, ReadableOptions);
     }
 }

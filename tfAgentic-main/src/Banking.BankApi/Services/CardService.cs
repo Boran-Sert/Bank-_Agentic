@@ -12,7 +12,7 @@ public interface ICardService
 }
 
 /// <summary>
-/// Kart verisinin okuma yolu. <b>Kart borcu tahsilatı bu sınıfta değildir;</b> tahsilat
+/// Kart verisinin okuma yolu. Kart borcu tahsilatı bu sınıfta değildir; tahsilat
 /// <see cref="ICollectionService.Charge"/> içindedir. Ön doğrulama ile tahsilatın aynı kod yolunu
 /// paylaşması bu ayrımla sağlanır.
 /// </summary>

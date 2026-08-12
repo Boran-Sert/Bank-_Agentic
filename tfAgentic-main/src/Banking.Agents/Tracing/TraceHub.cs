@@ -9,10 +9,8 @@ namespace Banking.Agents.Tracing;
 
 /// <summary>
 /// Ajan boru hattının tüm katmanlarından gelen iz olaylarının merkezi yayın noktası. Her olay hem
-/// yapılandırılmış loga yazılır hem de bağlı canlı izleme abonelerine gönderilir.
-/// <para>
-/// Geçerli katman adları <see cref="Banking.Domain.Constants.TraceCategories"/> içinde tanımlıdır.
-/// </para>
+/// yapılandırılmış loga yazılır hem de bağlı canlı izleme abonelerine gönderilir. Geçerli katman
+/// adları <see cref="Banking.Domain.Constants.TraceCategories"/> içinde tanımlıdır.
 /// </summary>
 public sealed class TraceHub
 {
@@ -21,7 +19,7 @@ public sealed class TraceHub
 
     /// <summary>
     /// İz yükünün serileştirme ayarları. Türkçe karakterler <c>\uXXXX</c> kaçışına çevrilmeden UTF-8
-    /// olarak yazılır; aksi hâlde izler okunamaz hâle gelir.
+    /// olarak yazılır.
     /// </summary>
     public static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -29,11 +27,17 @@ public sealed class TraceHub
         WriteIndented = false
     };
 
+    /// <summary>İz merkezini kurar. Günlük bağımlılığı verilmezse olaylar yalnızca abonelere gider.</summary>
     public TraceHub(ILogger<TraceHub>? logger = null)
     {
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<TraceHub>.Instance;
     }
 
+    /// <summary>
+    /// Canlı izleme aboneliği açar. Kanal sınırlıdır; dolduğunda en eski olay düşürülür, yavaş bir
+    /// abone yayıncıyı bekletmez.
+    /// </summary>
+    /// <returns>Abonelik kimliği ve olayların okunacağı kanal.</returns>
     public (Guid id, ChannelReader<string> reader) Subscribe()
     {
         var channel = Channel.CreateBounded<string>(new BoundedChannelOptions(512)
@@ -47,6 +51,7 @@ public sealed class TraceHub
         return (id, channel.Reader);
     }
 
+    /// <summary>Aboneliği kapatır ve kanalı serbest bırakır.</summary>
     public void Unsubscribe(Guid id)
     {
         if (_subscribers.TryRemove(id, out var channel))

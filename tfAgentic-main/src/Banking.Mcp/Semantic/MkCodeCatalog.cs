@@ -9,17 +9,8 @@ namespace Banking.Mcp.Semantic;
 
 /// <summary>
 /// Ekran kodu (mkCode) kataloğunun tek kaynağı. Listeyi bankadan çeker, kod→tanım aramasını
-/// karşılar ve anlamsal indeksi besler.
-/// <para>
-/// <b>Katalog bankaya aittir.</b> Hangi ekranların var olduğunu ve nasıl adlandırıldığını banka
-/// bilir; süreç içinde tutulan bir kopya, banka yeni bir ekran eklediğinde ajanı kör bırakır ve
-/// kaldırdığında var olmayan bir ekrana yönlendirir.
-/// </para>
-/// <para>
-/// <b>Sessiz varsayılan liste yoktur.</b> Banka erişilemezken elde kalan birkaç kodla yanıt vermek,
-/// sistemin çalıştığı izlenimini verirken kullanıcıyı yanlış ekrana götürür. Katalog boş kalır,
-/// durum izde görünür ve bir sonraki çağrı yeniden dener.
-/// </para>
+/// karşılar ve anlamsal indeksi besler. Katalog bankaya aittir; süreç içinde varsayılan bir kod
+/// listesi tutulmaz. Banka okunamadığında katalog boş kalır ve sonraki çağrı yeniden dener.
 /// </summary>
 public sealed class MkCodeCatalog(IBankApiClient bank, ILogger<MkCodeCatalog> logger)
 {
@@ -52,11 +43,6 @@ public sealed class MkCodeCatalog(IBankApiClient bank, ILogger<MkCodeCatalog> lo
     /// <summary>
     /// Katalog boşsa bankadan doldurur; doluysa etkisizdir. Açılışta çağrılarak ilk sorgudaki soğuk
     /// başlangıç gecikmesi önlenir.
-    /// <para>
-    /// <b>Başarısız yükleme kalıcı değildir:</b> banka o an ayakta değilse katalog boş kalır ve bir
-    /// sonraki çağrı yeniden dener. Aksi hâlde tek bir açılış hatası ekran yönlendirmesini süreç
-    /// ömrü boyunca sessizce sonuçsuz bırakırdı.
-    /// </para>
     /// </summary>
     public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
@@ -64,9 +50,8 @@ public sealed class MkCodeCatalog(IBankApiClient bank, ILogger<MkCodeCatalog> lo
     }
 
     /// <summary>
-    /// Ekran kodlarını bankadan yeniden okur. Banka yanıt vermezse <b>mevcut katalog korunur</b> —
-    /// erişilemeyen bir banka yüzünden çalışan yönlendirmeyi kaybetmek, bir önceki listeyle yanıt
-    /// vermekten daha kötüdür.
+    /// Ekran kodlarını bankadan yeniden okur. Banka yanıt vermezse mevcut katalog korunur;
+    /// yönlendirme bir önceki listeyle çalışmaya devam eder.
     /// </summary>
     /// <returns>Kataloğa alınan kod sayısı; banka okunamadığında sıfır.</returns>
     public async Task<int> RefreshAsync(CancellationToken cancellationToken = default)
@@ -93,13 +78,12 @@ public sealed class MkCodeCatalog(IBankApiClient bank, ILogger<MkCodeCatalog> lo
             return 0;
         }
 
-        // Kesintisiz değiştirme: eski kodlar yeni liste hazır olana kadar sorgulanabilir kalır.
+        // Kesintisiz değiştirme
         foreach (var code in loaded) _codes[code.Value] = code;
 
         var staleKeys = _codes.Keys.Except(loaded.Select(code => code.Value), StringComparer.OrdinalIgnoreCase);
         foreach (var key in staleKeys) _codes.TryRemove(key, out _);
 
-        // Banka aynı kodu birden çok kez döndürebilir; katalog benzersiz koda göre tekilleştirir.
         logger.LogInformation(
             "Ekran kodu kataloğu bankadan yüklendi: bankadan {Received} kayıt, katalogda {Count} benzersiz kod.",
             loaded.Count, _codes.Count);

@@ -21,13 +21,13 @@ public static class AgentConstants
     /// <summary>MCP araçlarının mantıksal grup adları.</summary>
     public static class ToolGroups
     {
-        /// <summary>Hesap araçları grubu.</summary>
+        /// <summary>Hesap, bakiye ve hesap hareketi araçları.</summary>
         public const string Account = "Account";
 
-        /// <summary>Kart araçları grubu.</summary>
+        /// <summary>Kredi kartı borcu, limiti ve ekstre araçları.</summary>
         public const string Card = "Card";
 
-        /// <summary>Analiz araçları grubu.</summary>
+        /// <summary>Harcama analizi ve kampanya araçları.</summary>
         public const string Analyze = "Analyze";
     }
 

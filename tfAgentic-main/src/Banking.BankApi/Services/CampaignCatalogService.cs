@@ -4,11 +4,8 @@ using Banking.Domain.Models;
 namespace Banking.Domain.Services;
 
 /// <summary>
-/// Kampanya kataloğuna erişim sözleşmesi.
-/// <para>
-/// <b>MCP araçları veri katmanına doğrudan erişmez;</b> kampanya okuma ve yazma yolu yalnızca bu
-/// servis üzerinden geçer.
-/// </para>
+/// Kampanya kataloğuna erişim sözleşmesi. Veri katmanına doğrudan erişilmez; kampanya okuma ve
+/// yazma yolu yalnızca bu servis üzerinden geçer.
 /// </summary>
 public interface ICampaignCatalogService
 {

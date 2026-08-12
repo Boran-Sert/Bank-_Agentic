@@ -10,24 +10,10 @@ namespace Banking.Mcp;
 
 /// <summary>
 /// Kredi kartı borcu, limit ve son ödeme tarihi sorgularını karşılayan MCP araç seti. Yalnızca kart
-/// uzmanına açılır.
-/// <para>
-/// <b>Veriyi kendisi üretmez:</b> her araç bankanın REST ucuna gövdeli tek bir istek gönderir.
-/// Borç, limit ve tarih alanlarının hesabı bankanındır; burada türetilmez. Araçların yaptığı tek
-/// işlem, bankanın kart kaydından o aracın sorusunu yanıtlayan alanları seçmektir — kartın tamamını
-/// her soruya döndürmek, modele sorulmayanı da okutur.
-/// </para>
-/// <para>
-/// <b>Para hareketi bu araç setinde yoktur.</b> Kart borcu ödeme, onay kapısından geçen iş akışı
-/// yoluna aittir; bir okuma aracının tahsilat tetiklemesi, kullanıcı onayının atlanması demektir.
-/// </para>
-/// <para>
-/// <b>Kart kimliği zorunlu değildir.</b> Soruların çoğu tek bir kartı değil "kartlarım"ı sorar ve
-/// kimlik verilmediğinde ya da verilen kimlik bankada karşılık bulmadığında araç boş dönmek yerine
-/// müşterinin kartlarının tamamını döndürür (bkz. <see cref="ProjectCardsAsync"/>). Zorunlu bir
-/// kimlik parametresi, modeli elinde olmayan bir değeri üretmeye zorlar; ortaya çıkan hata da
-/// kimliğin kullanıcıya sorulmasıyla sonuçlanır ki bu ajan talimatlarının açıkça yasakladığı şeydir.
-/// </para>
+/// uzmanına açılır. Borç, limit ve tarih hesabı bankanındır; her araç yalnızca kendi sorusunu
+/// yanıtlayan alanları seçer. Bu sette para hareketi yoktur — kart borcu ödeme, onay kapısından
+/// geçen iş akışı yoluna aittir. Kart kimliği zorunlu değildir; verilmediğinde veya bankada
+/// karşılığı olmadığında müşterinin kartlarının tamamı döner.
 /// </summary>
 [McpServerToolType]
 [ToolGroup(ToolGroup.Card)]
@@ -93,8 +79,8 @@ public sealed class CardsTools(IBankApiClient bank, CustomerContext context)
         (await FetchCardRawAsync(cardId, cancellationToken)).ToReadableJson();
 
     /// <summary>
-    /// Kart kaydını bankadan ham object (JsonElement) olarak çeker. 
-    /// Veriyi string'e çevirmeden döner ki metotlar içinde 'is not JsonElement' kontrolü doğru çalışabilsin.
+    /// Kart kaydını bankadan ham <c>JsonElement</c> olarak çeker. Metne çevrilmeden döner; çağıranlar
+    /// hata nesnesini <c>is not JsonElement</c> ile ayırt eder.
     /// </summary>
     private Task<object> FetchCardRawAsync(string cardId, CancellationToken cancellationToken) =>
         bank.AskBankAsync(

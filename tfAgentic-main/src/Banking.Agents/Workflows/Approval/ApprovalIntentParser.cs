@@ -12,23 +12,15 @@ public enum ApprovalIntent
     /// <summary>Yanıt net biçimde olumsuz; eylem iptal edilir.</summary>
     Rejected,
 
-    /// <summary>Yanıt anlaşılamadı. <b>Onay sayılmaz;</b> soru kullanıcıya tekrarlanır.</summary>
+    /// <summary>Yanıt anlaşılamadı; onay sayılmaz ve soru kullanıcıya tekrarlanır.</summary>
     Unclear
 }
 
 /// <summary>
-/// Onay yanıtını <see cref="ApprovalIntent"/> değerine çeviren deterministik ayrıştırıcı.
-/// <para>
-/// Sonucu para hareketi tetiklediğinden değerlendirme sırası bağlayıcıdır:
-/// <list type="number">
-///   <item>Önce <b>olumsuzluk</b> aranır. Türkçede olumsuzluk eki fiilin içinde yer aldığından
-///         ("onaylamıyorum", "kabul etmiyorum"), alt dize eşleştirmesi olumsuz bir yanıtı olumlu
-///         okur.</item>
-///   <item>Sonra <b>olumluluk</b> aranır ve yalnızca tam kelime eşleşmesi kabul edilir.</item>
-///   <item>İkisi de eşleşmezse sonuç <see cref="ApprovalIntent.Unclear"/> olur; belirsiz yanıt
-///         hiçbir koşulda onaya düşmez.</item>
-/// </list>
-/// </para>
+/// Onay yanıtını <see cref="ApprovalIntent"/> değerine çeviren deterministik ayrıştırıcı. Sonuç para
+/// hareketi tetiklediğinden değerlendirme sırası bağlayıcıdır: önce olumsuzluk aranır (Türkçede
+/// olumsuzluk eki fiilin içindedir — "onaylamıyorum"), sonra tam kelime eşleşmesiyle olumluluk.
+/// İkisi de eşleşmezse sonuç <see cref="ApprovalIntent.Unclear"/> olur.
 /// </summary>
 public static partial class ApprovalIntentParser
 {
@@ -36,7 +28,7 @@ public static partial class ApprovalIntentParser
 
     /// <summary>
     /// Olumsuzluk kalıpları: fiil ve olumsuzluk eki birleşimleri ("-ma/-me", "-mıyor/-miyor",
-    /// "-mam/-mem") ile doğrudan ret sözcükleri. <b>Olumluluk kalıplarından önce değerlendirilir.</b>
+    /// "-mam/-mem") ile doğrudan ret sözcükleri. Olumluluk kalıplarından önce değerlendirilir.
     /// </summary>
     [GeneratedRegex(
         """
@@ -78,7 +70,7 @@ public static partial class ApprovalIntentParser
         if (string.IsNullOrWhiteSpace(answer))
             return ApprovalIntent.Unclear;
 
-        // Türkçe'ye özgü küçültme: "İPTAL" → "iptal" (ToLowerInvariant burada bozuk sonuç verir).
+        // Türkçeye özgü küçültme: "İPTAL" → "iptal"
         var normalized = answer.Trim().ToLower(TurkishCulture);
 
         if (normalized == ShortcutReject) return ApprovalIntent.Rejected;

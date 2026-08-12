@@ -7,13 +7,9 @@ namespace Banking.Domain.Services;
 public interface ICollectionService
 {
     /// <summary>
-    /// Ön doğrulama yapar. <b>Para hareketi üretmez;</b> yalnızca bankanın işlemi verilen bilgilerle
-    /// kabul edip etmeyeceğini bildirir.
-    /// <para>
-    /// Tüm parametreler isteğe bağlıdır; böylece slotlar kısmen doluyken de çağrılabilir. Banka
-    /// yalnızca eldeki bilgiyle ilgili kuralları uygular ve eksik olanları atlar. Bu sayede yetersiz
-    /// bakiye gibi engeller onay ekranında değil, kullanıcı tutarı girdiği anda bildirilir.
-    /// </para>
+    /// Ön doğrulama yapar. Para hareketi üretmez; yalnızca bankanın işlemi verilen bilgilerle kabul
+    /// edip etmeyeceğini bildirir. Tüm parametreler isteğe bağlıdır ve banka yalnızca eldeki bilgiyle
+    /// ilgili kuralları uygular, böylece slotlar kısmen doluyken de çağrılabilir.
     /// </summary>
     BankValidationResult ValidateCardPaymentBeforeExecution(
         string? cardId,
@@ -21,10 +17,8 @@ public interface ICollectionService
         string? sourceAccountId);
 
     /// <summary>
-    /// Kart borcunu tahsil eder ve tutarı kaynak hesaptan düşer.
-    /// <para>
-    /// <b>Geri alınamaz bir işlemdir.</b> Yalnızca kullanıcı onayı alındıktan sonra çağrılmalıdır.
-    /// </para>
+    /// Kart borcunu tahsil eder ve tutarı kaynak hesaptan düşer. Geri alınamaz bir işlemdir;
+    /// yalnızca kullanıcı onayı alındıktan sonra çağrılır.
     /// </summary>
     PaymentReceipt Charge(string cardId, decimal amount, string sourceAccountId, DateOnly date);
 }

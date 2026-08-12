@@ -7,23 +7,9 @@ namespace Banking.Agents.Specialists;
 
 /// <summary>
 /// Süreç içi modda bir uzmanın yerine geçen vekil: her çağrıda hedef uzmanı katalogdan adına göre
-/// çözer ve isteği ona devreder.
-/// <para>
-/// <b>Vekil olmadan boşta kalan ajanın tahliyesi hiçbir şey serbest bırakmaz.</b> Köprü araçları
-/// uzun ömürlü singleton'ların (orkestratör ve iş akışı ajanları) araç listesinde durur. Köprü
-/// doğrudan somut ajanı sarsaydı, o ajana araç listesinden erişilebilir kalır ve önbellekten
-/// düşürülmesi yalnızca sözlüğü boşaltırdı. Vekil, köprü ile ajan arasındaki tek bağı ada indirir.
-/// </para>
-/// <para>
-/// <b>İki taşıma modunun aynı davranışı göstermesi de buna bağlıdır.</b> A2A modunda köprü zaten
-/// somut ajanı değil bir <c>A2AClient</c>'ı tutar ve tahliye çalışır. Süreç içi modda vekil
-/// kullanılmazsa iki mod arasında ölçülemeyen bir davranış farkı doğar: aynı ayarla biri boşta kalan
-/// ajanı bırakır, diğeri bırakmaz.
-/// </para>
-/// <para>
-/// Hedef her çağrıda çözüldüğü için tahliye edilmiş uzman burada sessizce yeniden kurulur; çağıranın
-/// ajan ömründen haberi olmaz.
-/// </para>
+/// çözer ve isteği ona devreder. Köprü ile ajan arasındaki tek bağı ada indirir; böylece uzun ömürlü
+/// araç listelerinde duran bir köprü, boşta kalan ajanın tahliyesini engellemez. A2A modunda köprü
+/// zaten somut ajanı değil bir <c>A2AClient</c>'ı tuttuğundan iki taşıma modu aynı davranır.
 /// </summary>
 /// <param name="catalog">Hedef uzmanın çözüleceği katalog.</param>
 /// <param name="card">Vekilin temsil ettiği uzmanın kartı; ad ve açıklama buradan okunur.</param>

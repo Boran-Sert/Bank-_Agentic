@@ -8,9 +8,9 @@ using SmartComponents.LocalEmbeddings;
 namespace Banking.Mcp.Semantic;
 
 /// <summary>
-/// Semantik aramanın kampanya hakkında ihtiyaç duyduğu alanlar. <b>Bankanın kayıt tipi değildir:</b>
-/// yalnızca gömme metnine giren ve kullanıcıya sunulan alanları taşır, bankanın yanıtındaki diğer
-/// alanlar yok sayılır. Banka yüzeyi değiştiğinde güncellenecek yer burasıdır.
+/// Semantik aramanın kampanya hakkında ihtiyaç duyduğu alanlar. Bankanın kayıt tipi değildir;
+/// yalnızca gömme metnine giren ve kullanıcıya sunulan alanları taşır. Banka yüzeyi değiştiğinde
+/// güncellenecek yer burasıdır.
 /// </summary>
 public sealed record CampaignSummary(
     string Id,
@@ -23,12 +23,8 @@ public sealed record CampaignSummary(
     decimal MinimumSpendAmount);
 
 /// <summary>
-/// Kampanyaları anlamsal olarak arayan bileşen.
-/// <para>
-/// <b>Katalog bankadan okunur.</b> İndeksin kaynağı bankanın kampanya ucudur; bu süreçte kampanya
-/// verisi tutan ikinci bir kaynak yoktur. Süreç içi olan tek şey vektör indeksinin kendisidir —
-/// banka bir gömme ucu sunmadığı için o hesap burada yapılır.
-/// </para>
+/// Kampanyaları anlamsal olarak arayan bileşen. Katalog bankanın kampanya ucundan okunur; bu
+/// süreçte tutulan tek şey vektör indeksidir.
 /// </summary>
 public sealed class SemanticCampaignSearcher(
     LocalEmbedder embedder,
@@ -37,8 +33,8 @@ public sealed class SemanticCampaignSearcher(
     ILogger<SemanticCampaignSearcher> logger)
 {
     /// <summary>
-    /// Kampanya eşiği yüksektir: sonuç kullanıcıya doğrudan bir teklif olarak sunulur. Alakasız bir
-    /// kampanyayı önermek, hiç kampanya bulunamadığını söylemekten daha kötüdür.
+    /// Kampanya eşiği yüksektir: sonuç kullanıcıya doğrudan teklif olarak sunulur, zayıf eşleşme
+    /// sonuç sayılmaz.
     /// </summary>
     private const float SimilarityThreshold = 0.70f;
 
@@ -55,13 +51,8 @@ public sealed class SemanticCampaignSearcher(
         vectorStore);
 
     /// <summary>
-    /// İndeksi bir kez doldurur. Uygulama başlangıcında çağrılarak ilk sorgudaki soğuk başlangıç
-    /// gecikmesini önler; indeks zaten doluysa etkisizdir.
-    /// <para>
-    /// <b>Başarısız yükleme kalıcı değildir:</b> banka o an ayakta değilse indeks boş kalır ve bir
-    /// sonraki çağrı yeniden dener. Aksi hâlde tek bir açılış hatası, semantik aramayı süreç ömrü
-    /// boyunca sessizce sonuçsuz bırakırdı.
-    /// </para>
+    /// İndeksi bir kez doldurur; indeks zaten doluysa etkisizdir. Banka o an ayakta değilse indeks
+    /// boş kalır ve sonraki çağrı yeniden dener.
     /// </summary>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -70,9 +61,8 @@ public sealed class SemanticCampaignSearcher(
     }
 
     /// <summary>
-    /// Kampanyaları bankadan yeniden okur ve indeksi kesintisiz tazeler. Banka yanıt vermezse
-    /// <b>mevcut indekse dokunulmaz</b> — erişilemeyen bir banka yüzünden çalışan aramayı kaybetmek,
-    /// bir önceki listeyle yanıt vermekten daha kötüdür.
+    /// Kampanyaları bankadan yeniden okur ve indeksi kesintisiz tazeler. Banka yanıt vermezse mevcut
+    /// indekse dokunulmaz; arama bir önceki listeyle yanıt vermeye devam eder.
     /// </summary>
     /// <returns>İndekslenen kampanya sayısı; banka okunamadığında sıfır.</returns>
     public async Task<int> RefreshAsync(CancellationToken cancellationToken = default)

@@ -8,12 +8,8 @@ namespace Banking.Mcp;
 
 /// <summary>
 /// Hesap, bakiye ve hesap hareketi sorgularını karşılayan MCP araç seti. Yalnızca hesap uzmanına
-/// açılır.
-/// <para>
-/// <b>Veriyi kendisi üretmez:</b> her araç bankanın REST ucuna gövdeli tek bir istek gönderir ve
-/// bankanın yanıtını olduğu gibi taşır. Sahiplik denetimi (hesabın müşteriye ait olup olmadığı)
-/// bankanın kararıdır; burada tekrarlanmaz.
-/// </para>
+/// açılır. Her araç bankanın REST ucuna gövdeli tek bir istek gönderir ve yanıtı olduğu gibi taşır;
+/// sahiplik denetimi bankanın kararıdır ve burada tekrarlanmaz.
 /// </summary>
 [McpServerToolType]
 [ToolGroup(ToolGroup.Account)]

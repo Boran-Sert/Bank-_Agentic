@@ -30,13 +30,11 @@ public static class ApiEndpoints
         MapDiagnostics(app);
     }
 
-    // =================================================================================
-    // SOHBET
-    // =================================================================================
+    // --- Sohbet ---
 
     private static void MapChat(WebApplication app)
     {
-        // Q&A: orkestratör (GatewayService üzerinden tekil oturum yönetimi)
+        // Sohbet ucu
         app.MapPost("/api/chat", async (ChatRequest req, GatewayService gateway, CancellationToken ct) =>
         {
             var text = req.Text ?? req.Message;
@@ -49,7 +47,7 @@ public static class ApiEndpoints
             return Results.Ok(response);
         });
 
-        // MW Gateway ucu (Java MW için)
+        // Dış istemci ucu
         app.MapPost("/api/ai/chat", async (GatewayRequest req, GatewayService gateway, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(req.Text))
@@ -60,13 +58,11 @@ public static class ApiEndpoints
         });
     }
 
-    // =================================================================================
-    // DEKLARATİF KAYIT (yeniden derleme gerektirmez)
-    // =================================================================================
+    // --- Deklaratif kayıt ---
 
     private static void MapDeclarativeRegistration(WebApplication app)
     {
-        // MAF deklaratif YAML/JSON iş akışı kaydı.
+        // İş akışı kaydı
         app.MapPost("/api/workflows/register-declarative", async (
             HttpRequest request,
             WorkflowRegistry registry,
@@ -105,14 +101,14 @@ public static class ApiEndpoints
             }
             catch (InvalidOperationException exception)
             {
-                // Örn. derlenmiş bir akışın adını ezmeye çalışmak. Sunucu hatası değil, istek hatasıdır.
+                // Çakışma istek hatasıdır, sunucu hatası değil
                 return Results.BadRequest(new { error = exception.Message });
             }
 
             var savedAs = await DeclarativeFileStore.SaveAsync(
                 environment.ContentRootPath, StartupLoader.WorkflowsFolder, workflowName, content);
 
-            // Yeni akışı anında RAG semantik indeksine al (sıfır soğuk başlangıç).
+            // Anında indeksleme
             searcher.AddOrUpdate(new WorkflowMetadata(workflowName, definition.Description, definition.Instructions));
 
             hub.Publish(TraceCategories.Workflow,
@@ -126,9 +122,7 @@ public static class ApiEndpoints
             });
         });
 
-        // Uzman ajan tanımlama (arayüzden, yeniden derlemeden).
-        // Akış tanımlarıyla aynı desen: ayrıştır → kaydet (çakışma korumalı) → diske yaz.
-        // A2A adresi ayrıca açılmaz; tek dağıtıcı endpoint yeni uzmanı aynı anda görür.
+        // Uzman kaydı; A2A adresi ayrıca açılmaz, dağıtıcı endpoint yeni uzmanı görür
         app.MapPost("/api/specialists/register-declarative", async (
             HttpRequest request,
             SpecialistCatalog catalog,
@@ -164,7 +158,7 @@ public static class ApiEndpoints
             }
             catch (InvalidOperationException exception)
             {
-                // Örn. derlenmiş bir uzmanın adını/yolunu ezmeye çalışmak; istek hatasıdır.
+                // Çakışma istek hatasıdır
                 return Results.BadRequest(new { error = exception.Message });
             }
 
@@ -191,13 +185,11 @@ public static class ApiEndpoints
         });
     }
 
-    // =================================================================================
-    // KATALOGLAR (arayüzün doldurduğu listeler)
-    // =================================================================================
+    // --- Kataloglar ---
 
     private static void MapCatalogs(WebApplication app)
     {
-        // Uzman listesi (arayüzdeki kartlar için)
+        // Uzman listesi
         app.MapGet("/api/specialists", (SpecialistCatalog catalog) =>
             Results.Ok(catalog.Cards.Select(card => new
             {
@@ -210,13 +202,13 @@ public static class ApiEndpoints
                 toolGroup = card.ToolNames is null ? card.ToolGroup.ToString() : null
             })));
 
-        // Araç kataloğu: uzman tanımlarken hangi MCP araçlarının seçilebileceğini arayüze verir
+        // Araç kataloğu
         app.MapGet("/api/tools", () =>
             Results.Ok(ToolRegistry.Instance.GetAllTools()
                 .Where(tool => tool.Type == ToolType.Mcp)
                 .Select(tool => new { tool.Name, group = tool.Group.ToString(), tool.Description })));
 
-        // Kampanya senkronizasyonu: bankadan güncel kampanyaları çekip indeksi kesintisiz tazeler
+        // Kampanya senkronizasyonu
         app.MapPost("/api/campaigns/sync", async (ICampaignSyncService syncService, TraceHub hub, CancellationToken ct) =>
         {
             var syncedCount = await syncService.SyncFromBackendAsync(ct);
@@ -226,17 +218,15 @@ public static class ApiEndpoints
         });
     }
 
-    // =================================================================================
-    // TANILAMA VE CANLI İZ
-    // =================================================================================
+    // --- Tanılama ve canlı iz ---
 
     private static void MapDiagnostics(WebApplication app)
     {
-        // Anahtarsız bile MCP/A2A/uzman wiring'ini doğrular
+        // Anahtarsız da çalışır
         app.MapGet("/api/diag", async (AgentRuntime runtime, CancellationToken ct) =>
             Results.Ok(await runtime.GetDiagnosticsAsync(ct)));
 
-        // Canlı katman izi (SSE): UI'ın sağ paneli buna abone olur
+        // Canlı iz (SSE)
         app.MapGet("/api/trace/stream", async (HttpContext http, TraceHub hub, CancellationToken ct) =>
         {
             http.Response.Headers.ContentType = "text/event-stream";

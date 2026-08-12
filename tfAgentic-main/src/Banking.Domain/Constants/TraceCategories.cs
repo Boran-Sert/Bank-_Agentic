@@ -26,7 +26,7 @@ public static class TraceCategories
 
     /// <summary>
     /// Bankaya giden isteğin kendisi: yol, metot ve gövdedeki her parametrenin adı ile değeri.
-    /// <see cref="Service"/> çağrının sonucunu özetler; bu kategori çağrının <b>içeriğini</b> taşır.
+    /// <see cref="Service"/> çağrının sonucunu özetler; bu kategori çağrının içeriğini taşır.
     /// </summary>
     public const string ApiRequest = "API-REQUEST";
 

@@ -2,11 +2,8 @@ namespace Banking.Agents.Specialists.Declarative;
 
 /// <summary>
 /// Çalışma zamanında (arayüzden veya diskteki bir YAML dosyasından) tanımlanan bir uzman ajanın tam
-/// tanımı.
-/// <para>
-/// Derlenmiş uzmanların statik <c>AgentCard Card</c> özelliğiyle sağladığı her bilgiyi taşır; her iki
-/// kaynak da aynı <see cref="AgentCard"/> tipine dönüşür ve alt katmanlar aradaki farkı görmez.
-/// </para>
+/// tanımı. Derlenmiş uzmanların statik <c>AgentCard Card</c> özelliğiyle sağladığı her bilgiyi
+/// taşır; iki kaynak da aynı <see cref="AgentCard"/> tipine dönüşür.
 /// </summary>
 public sealed class SpecialistDefinition
 {
@@ -20,11 +17,8 @@ public sealed class SpecialistDefinition
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// Uzmanın ne yaptığının açıklaması (<c>description</c>).
-    /// <para>
-    /// <b>Bu metin aynı zamanda köprü aracının açıklamasıdır.</b> Orkestratörün ve akış ajanlarının
-    /// hangi uzmana danışacağı kararı bu metne dayanır; zorunlu olmasının nedeni budur.
-    /// </para>
+    /// Uzmanın ne yaptığının açıklaması (<c>description</c>). Aynı zamanda köprü aracının
+    /// açıklamasıdır; hangi uzmana danışılacağı kararı bu metne dayanır ve alan zorunludur.
     /// </summary>
     public string Description { get; set; } = string.Empty;
 
@@ -67,11 +61,8 @@ public sealed class SpecialistModelConfig
 }
 
 /// <summary>
-/// Uzman tanımındaki <c>model.options</c> bloğunun karşılığı.
-/// <para>
-/// <b>Yazılmayan alan uzmana dayatılmaz;</b> yapılandırmadaki değer ya da modelin kendi varsayılanı
-/// geçerli olur.
-/// </para>
+/// Uzman tanımındaki <c>model.options</c> bloğunun karşılığı. Yazılmayan alan uzmana dayatılmaz;
+/// yapılandırmadaki değer ya da modelin kendi varsayılanı geçerli olur.
 /// </summary>
 public sealed class SpecialistModelOptionsConfig
 {

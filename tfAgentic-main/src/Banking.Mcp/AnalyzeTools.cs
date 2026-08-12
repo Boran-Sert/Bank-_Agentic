@@ -14,18 +14,10 @@ namespace Banking.Mcp;
 
 /// <summary>
 /// Harcama analizi, kampanya ve finansman sorgularını karşılayan MCP araç seti. Yalnızca analiz
-/// uzmanına açılır.
-/// <para>
-/// <b>Katman disiplini:</b> bu sınıf ne veri deposuna ne de bankanın servis sınıflarına erişir;
-/// ekstre, kampanya ve finansman verisinin tamamı bankanın REST uçlarından gövdeli isteklerle
-/// alınır. Analiz hesabı da bankanındır — toplam, oran ve kırılım burada yeniden hesaplanmaz.
-/// </para>
-/// <para>
-/// Bu kuralın <b>tek istisnası semantik aramanın kendisidir</b> (<see cref="KampanyaVektorelAra"/>,
-/// <see cref="RecommendFinancing"/>): banka bir gömme ucu sunmadığı için vektör indeksi bu süreçte,
-/// yerel gömme modeliyle tutulur. <b>İndeksin verisi yine bankadan gelir</b> — süreç içinde kampanya
-/// veya finansman verisi tutan ikinci bir kaynak yoktur.
-/// </para>
+/// uzmanına açılır. Veri de hesap da bankanındır; toplam, oran ve kırılım burada yeniden
+/// hesaplanmaz. Tek istisna semantik aramadır (<see cref="KampanyaVektorelAra"/>,
+/// <see cref="RecommendFinancing"/>): banka gömme ucu sunmadığı için vektör indeksi bu süreçte
+/// tutulur, verisi yine bankadan gelir.
 /// </summary>
 [McpServerToolType]
 [ToolGroup(ToolGroup.Analyze)]

@@ -7,13 +7,9 @@ namespace Banking.Domain.Services;
 public interface ITransferService
 {
     /// <summary>
-    /// Ön doğrulama yapar. <b>Para hareketi üretmez;</b> yalnızca bankanın transferi verilen
-    /// bilgilerle kabul edip etmeyeceğini bildirir.
-    /// <para>
-    /// Tüm parametreler isteğe bağlıdır; böylece slotlar kısmen doluyken de çağrılabilir. Banka
-    /// yalnızca eldeki bilgiyle ilgili kuralları uygular: IBAN verilmişse biçimini, tutar verilmişse
-    /// bakiyeyi denetler.
-    /// </para>
+    /// Ön doğrulama yapar. Para hareketi üretmez; yalnızca bankanın transferi verilen bilgilerle
+    /// kabul edip etmeyeceğini bildirir. Tüm parametreler isteğe bağlıdır ve banka yalnızca eldeki
+    /// bilgiyle ilgili kuralları uygular: IBAN verilmişse biçimini, tutar verilmişse bakiyeyi.
     /// </summary>
     BankValidationResult ValidateMoneyTransferBeforeExecution(
         string? sourceAccountId,
@@ -21,10 +17,8 @@ public interface ITransferService
         decimal? transferAmount);
 
     /// <summary>
-    /// Kaynak hesaptan verilen IBAN'a para transferi gerçekleştirir.
-    /// <para>
-    /// <b>Geri alınamaz bir işlemdir.</b> Yalnızca kullanıcı onayı alındıktan sonra çağrılmalıdır.
-    /// </para>
+    /// Kaynak hesaptan verilen IBAN'a para transferi gerçekleştirir. Geri alınamaz bir işlemdir;
+    /// yalnızca kullanıcı onayı alındıktan sonra çağrılır.
     /// </summary>
     TransferReceipt Transfer(string sourceAccountId, string targetIban, decimal amount, string description);
 }

@@ -55,14 +55,14 @@ public sealed record CampaignRequest(string? CampaignId);
 /// <summary>Finansman kataloğu sorgusunun gövdesi. Tür verilmezse katalog bütünüyle döner.</summary>
 public sealed record FinancingRequest(string? Type);
 
-/// <summary>Kart borcu tahsilatının gövdesi. <b>Geri alınamaz bir işlemi tetikler.</b></summary>
+/// <summary>Kart borcu tahsilatının gövdesi. Geri alınamaz bir işlemi tetikler.</summary>
 public sealed record CardPaymentRequest(
     string? CardId,
     decimal? Amount,
     string? SourceAccountId,
     DateOnly? Date);
 
-/// <summary>Para transferinin gövdesi. <b>Geri alınamaz bir işlemi tetikler.</b></summary>
+/// <summary>Para transferinin gövdesi. Geri alınamaz bir işlemi tetikler.</summary>
 public sealed record MoneyTransferRequest(
     string? SourceAccountId,
     string? TargetIban,

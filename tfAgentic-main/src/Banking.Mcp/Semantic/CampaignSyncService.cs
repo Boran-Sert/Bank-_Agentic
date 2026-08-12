@@ -16,17 +16,14 @@ public interface ICampaignSyncService
 }
 
 /// <summary>
-/// Kampanya indeksini bankadan tazeleyen servis.
-/// <para>
-/// <b>Yerel bir kampanya kataloğu tutmaz.</b> Kampanyaların sahibi bankadır; bu süreçte ikinci bir
-/// kopya tutmak, iki kaynağın sessizce ayrışması demektir. Senkronizasyonun tek işi süreç içi vektör
-/// indeksini bankanın güncel hâline eşitlemektir.
-/// </para>
+/// Kampanya indeksini bankadan tazeleyen servis. Yerel bir kampanya kataloğu tutmaz; tek işi süreç
+/// içi vektör indeksini bankanın güncel hâline eşitlemektir.
 /// </summary>
 public sealed class CampaignSyncService(
     SemanticCampaignSearcher campaignSearcher,
     ILogger<CampaignSyncService> logger) : ICampaignSyncService
 {
+    /// <inheritdoc />
     public async Task<int> SyncFromBackendAsync(CancellationToken cancellationToken = default)
     {
         var indexedCount = await campaignSearcher.RefreshAsync(cancellationToken);

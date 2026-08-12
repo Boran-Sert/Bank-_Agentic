@@ -6,18 +6,14 @@ using Banking.Domain.Constants;
 namespace Banking.Agents.Sessions;
 
 /// <summary>
-/// Bir kullanıcı oturumunun taşıdığı durumun tamamı. Saf veri tipidir; davranış içermez.
-/// <para>
-/// Ajan nesneleri singleton ve stateless olduğundan kullanıcıya özel her değer burada, oturum
-/// kimliği anahtarıyla tutulur. İstekler arasında bellekte canlı ajan veya konuşma nesnesi
-/// bırakılmaz; konuşma geçmişleri serileştirilmiş olarak saklanır.
-/// </para>
-/// <para>
-/// <b>Bu tipe doğrudan erişilmez.</b> Okuma ve yazma <see cref="SessionContext"/> üzerinden yapılır.
-/// </para>
+/// Bir kullanıcı oturumunun taşıdığı durumun tamamı. Saf veri tipidir; davranış içermez. Ajan
+/// nesneleri singleton ve stateless olduğundan kullanıcıya özel her değer burada tutulur ve konuşma
+/// geçmişleri serileştirilmiş olarak saklanır. Okuma ve yazma <see cref="SessionContext"/> üzerinden
+/// yapılır; bu tipe doğrudan erişilmez.
 /// </summary>
 public sealed class SessionState
 {
+    /// <summary>Oturumun kimliği.</summary>
     public required string SessionId { get; init; }
 
     /// <summary>Aktif iş akışının kanonik adı (örn. <c>card-payment</c>); akış yoksa <c>null</c>.</summary>
@@ -30,13 +26,9 @@ public sealed class SessionState
     public Dictionary<string, object?> SlotValues { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Aktif akışın YAML şeması: slot adı → tip ve zorunluluk. Motor eksik slotları, <c>update_slot</c>
-    /// ise tip kontrolünü bu şemadan okur.
-    /// <para>
-    /// <b>Şema ile teklif ayrı alanlarda tutulur.</b> <see cref="ProposedSlots"/> yalnızca ajanın
-    /// açıkça sunduğu teklifi taşır; beklenen slotların listesi hiçbir koşulda teklif yerine geçmez.
-    /// İkisinin tek alanda birleşmesi, onay ekranının boş değerlerle üretilmesine yol açar.
-    /// </para>
+    /// Aktif akışın YAML şeması: slot adı → tip ve zorunluluk. Motor eksik slotları,
+    /// <c>update_slot</c> ise tip kontrolünü bu şemadan okur. Beklenen slotların listesi hiçbir
+    /// koşulda <see cref="ProposedSlots"/> yerine geçmez; ikisi ayrı alanlarda tutulur.
     /// </summary>
     public Dictionary<string, DeclarativePropertyConfig>? ExpectedSlots { get; set; }
 
@@ -48,8 +40,7 @@ public sealed class SessionState
 
     /// <summary>
     /// Onaya sunulan slot kümesinin parmak izi. Aynı anahtarla gelen ikinci onay eylemi yeniden
-    /// çalıştırmaz; <see cref="CompletedOutcome"/> döner. Çift tıklamanın çift tahsilata dönüşmesini
-    /// engelleyen mekanizma budur.
+    /// çalıştırmaz, <see cref="CompletedOutcome"/> döner.
     /// </summary>
     public string? IdempotencyToken { get; set; }
 
@@ -63,9 +54,8 @@ public sealed class SessionState
     public JsonElement? SerializedWorkflowSession { get; set; }
 
     /// <summary>
-    /// Kullanıcının bu istekteki mesajı. Orkestratörün <c>start_workflow</c> aracı akışı başlatırken
-    /// okur. Oturum durumunda tutulur; singleton bir alanda tutulması eşzamanlı oturumların
-    /// birbirinin mesajını görmesine yol açar.
+    /// Kullanıcının bu istekteki mesajı; orkestratörün <c>start_workflow</c> aracı akışı başlatırken
+    /// okur. Oturum durumunda tutulur, singleton bir alanda değil.
     /// </summary>
     public string? LastUserMessage { get; set; }
 
@@ -75,5 +65,6 @@ public sealed class SessionState
     /// </summary>
     public string? PendingAgentSignal { get; set; }
 
+    /// <summary>Durumun depoya en son yazıldığı an.</summary>
     public DateTimeOffset LastUpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

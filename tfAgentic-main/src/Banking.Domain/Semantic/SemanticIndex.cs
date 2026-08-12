@@ -6,26 +6,17 @@ using SmartComponents.LocalEmbeddings;
 namespace Banking.Domain.Semantic;
 
 /// <summary>
-/// Yerel ONNX gömme modeliyle çalışan, bellek içi anlamsal arama indeksi.
-/// <para>
-/// <b>Sistemdeki tek vektör arama uygulamasıdır.</b> Kayıt türünden bağımsızdır; aranan şeyin ne
-/// olduğu yalnızca <paramref name="textSelector"/> ve <paramref name="similarityThreshold"/> ile
-/// belirlenir. Kopyalanmış arama kodu, eşiğin ve sıralamanın kayıt türüne göre sessizce ayrışmasına
-/// yol açar.
-/// </para>
-/// <para>
-/// <b>Eleme sıralamadan ve kotadan önce yapılır.</b> Önce <c>topK</c> alıp sonra eşik uygulamak,
-/// eşiği geçemeyen bir kaydın kotadan yer kapmasına ve eşiği geçen bir kaydın sonuçtan düşmesine
-/// yol açar.
-/// </para>
+/// Yerel ONNX gömme modeliyle çalışan, bellek içi anlamsal arama indeksi. Sistemdeki tek vektör
+/// arama uygulamasıdır; aranan şeyin ne olduğunu yalnızca <paramref name="textSelector"/> ve
+/// <paramref name="similarityThreshold"/> belirler. Eleme, sıralamadan ve <c>topK</c> kotasından
+/// önce yapılır.
 /// </summary>
 /// <param name="embedder">Gömme vektörlerini üreten yerel model.</param>
 /// <param name="keySelector">Kaydın kimliği; aynı kimlikle ikinci ekleme öncekini değiştirir.</param>
 /// <param name="textSelector">Kaydın gömülecek metni. Arama kalitesini bu metin belirler.</param>
 /// <param name="similarityThreshold">
-/// Sonuca girebilmek için gereken en düşük benzerlik. Kayıt türüne göre değişir ve <b>bilerek
-/// farklıdır</b>; ortak bir değere çekilmesi, dar kapsamlı bir indeksin alakasız sonuç döndürmesine
-/// veya geniş kapsamlı bir indeksin hiç sonuç vermemesine yol açar.
+/// Sonuca girebilmek için gereken en düşük benzerlik. Kayıt türüne göre bilerek farklıdır ve ortak
+/// bir değere çekilmez.
 /// </param>
 /// <param name="logger">Arama sonuçlarının yazılacağı günlük.</param>
 /// <param name="label">Günlük satırlarında indeksi tanıtan ad (örn. <c>Kampanya</c>).</param>
@@ -51,11 +42,8 @@ public sealed class SemanticIndex<T>(
     }
 
     /// <summary>
-    /// İndeksin tamamını verilen kayıtlarla değiştirir.
-    /// <para>
-    /// <b>Kesintisizdir:</b> yeni içerik tamamen vektörleştirildikten sonra tek adımda devreye
-    /// alınır; arama trafiği bu sırada eski içerikten yanıtlanmaya devam eder.
-    /// </para>
+    /// İndeksin tamamını verilen kayıtlarla değiştirir. Yeni içerik tamamen vektörleştirildikten
+    /// sonra tek adımda devreye alınır; arama trafiği bu sırada eski içerikten yanıtlanır.
     /// </summary>
     /// <returns>İndekslenen kayıt sayısı.</returns>
     public int Replace(IEnumerable<T> items)
@@ -76,21 +64,10 @@ public sealed class SemanticIndex<T>(
     }
 
     /// <summary>
-    /// İndeksin tamamını verilen kayıtlarla değiştirir; vektörleri mümkünse depodan yükler, değilse
-    /// hesaplayıp depoya yazar.
-    /// <para>
-    /// <b>Depo anahtarı içeriğin özetidir.</b> Kayıtların kimlikleri ve gömülen metinleri
-    /// değiştiğinde anahtar da değişir ve saklanan vektörler bulunamaz. Sürüm taşımayan bir anahtar,
-    /// bankada güncellenmiş bir kaydın aramada süresiz olarak eski hâliyle görünmesi demektir.
-    /// </para>
-    /// <para>
-    /// Depodan yükleme yalnızca <b>tam</b> eşleşmede kabul edilir: saklanan vektör kümesi bugünkü
-    /// kayıtların tamamını karşılamıyorsa hesap baştan yapılır. Eksik bir kümeyi tamamlamak, hangi
-    /// kaydın hangi içerikle gömüldüğünün izini kaybettirir.
-    /// </para>
+    /// İndeksin tamamını verilen kayıtlarla değiştirir; vektörleri depodan yükler, bulamazsa
+    /// hesaplayıp depoya yazar. Depo anahtarı içeriğin özetidir ve yalnızca bugünkü kayıtların
+    /// tamamını karşılayan bir vektör kümesi kabul edilir.
     /// </summary>
-    /// <param name="items">İndeksi oluşturacak kayıtlar.</param>
-    /// <param name="cancellationToken">İptal jetonu.</param>
     /// <returns>İndekslenen kayıt sayısı.</returns>
     public async Task<int> ReplaceAsync(IEnumerable<T> items, CancellationToken cancellationToken = default)
     {
@@ -154,7 +131,7 @@ public sealed class SemanticIndex<T>(
 
     /// <summary>
     /// İndekslenen içeriğin özetinden depo anahtarını üretir. Kayıtlar kimliğe göre sıralanır;
-    /// bankanın döndürdüğü sıra değiştiğinde anahtarın da değişmesi gereksiz yeniden hesap demektir.
+    /// bankanın döndürdüğü sıra anahtarı etkilemez.
     /// </summary>
     private string BuildIndexKey(IEnumerable<(string Key, string Text)> entries)
     {
@@ -169,7 +146,7 @@ public sealed class SemanticIndex<T>(
 
     /// <summary>
     /// Tek bir kaydı indekse ekler veya günceller. İndeksin tamamını yeniden kurmaz; çalışma
-    /// zamanında eklenen bir kaydın aramada anında görünmesini sağlayan yol budur.
+    /// zamanında eklenen kayıt aramada anında görünür.
     /// </summary>
     public void AddOrUpdate(T item)
     {

@@ -15,7 +15,7 @@ Süreç ayağa kalkarken şu adımlar sırayla çalışır.
 **`Program.cs`** (`src/Banking.Host/Program.cs`) — Yalnızca sırayı bilir, içerikleri kendi dosyalarındadır:
 
 1. `builder.AddBankingAgents()` → tüm DI kayıtları (`Composition/ServiceRegistration.cs`) ve dönen `AgentOptions`.
-2. Kestrel, **`Agents:SelfBaseUrl`'den türetilen** portta tüm ağ arayüzlerini dinler. Port ikinci bir yerde yazılı değildir; süreç kendi MCP ve A2A uçlarına aynı adresten bağlandığı için iki değerin ayrışması bu bağlantıları hata vermeden koparırdı.
+2. Kestrel, **`Agents:SelfBaseUrl`'den türetilen** portta tüm ağ arayüzlerini dinler. Port ikinci bir yerde yazılı değildir; süreç kendi MCP ve A2A uçlarına aynı adresten bağlanır.
 3. `app.LoadDeclarativeDefinitionsAsync()` → semantik indeksler + diskteki YAML tanımları (`Composition/StartupLoader.cs`).
 4. Statik dosyalar (`wwwroot/index.html`) ve `app.MapBankingApi()` (`Composition/ApiEndpoints.cs`).
 5. `app.ScheduleAgentWarmUp()` → sunucu dinlemeye başlayınca ajan grafiğini ön ısıtır.
@@ -94,7 +94,6 @@ await using var session = lease.Enter();
 | `SerializedOrchestratorSession` | `JsonElement?` | Orkestratörün konuşma geçmişi |
 | `SerializedWorkflowSession` | `JsonElement?` | Akış ajanının konuşma geçmişi |
 | `LastUserMessage` | `string?` | Bu isteğin mesajı; `start_workflow` aracı okur |
-| `LastAssistantReply` | `string?` | Önceki turun yanıtı; zamirli takip için bağlama eklenir |
 | `PendingAgentSignal` | `string?` | Akış ajanının bu turda bıraktığı denetim sinyali |
 
 **Neden şema ile teklif ayrı alanlarda?** `ExpectedSlots` "ne bekleniyor", `ProposedSlots` "ne sunuldu" bilgisidir. Tek alanda birleşmeleri, onay ekranının boş değerlerle üretilmesine yol açar.
@@ -105,7 +104,7 @@ await using var session = lease.Enter();
 
 - `BeginWorkflow(name)`: Akışı oturuma bağlar, evreyi `idle` yapar. Boş ad kabul etmez.
 - `CompleteWorkflow()` / `CancelWorkflow()`: `ResetWorkflow` üzerinden akışı sonlandırır.
-- `ResetWorkflow(finalPhase, trace)` (private): Akış durumunu, slotları, şemayı, teklifi, onayı, idempotency'yi, akış ajanı geçmişini **ve** `LastAssistantReply` + `SerializedOrchestratorSession`'ı temizler. **Son ikisi hatanın düzeldiği yerdir** — bkz. Bölüm 4.4.
+- `ResetWorkflow(finalPhase, trace)` (private): Akış durumunu, slotları, şemayı, teklifi, onayı, idempotency'yi, akış ajanı geçmişini **ve** `SerializedOrchestratorSession`'ı temizler. Sonuncusu, tamamlanmış bir akıştan sonra orkestratörün onay bekliyormuş gibi davranmasını engeller — bkz. Bölüm 4.4.
 - `SetSlot(name, value)`: Tek slot değerini yazar.
 - `GetSlotStatus()`: `SlotBinder.GetStatus` ile dolu/eksik/opsiyonel slotları hesaplar.
 - `StoreProposedSlots(workflowName, slots)`: Teklifi saklar ve `null` olmayan değerleri StateBag'e geri yazar.
@@ -114,7 +113,7 @@ await using var session = lease.Enter();
 
 ### 2.3 Scope — `AmbientSessionAccessor` ve `SessionLease`
 
-**`AmbientSessionAccessor`** (`Sessions/AmbientSessionAccessor.cs`) — `AsyncLocal<SessionContext?>` tabanlı. **Oturum kimliği katmanlar arasında parametre olarak taşınmaz ve LLM araçlarına hiçbir biçimde verilmez** — verilseydi, hangi oturuma yazılacağını modelin ürettiği bir metin belirlerdi. Üç garantiyi birlikte sağlar:
+**`AmbientSessionAccessor`** (`Sessions/AmbientSessionAccessor.cs`) — `AsyncLocal<SessionContext?>` tabanlı. **Oturum kimliği katmanlar arasında parametre olarak taşınmaz ve araçlara verilmez.** Üç garantiyi birlikte sağlar:
 
 1. **İzolasyon** — farklı bir oturumla iç içe scope açmak istisna üretir.
 2. **Tek okuma / tek yazma** — durum açılışta yüklenir, kapanışta yazılır.
@@ -122,7 +121,7 @@ await using var session = lease.Enter();
 
 - `Current`: Aktif oturum; scope yoksa istisna. Sessizce yeni oturum üretmek iki kullanıcının verisini karıştırırdı.
 - `OpenAsync(sessionId, ct)`: Kilidi alır, durumu **bir kez** yükler, `SessionLease` döner. Aynı oturumla iç içe çağrıldığında yeniden yükleme/kilitleme yapmaz.
-- `CloseAsync(lease)` (internal): Durumu yazar, ambient'ı temizler, kilidi bırakır. **İstek iptal edilse veya hata alsa bile yazma yapılır** — aksi hâlde kullanıcı yarım kalan akışını kaybederdi.
+- `CloseAsync(lease)` (internal): Durumu yazar, ambient'ı temizler, kilidi bırakır. **İstek iptal edilse veya hata alsa bile yazma yapılır**; o ana kadarki ilerleme korunur.
 
 **`SessionLease`** (`Sessions/SessionLease.cs`) — `IAsyncDisposable`.
 
@@ -132,7 +131,7 @@ await using var session = lease.Enter();
 
 **`ISessionStore`** (`Sessions/ISessionStore.cs`) — Tek çağıranı `AmbientSessionAccessor`'dır. Sistemde kalan **tek tek-uygulamalı arayüzdür** ve bilerek korunmuştur: Redis'e geçişin belgelenmiş tek DI satırıdır, `ValueTask` imzaları da bunun içindir.
 
-**`InMemorySessionStore`** — `IMemoryCache` üzerinde kayan TTL (`Sessions:SlidingTimeToLiveMinutes`, varsayılan 30 dk). `PublishEviction` geri çağrımı, yarım kalan bir akışın düştüğü anı ize yazar — aksi hâlde bu kayıp hiçbir yerde görünmezdi.
+**`InMemorySessionStore`** — `IMemoryCache` üzerinde kayan TTL (`Sessions:SlidingTimeToLiveMinutes`, varsayılan 30 dk). `PublishEviction` geri çağrımı, yarım kalan bir akışın düştüğü anı ize yazar; kayıp yalnızca bu satırda görünür.
 
 ---
 
@@ -156,7 +155,7 @@ await using var session = lease.Enter();
 
 - `EnsureReadyAsync(ct)`: Uzmanları ve orkestratörü kurar; kurulu ve güncelse etkisizdir. **Yeniden kurulumun tek nedeni uzman kataloğunun sürüm değişimidir** — köprü araçları ve yönlendirme kuralları kartlardan üretilir. Başarısız kurulum kalıcı değildir; ilk istek yeniden dener.
 - `BuildOrchestrator()` (private): Uzman köprüleri + `start_workflow` + ekran araçlarıyla `ChatClientAgent` kurar. Sistem talimatı kullanıcıya özel bilgi içermez, bu yüzden tek örnek tüm istekleri karşılar.
-- `AskOrchestratorAsync(userMessage, ct)`: Mesajı oturuma yazar, aday akışları arar (**aktif akış varken aday listesi verilmez** — konu dışı bir soru devam eden işlemi başka bir akışla değiştirmeye davet ederdi) ve model turunu çalıştırır.
+- `AskOrchestratorAsync(userMessage, ct)`: Mesajı oturuma yazar, aday akışları arar (**aktif akış varken aday listesi verilmez**, devam eden işlem korunur) ve model turunu çalıştırır.
 - `AskLanguageModelAsync(...)` (private): Aday akış bağlamını ve önceki tur bağlamını sistem mesajı olarak ekler, konuşmayı oturumdan geri yükler, ajanı çalıştırır, geçmişi tekrar oturuma yazar, tetiklenen aracı çıkarır ve `StoreTurnContext` ile bağlamı saklar/temizler.
 - `SearchCandidateWorkflows(userMessage)` (private): `topK: 3` aday döner. **Arama akış başlatmaz** — vektör benzerliği *konu* yakınlığını ölçer, *niyeti* değil.
 - `StartWorkflowAsync(workflowName, ct)` (private, LLM aracı): Oturumda akış varsa başlatmaz ve durumu araç sonucu olarak modele bildirir; yoksa `BeginWorkflow` + `CreateEngineAsync` + `AdvanceWorkflowStepAsync`.
@@ -173,7 +172,7 @@ await using var session = lease.Enter();
 - `GetSpecialistAsync(name, ct)`: Ajanı `IMemoryCache`'ten döner; önbellekte yoksa (ilk istek veya boşta kalıp tahliye edilmiş) `BuildFromCardAsync` ile kurup kayan süreyle (`AgentOptions.AgentIdleTimeout`, varsayılan 20 dk) önbelleğe yazar. Ad başına `SemaphoreSlim` eşzamanlı ıskaları tekilleştirir. Tahliye `Version`'ı **artırmaz**.
 - `RegisterDeclarativeSpecialistAsync(definition, ct)`: Kartı yazar, katalog hazırsa ajanı hemen kurar, `Version`'ı artırır.
 - `GuardAgainstCompiledCollision(card)` (private): Ad, köprü aracı adı **ve** A2A yolu için çakışma denetler; üçü de çağrının hangi uzmana gideceğini belirler.
-- `BuildBridgeTools()`: Her uzman için çağıranın kullanabileceği aracı üretir. Süreç içi modda somut ajanı değil `LazySpecialistAgent` vekilini sarar — vekil hedefi her çağrıda adına göre çözer, aksi hâlde köprü aracının tuttuğu somut ajan tahliyeyi anlamsız kılardı.
+- `BuildBridgeTools()`: Her uzman için çağıranın kullanabileceği aracı üretir. Süreç içi modda somut ajanı değil `LazySpecialistAgent` vekilini sarar; vekil hedefi her çağrıda adına göre çözer, böylece köprü aracı boşta kalan ajanın tahliyesini engellemez.
 - `BuildFromCardAsync(card, ct)` (private): Kartı çalışan ajana çevirir. **Derlenmiş ve deklaratif uzman aynı biçimde kurulur**; uzman başına `Build` metodu yoktur, kart sözleşmenin tamamıdır.
 
 Derlenmiş uzmanlar (`HesapUzmaniAgent`, `KartUzmaniAgent`, `AnalizUzmaniAgent`) yalnızca statik bir `AgentCard Card` özelliği taşır.
@@ -186,17 +185,15 @@ Derlenmiş uzmanlar (`HesapUzmaniAgent`, `KartUzmaniAgent`, `AnalizUzmaniAgent`)
 
 - `EnsureConnectedAsync(ct)` (private): Bağlantıyı kurar, araçları keşfeder ve `ToolRegistry.ValidateDiscoveredMcpTools` ile fail-fast doğrular.
 - `GetTracedToolsForGroupAsync(group, ct)`: Gruba ait araçları izleme sarmalayıcısıyla döner.
-- `GetTracedToolsByNamesAsync(names, ct)`: Adları verilen araçları döner. **Bilinmeyen bir ad sessizce atlanmaz**, istisna fırlatır.
+- `GetTracedToolsByNamesAsync(names, ct)`: Adları verilen araçları döner. **Bilinmeyen bir ad atlanmaz**, istisna fırlatır.
 
 ### 4.4 Bağlamsal Devamlılık — önceki tur bağlamı
 
-Zamirli takip cümlelerinin ("ikincisini", "bunlardan bana uygun olanı") göndergesi, orkestratörün bir önceki turdaki yanıtından çözülür. Bu bilgi **`SessionState.LastAssistantReply`'de**, oturumun geri kalanıyla aynı yerde tutulur; ayrı bir `AIContextProvider` yoktur.
+Zamirli takip cümlelerinin ("ikincisini", "bunlardan bana uygun olanı") göndergesi, orkestratörün bir önceki turdaki yanıtından çözülür. Bu iş `ContextProviders/TopicContextProvider` içinde yapılır; sağlayıcı orkestratöre `ChatClientAgentOptions.AIContextProviders` ile bağlanır (`AgentRuntime.BuildOrchestrator`).
 
-- `AgentRuntime.AskLanguageModelAsync` turdan **önce** `AgentPrompts.BuildPreviousTurnContext(...)`'i sistem mesajı olarak ekler.
-- `AgentRuntime.StoreTurnContext(...)` turdan **sonra** yanıtı saklar — ya da turda `start_workflow`/`open_screen` tetiklendiyse bağlamı temizler (konu kapandı).
-- `SessionContext.ResetWorkflow` akış bittiğinde hem `LastAssistantReply`'ı hem `SerializedOrchestratorSession`'ı siler.
-
-**Son madde bir hata düzeltmesidir.** Akış boyunca yönlendirici orkestratörü baypas ettiği için, akış bittiğinde orkestratörün geçmişinde son duran alışveriş *"`start_workflow` çağırdım, araç bana bir soru döndürdü"* olur. Silinmezse, akış çoktan bittiği hâlde bir sonraki mesaj o cevaplanmamış soruya verilmiş yanıt sanılır ve **sistem onay bekliyormuş gibi davranır.** Bedeli: tamamlanmış bir işlemin öncesine gönderme yapan zamir artık çözülmez — para hareketi içeren bir akışta doğru takas budur.
+- Sağlayıcı turdan **önce** önceki yanıtı bağlam olarak ekler, turdan **sonra** yeni yanıtı saklar. İki yarı aynı tipte durduğundan ayrışamaz.
+- Turda `start_workflow` veya `open_screen` tetiklendiyse bağlam temizlenir (konu kapandı). Karar **araç adı sabitlerinden** okunur (`ContextResettingTools`), yanıt metninden değil: metinde anahtar sözcük aramak kullanıcının olağan cümlesinde de eşleşir.
+- Akışın tamamlanması ve iptali bu listede yoktur; aktif akışta yönlendirici orkestratörü baypas ettiği için sağlayıcı o turları hiç görmez. Temizliği `SessionContext.ResetWorkflow` yapar (bkz. §3.2).
 
 ### 4.5 Prompt Deposu — `AgentPrompts`
 
@@ -204,7 +201,6 @@ Zamirli takip cümlelerinin ("ikincisini", "bunlardan bana uygun olanı") gönde
 
 - `GetOrchestratorInstructions(dynamicRoutingRules)`: Uzman yönlendirme kuralları kartlardan üretilerek gömülür. Talimat hiçbir akış adı saymaz.
 - `BuildCandidateWorkflowsContext(candidates)`: Aday akışları per-request bağlam mesajına çevirir; listenin bir **ad sözlüğü** olduğunu, başlatma gerekçesi olmadığını açıkça yazar.
-- `BuildPreviousTurnContext(previousReply)`: Önceki turun yanıtını bağlam mesajına çevirir; metnin "bekleyen bir soru değil, geçmişin özeti" olduğunu belirtir.
 - `BuildSlotFillingRules(propose, cancel, handoff)`: Akış ajanının kuralları; araç adları çağırandan gelir, burada yeniden türetilmez.
 
 ### 4.6 İzleme — `TraceHub` / `TracingAIFunction` / `TracingChatClient`
@@ -228,7 +224,7 @@ Zamirli takip cümlelerinin ("ikincisini", "bunlardan bana uygun olanı") gönde
 - `CreateEngineAsync(workflowName)`: Bu isteğe ait motoru üretir; kayıtlı değilse `KeyNotFoundException`.
 - `BuildEngineAsync(registered)` (private): **Sıra bağlayıcıdır** — önce şema oturuma tanıtılır (`DeclareExpectedSlots`), sonra ajan kimliği kurulur (`WorkflowAgentDefinition.For`), talimat üretilir, ajan alınır, en son motor bağlanır.
 
-**Kayıt defteri davranış değil veri tutar.** Kapanış (closure) saklansaydı akışın yolu, şeması ve talimatı yalnızca o kapanışın içinde yaşar, hata ayıklarken ne sözlükte görülebilir ne de motorun kurulumuna kesme noktası konabilirdi.
+**Kayıt defteri davranış değil veri tutar.** Akışın yolu, şeması ve talimatı sözlükte okunabilir durur; motoru bunlardan `BuildEngineAsync` kurar.
 
 ### 5.2 Ajan Kurucusu — `WorkflowAgentFactory`
 
@@ -272,7 +268,7 @@ Ajanın araç kümesi: uzman köprüleri + dört denetim aracı.
 
 **`SlotBinder`** (static, internal) — Toplanan değerler ile YAML şeması arasındaki **saf** karşılaştırma; bağımlılığı, durumu ve yan etkisi yoktur.
 - `GetStatus(slotValues, expectedSlots)`: Dolu/eksik/opsiyonel ayrımını yapar.
-- `ResolveSlotNames(...)` (private): Toplanan anahtarlar ∪ şemadaki slotlar. **Şemada olmayan ama model tarafından yazılmış anahtarlar da görünür kalır**; sessizce düşürülmeleri, yanlış slot adı üreten modeli teşhis edilemez kılar.
+- `ResolveSlotNames(...)` (private): Toplanan anahtarlar ∪ şemadaki slotlar. **Şemada olmayan ama model tarafından yazılmış anahtarlar da görünür kalır**; yanlış slot adı üreten model böylece izde teşhis edilir.
 - `IsRequired(...)` (private): Şemada tanımlı olmayan slot zorunlu sayılmaz — modelin fazladan yazdığı bir anahtar akışı kalıcı olarak "eksik" durumunda bırakamaz.
 - `IsBlank(value)` (private): Boş metin ya da sıfır/negatif tutar.
 
@@ -326,7 +322,7 @@ Ajanın araç kümesi: uzman köprüleri + dört denetim aracı.
 **`WorkflowOutcome`** (record) — Tüm akışların **ortak sonuç sözleşmesi**: `WorkflowName`, `Status` (`Succeeded`/`RejectedByUser`/`Failed`), `UserMessage`, `ReceiptId`, `Details`. `UserMessage` zorunludur — başarısızlıkta gerçek gerekçeyi taşır ve üst katmanda yutulması mümkün değildir. Fabrika metotları: `Success`, `RejectedByUser`, `Failure`.
 
 **`GenericConfirmationView`** (record) — Onay ekranı görünümü: `WorkflowName`, `Parameters`, `ScreenMkCode`.
-- `ComputeIdempotencyToken(view)` (static): Akış adı + sıralı slotlardan SHA-256. **Tek yerde tutulması zorunludur:** motor bu değeri oturuma yazarak ikinci onay isteğini tanır, executor aynı değeri bankaya `Idempotency-Key` olarak gönderir. İki tarafın ayrı hesaplaması çift tıklama korumasını sessizce devre dışı bırakır.
+- `ComputeIdempotencyToken(view)` (static): Akış adı + sıralı slotlardan SHA-256. **Tek yerde tutulur:** motor bu değeri oturuma yazarak ikinci onay isteğini tanır, executor aynı değeri bankaya `Idempotency-Key` olarak gönderir.
 
 ---
 
@@ -363,7 +359,7 @@ Temizlenmiş yanıt HTTP 200 ile UI'a döner. Bu sırada `await using` bloğu ka
 
 - `ScanAssembly(assembly)`: `[McpServerToolType]` taşıyan veya adı `Tools` ile biten sınıfların `[McpServerTool]` metotlarını kaydeder.
 - `Get(name)` / `GetAllTools()` / `GetNamesByGroup(group)` / `GetAllSanitizableToolNames()`.
-- `ValidateDiscoveredMcpTools(discovered)`: Kayıtlı ama sunucuda bulunmayan araç varsa **fail-fast**. Uyuşmazlık sessizce geçilseydi, o araç çağrıldığı anda açıklanamayan bir çalışma zamanı hatasına dönüşürdü.
+- `ValidateDiscoveredMcpTools(discovered)`: Kayıtlı ama sunucuda bulunmayan araç varsa **fail-fast**. Uyuşmazlık bağlantı kurulumunda yakalanır, aracın ilk çağrısında değil.
 - `RegisterNonMcpCoreTools()` (private): Uzman köprüleri, `start_workflow`, `ekran_kodu_ara`, `ekran_ac`.
 - `InferGroupFromTypeName(name)` (private): `[ToolGroup]` yoksa addan çıkarım.
 

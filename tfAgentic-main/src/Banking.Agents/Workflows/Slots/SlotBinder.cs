@@ -4,7 +4,7 @@ namespace Banking.Agents.Workflows.Slots;
 
 /// <summary>Bir akışın slot kümesinin anlık durumu.</summary>
 /// <param name="FilledSlots">Değeri girilmiş ve anlamlı olan slotlar.</param>
-/// <param name="MissingSlots">Henüz sorulmamış veya boş bırakılmış <b>zorunlu</b> slotlar.</param>
+/// <param name="MissingSlots">Henüz sorulmamış veya boş bırakılmış zorunlu slotlar.</param>
 /// <param name="OptionalSlots">Doldurulmamış, ancak zorunlu da olmayan slotlar.</param>
 public sealed record SlotStatus(
     IReadOnlyDictionary<string, object> FilledSlots,
@@ -50,11 +50,8 @@ public sealed record SlotStatus(
 }
 
 /// <summary>
-/// Toplanan ham değerler ile YAML şeması arasındaki <b>saf</b> karşılaştırma katmanı.
-/// <para>
-/// Bağımlılığı, durumu ve yan etkisi yoktur: verilen değer sözlüğünü ve şemayı okur, sonucu döner.
-/// Oturum yönetimi, kalıcılık ve izleme <see cref="Sessions.SessionContext"/>'e aittir.
-/// </para>
+/// Toplanan ham değerler ile YAML şeması arasındaki saf karşılaştırma katmanı. Bağımlılığı, durumu
+/// ve yan etkisi yoktur; oturum yönetimi ve izleme <see cref="Sessions.SessionContext"/>'e aittir.
 /// </summary>
 internal static class SlotBinder
 {
@@ -82,7 +79,7 @@ internal static class SlotBinder
                 continue;
             }
 
-            // required: false olan alan boş kalabilir; akışı bekletmez.
+            // Opsiyonel slot akışı bekletmez
             if (IsRequired(slotName, expectedSlots)) missing.Add(slotName);
             else optional.Add(slotName);
         }
@@ -92,8 +89,7 @@ internal static class SlotBinder
 
     /// <summary>
     /// Değerlendirmeye alınacak slot adlarının birleşimini çözer: toplanan anahtarlar ve şemadaki
-    /// slotlar. <b>Şemada olmayan ancak model tarafından yazılmış anahtarlar da görünür kalır;</b>
-    /// sessizce düşürülmeleri, modelin yanlış slot adı ürettiği durumları teşhis edilemez kılar.
+    /// slotlar. Şemada olmayan ama model tarafından yazılmış anahtarlar da görünür kalır.
     /// </summary>
     private static HashSet<string> ResolveSlotNames(
         IReadOnlyDictionary<string, object?> slotValues,
@@ -111,8 +107,8 @@ internal static class SlotBinder
     }
 
     /// <summary>
-    /// Slotun zorunlu olup olmadığını belirler. <b>Şemada tanımlı olmayan slot zorunlu sayılmaz:</b>
-    /// modelin fazladan yazdığı bir anahtar, akışı kalıcı olarak "eksik slot" durumunda bırakamaz.
+    /// Slotun zorunlu olup olmadığını belirler. Şemada tanımlı olmayan slot zorunlu sayılmaz; modelin
+    /// fazladan yazdığı bir anahtar akışı bekletemez.
     /// </summary>
     private static bool IsRequired(
         string slotName, IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)

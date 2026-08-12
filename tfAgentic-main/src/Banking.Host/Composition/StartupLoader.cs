@@ -21,21 +21,15 @@ public static class StartupLoader
     public const string SpecialistsFolder = "specialist-agents";
 
     /// <summary>
-    /// Semantik indeksleri doldurur ve diskteki deklaratif tanımları kaydeder.
-    /// <para>
-    /// <b>Bozuk bir tanım dosyası açılışı durdurmaz:</b> gerekçesi loglanır ve diğer tanımlar
-    /// yüklenmeye devam eder. Tek bir hatalı dosyanın tüm sistemi ayağa kalkamaz hâle getirmesi,
-    /// tanımların çalışma zamanında eklenebilmesinin anlamını ortadan kaldırırdı.
-    /// </para>
+    /// Semantik indeksleri doldurur ve diskteki deklaratif tanımları kaydeder. Bozuk bir tanım
+    /// dosyası açılışı durdurmaz; gerekçesi loglanır ve diğer tanımlar yüklenmeye devam eder.
     /// </summary>
     public static async Task LoadDeclarativeDefinitionsAsync(this WebApplication app)
     {
         using var scope = app.Services.CreateScope();
         var services = scope.ServiceProvider;
 
-        // Semantik mkCode, kampanya ve finansman indekslerini hafızaya al (soğuk başlangıç önleme).
-        // Üç katalog da bankadan okunur; banka bu anda ayakta değilse indeks boş kalır ve ilgili
-        // araç ilk çağrıldığında yeniden dener — açılış bu yüzden durdurulmaz.
+        // Semantik indeksler; banka ayakta değilse boş kalır ve ilk çağrıda yeniden denenir
         await services.GetRequiredService<SemanticMkCodeSearcher>().InitializeAsync();
         await services.GetRequiredService<SemanticCampaignSearcher>().InitializeAsync();
         await services.GetRequiredService<SemanticFinancingSearcher>().InitializeAsync();
@@ -62,9 +56,7 @@ public static class StartupLoader
 
         services.GetRequiredService<SemanticWorkflowSearcher>().Initialize(workflowRegistry.DiscoveredWorkflows);
 
-        // Diskteki uzman ajan tanımlarını yükle. A2A adresleri endpoint tablosunda değil dağıtıcının
-        // arkasında çözüldüğü için bu yükleme app.Build()'dan sonra yapılabilir. Ajanlar burada
-        // KURULMAZ: süreç içi MCP sunucusu henüz dinlemiyor, kurulumu ön ısıtma yapar.
+        // Uzman kartları; ajanların kurulumunu ön ısıtma yapar
         var specialistCatalog = services.GetRequiredService<SpecialistCatalog>();
 
         foreach (var (filePath, content) in
@@ -84,12 +76,9 @@ public static class StartupLoader
     }
 
     /// <summary>
-    /// Sunucu dinlemeye başladığında ajan grafiğini ön ısıtır.
-    /// <para>
-    /// <b>Ön ısıtma burada tetiklenir, daha erken değil:</b> uzman kurulumu süreç içi MCP sunucusuna
-    /// loopback bağlanır ve sunucu bu olaydan önce dinlemiyordur. Başarısızlık ölümcül değildir;
-    /// kurulum tamamlanmış sayılmaz ve ilk istek yeniden dener.
-    /// </para>
+    /// Sunucu dinlemeye başladığında ajan grafiğini ön ısıtır. Daha erken tetiklenemez; uzman
+    /// kurulumu süreç içi MCP sunucusuna loopback bağlanır. Başarısızlık ölümcül değildir, ilk
+    /// istek yeniden dener.
     /// </summary>
     public static void ScheduleAgentWarmUp(this WebApplication app) =>
         app.Lifetime.ApplicationStarted.Register(() => _ = Task.Run(async () =>

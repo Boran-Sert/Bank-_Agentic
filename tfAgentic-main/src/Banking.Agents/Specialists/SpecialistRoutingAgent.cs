@@ -7,20 +7,11 @@ using Microsoft.Extensions.AI;
 namespace Banking.Agents.Specialists;
 
 /// <summary>
-/// Tek bir <c>/a2a/{route}</c> endpoint'inin arkasında duran dağıtıcı ajan: her isteği,
-/// yoldaki <c>route</c> değerine karşılık gelen gerçek uzmana devreder.
-/// <para>
-/// <b>Tek endpoint kullanılmasının nedeni:</b> A2A endpoint tablosu uygulama başlatılırken sabitlenir
-/// ve uzman başına ayrı yol açmak, çalışma zamanında eklenen bir uzmanın ancak yeniden başlatmadan
-/// sonra erişilebilir olması anlamına gelir. Yol parametreli tek endpoint, uzman kataloğunu endpoint
-/// tablosundan bağımsız kılar.
-/// </para>
-/// <para>
-/// Yol değeri istek anında <see cref="IHttpContextAccessor"/> üzerinden okunur; bu ajan
-/// A2A JSON-RPC işleyicisi tarafından <b>istek boru hattının içinde</b> çağrıldığı için
-/// <c>HttpContext</c> akıştadır. Bağlam bulunamazsa istek sessizce yanlış uzmana gitmez,
-/// hata verir.
-/// </para>
+/// Tek bir <c>/a2a/{route}</c> endpoint'inin arkasında duran dağıtıcı ajan: her isteği, yoldaki
+/// <c>route</c> değerine karşılık gelen gerçek uzmana devreder. Yol parametreli tek endpoint, uzman
+/// kataloğunu açılışta sabitlenen endpoint tablosundan bağımsız kılar; çalışma zamanında eklenen
+/// uzman yeniden başlatma olmadan erişilebilir olur. Yol değeri istek anında
+/// <see cref="IHttpContextAccessor"/> üzerinden okunur; bağlam bulunamazsa hata verilir.
 /// </summary>
 public sealed class SpecialistRoutingAgent(
     IHttpContextAccessor httpContextAccessor, SpecialistCatalog catalog) : AIAgent
@@ -57,29 +48,33 @@ public sealed class SpecialistRoutingAgent(
         return await catalog.GetSpecialistByA2ARouteAsync(route, cancellationToken);
     }
 
+    /// <inheritdoc />
     protected override async ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken)
         => await (await ResolveTargetAsync(cancellationToken)).CreateSessionAsync(cancellationToken);
 
+    /// <inheritdoc />
     protected override async ValueTask<AgentSession> DeserializeSessionCoreAsync(
         JsonElement serializedState, JsonSerializerOptions? jsonSerializerOptions, CancellationToken cancellationToken)
         => await (await ResolveTargetAsync(cancellationToken))
             .DeserializeSessionAsync(serializedState, jsonSerializerOptions, cancellationToken);
 
+    /// <inheritdoc />
     protected override async ValueTask<JsonElement> SerializeSessionCoreAsync(
         AgentSession session, JsonSerializerOptions? jsonSerializerOptions, CancellationToken cancellationToken)
         => await (await ResolveTargetAsync(cancellationToken))
             .SerializeSessionAsync(session, jsonSerializerOptions, cancellationToken);
 
+    /// <inheritdoc />
     protected override async Task<AgentResponse> RunCoreAsync(
         IEnumerable<ChatMessage> messages, AgentSession? session, AgentRunOptions? options, CancellationToken cancellationToken)
         => await (await ResolveTargetAsync(cancellationToken)).RunAsync(messages, session, options, cancellationToken);
 
+    /// <inheritdoc />
     protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages, AgentSession? session, AgentRunOptions? options,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
-        // Hedef, akış başlamadan ÖNCE çözülür: iterator gövdesi geciktirilerek çalıştığında
-        // HttpContext'in hâlâ akışta olacağının garantisi yoktur.
+        // Hedef akış başlamadan çözülür (HttpContext gereği)
         var target = await ResolveTargetAsync(cancellationToken);
 
         await foreach (var update in target.RunStreamingAsync(messages, session, options, cancellationToken)

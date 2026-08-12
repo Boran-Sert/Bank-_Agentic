@@ -11,7 +11,7 @@ public interface IAccountService
 }
 
 /// <summary>
-/// Hesap verisinin okuma yolu. <b>Para hareketi bu sınıfta değildir;</b> transfer
+/// Hesap verisinin okuma yolu. Para hareketi bu sınıfta değildir; transfer
 /// <see cref="ITransferService"/>, kart tahsilatı <see cref="ICollectionService"/> içindedir. Para
 /// taşıyan kod yolunun tek olması bu ayrımla sağlanır.
 /// </summary>

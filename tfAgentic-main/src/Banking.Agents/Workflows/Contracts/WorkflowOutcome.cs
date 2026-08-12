@@ -16,15 +16,9 @@ public enum WorkflowOutcomeStatus
 }
 
 /// <summary>
-/// Tüm deterministik iş akışlarının ortak sonuç sözleşmesi.
-/// <para>
-/// <b>Üst katmanlar akışa özel sonuç tipi tanımaz;</b> konuşma ve gateway katmanları yalnızca bu
-/// sözleşmeyi okur. Yeni bir iş akışı eklenmesi üst katmanlarda değişiklik gerektirmez.
-/// </para>
-/// <para>
-/// Kullanıcıya gösterilecek metni akışın kendisi üretir (<see cref="UserMessage"/>); gateway
-/// bankacılık metni biçimlendirmez, yalnızca taşır.
-/// </para>
+/// Tüm deterministik iş akışlarının ortak sonuç sözleşmesi. Üst katmanlar akışa özel sonuç tipi
+/// tanımaz; yeni bir akış eklemek konuşma ve gateway katmanlarında değişiklik gerektirmez.
+/// Kullanıcıya gösterilecek metni akışın kendisi üretir (<see cref="UserMessage"/>).
 /// </summary>
 public sealed record WorkflowOutcome
 {
@@ -55,8 +49,7 @@ public sealed record WorkflowOutcome
     public WorkflowOutcomeStatus Status { get; }
 
     /// <summary>
-    /// Kullanıcıya gösterilecek metin. <b>Başarısızlıkta gerçek gerekçeyi taşır;</b> alan zorunlu
-    /// olduğundan hata sebebinin üst katmanda yutulması mümkün değildir.
+    /// Kullanıcıya gösterilecek metin. Başarısızlıkta gerçek gerekçeyi taşır ve alan zorunludur.
     /// </summary>
     public string UserMessage { get; }
 

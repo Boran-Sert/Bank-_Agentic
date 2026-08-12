@@ -46,12 +46,8 @@ public sealed class MicrosoftAgentDeclarativeDefinition
     public DeclarativeSchemaConfig? InputSchema { get; set; }
 
     /// <summary>
-    /// Onay sonrası banka çağrısının tanımı (<c>action</c>).
-    /// <para>
-    /// <b>Tanımlanmadığında akış bankayı hiç çağırmaz:</b> onay yalnızca kayda geçer ve makbuz
-    /// üretilmez. Para hareketi bekleyen bir akışta bu bloğun eksikliği, kullanıcıya gerçekleşmemiş
-    /// bir işlemin bildirilmesi anlamına gelir.
-    /// </para>
+    /// Onay sonrası banka çağrısının tanımı (<c>action</c>). Tanımlanmadığında akış bankayı hiç
+    /// çağırmaz ve onay kapısı kurulmaz; para hareketi olan her akış bu bloğu tanımlar.
     /// </summary>
     public DeclarativeActionConfig? Action { get; set; }
 }
@@ -77,12 +73,9 @@ public sealed class DeclarativeModelConfig
 }
 
 /// <summary>
-/// YAML'daki <c>model.options</c> bloğunun karşılığı.
-/// <para>
-/// <b>Alanların tamamı isteğe bağlıdır ve varsayılanları <c>null</c>'dır.</b> Yazılmayan alan akışa
-/// dayatılmaz; yapılandırmadaki değer ya da modelin kendi varsayılanı geçerli olur. Buraya sabit bir
-/// değer yazmak, o varsayılan zincirini ulaşılamaz kılar.
-/// </para>
+/// YAML'daki <c>model.options</c> bloğunun karşılığı. Alanların tamamı isteğe bağlıdır ve
+/// varsayılanları <c>null</c>'dır; yazılmayan alanda yapılandırmadaki değer ya da modelin kendi
+/// varsayılanı geçerli olur.
 /// </summary>
 public sealed class DeclarativeModelOptionsConfig
 {

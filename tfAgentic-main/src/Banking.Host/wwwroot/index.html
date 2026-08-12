@@ -6,265 +6,285 @@
 <title>TKFB Agentic · Microsoft Agent Framework & Declarative Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
+  /* ==================================================================
+     Sıcak koyu tema — tek tema, bilinçli tercih. Zemin sıcak siyah,
+     metin kemik, tek vurgu kil rengi. Her renk token üzerinden okunur.
+     ================================================================== */
   :root {
-    --bg-dark: #090d16;
-    --bg-panel: rgba(18, 26, 43, 0.75);
-    --bg-panel-solid: #121a2b;
-    --bg-input: #0c1220;
-    --border-color: rgba(255, 255, 255, 0.08);
-    --border-highlight: rgba(59, 130, 246, 0.4);
-    
-    --primary: #3b82f6;
-    --primary-glow: rgba(59, 130, 246, 0.35);
-    --accent-emerald: #10b981;
-    --accent-amber: #f59e0b;
-    --accent-purple: #a855f7;
-    --accent-rose: #f43f5e;
-    --accent-cyan: #06b6d4;
+    color-scheme: dark;
 
-    --text-main: #f1f5f9;
-    --text-muted: #94a3b8;
-    --text-dim: #64748b;
+    --ground:          #191817;
+    --surface:         #232220;
+    --surface-raised:  #2C2B28;
+    --surface-sunken:  #131211;
 
-    /* Layer Colors */
-    --l-llm: #a855f7;
-    --l-a2a: #3b82f6;
-    --l-mcp: #14b8a6;
-    --l-service: #10b981;
-    --l-workflow: #f59e0b;
-    --l-system: #0ea5e9;
-    --l-context: #8b5cf6;
-    --l-gateway: #ec4899;
-    --l-flowrouter: #6366f1;
-    --l-security: #ef4444;
-    --l-api-request: #0891b2;
-    --l-api-response: #0d9488;
-    --l-api-error: #f43f5e;
+    --line:            rgba(240, 238, 230, 0.10);
+    --line-strong:     rgba(240, 238, 230, 0.20);
+
+    --bone:            #F0EEE6;
+    --bone-dim:        #BFBBAE;
+    --bone-faint:      #948F82;
+
+    --clay:            #D97757;
+    --clay-bright:     #E5906F;
+    --clay-soft:       rgba(217, 119, 87, 0.13);
+    --clay-line:       rgba(217, 119, 87, 0.38);
+    --on-clay:         #241C18;
+
+    --ok:              #7FB08A;
+    --warn:            #D9A441;
+    --danger:          #E0736A;
+    --info:            #7BA3C4;
+
+    --radius-sm: 8px;
+    --radius:    12px;
+    --radius-lg: 16px;
+
+    /* İzleme katmanı renkleri — sıcak zeminde okunacak şekilde doygunluğu düşük */
+    --l-llm:          #A78BC4;
+    --l-a2a:          #7BA3C4;
+    --l-mcp:          #6FB0A6;
+    --l-service:      #7FB08A;
+    --l-workflow:     #D9A441;
+    --l-system:       #93A4B5;
+    --l-context:      #9B93D1;
+    --l-gateway:      #D18BAE;
+    --l-flowrouter:   #8E96D6;
+    --l-security:     #E0736A;
+    --l-api-request:  #6BA9B8;
+    --l-api-response: #6FB08F;
+    --l-api-error:    #E0736A;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  
+
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    background-color: var(--bg-dark);
-    background-image: 
-      radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.12) 0px, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.08) 0px, transparent 50%);
-    color: var(--text-main);
+    background: var(--ground);
+    color: var(--bone);
     height: 100vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    -webkit-font-smoothing: antialiased;
   }
 
-  /* Header */
+  :focus-visible {
+    outline: 2px solid var(--clay);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(240, 238, 230, 0.12);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(240, 238, 230, 0.22); background-clip: content-box; }
+
+  /* ---------------------------- Üst bar ---------------------------- */
   header {
-    height: 60px;
-    padding: 0 24px;
-    background: rgba(15, 23, 42, 0.8);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
-    border-bottom: 1px solid var(--border-color);
+    height: 62px;
+    padding: 0 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    z-index: 100;
+    gap: 20px;
+    flex-shrink: 0;
   }
 
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+  .brand { display: flex; align-items: center; gap: 11px; }
 
   .brand-logo {
-    width: 36px;
-    height: 36px;
+    width: 34px; height: 34px;
     border-radius: 10px;
-    background: linear-gradient(135deg, #2563eb, #7c3aed);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 18px;
-    box-shadow: 0 0 15px var(--primary-glow);
+    background: var(--clay);
+    color: var(--on-clay);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
   }
 
   .brand-title h1 {
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: -0.3px;
-    background: linear-gradient(to right, #ffffff, #94a3b8);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    color: var(--bone);
+    line-height: 1.15;
   }
 
   .brand-title span {
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--bone-faint);
     display: block;
-    font-weight: 400;
+    letter-spacing: 0.01em;
   }
 
-  /* Navigation Tabs */
   .nav-tabs {
     display: flex;
-    background: rgba(15, 23, 42, 0.6);
+    background: var(--surface-sunken);
     padding: 4px;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    gap: 4px;
+    border-radius: 11px;
+    border: 1px solid var(--line);
+    gap: 2px;
   }
 
   .tab-btn {
-    padding: 8px 16px;
+    padding: 8px 15px;
     border: none;
     background: transparent;
-    color: var(--text-muted);
+    color: var(--bone-dim);
+    font-family: inherit;
     font-size: 13px;
     font-weight: 500;
-    border-radius: 7px;
+    border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
     gap: 8px;
-    transition: all 0.2s ease;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
   }
 
-  .tab-btn:hover {
-    color: var(--text-main);
-    background: rgba(255, 255, 255, 0.04);
-  }
+  .tab-btn i { font-size: 12px; opacity: 0.8; }
+  .tab-btn:hover { color: var(--bone); background: rgba(240, 238, 230, 0.05); }
 
   .tab-btn.active {
-    background: var(--primary);
-    color: #ffffff;
-    box-shadow: 0 2px 10px var(--primary-glow);
+    background: var(--surface-raised);
+    color: var(--bone);
+    box-shadow: inset 0 0 0 1px var(--line-strong);
   }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
+  .tab-btn.active i { color: var(--clay); opacity: 1; }
 
   .user-badge {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    background: rgba(30, 41, 59, 0.6);
-    border: 1px solid var(--border-color);
+    gap: 9px;
+    padding: 5px 13px 5px 5px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
     border-radius: 99px;
-    font-size: 12px;
-    color: var(--text-muted);
+    font-size: 12.5px;
+    color: var(--bone-dim);
+    white-space: nowrap;
   }
 
   .user-avatar {
-    width: 22px;
-    height: 22px;
+    width: 24px; height: 24px;
     border-radius: 50%;
-    background: #3b82f6;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: var(--clay);
+    color: var(--on-clay);
+    display: flex; align-items: center; justify-content: center;
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 600;
   }
 
-  /* Main Container */
-  #app-content {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-  }
+  /* --------------------------- Kabuk ------------------------------- */
+  #app-content { flex: 1; position: relative; overflow: hidden; }
 
   .tab-content {
     display: none;
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
+    width: 100%; height: 100%;
+    position: absolute; top: 0; left: 0;
   }
+  .tab-content.active { display: flex; }
 
-  .tab-content.active {
-    display: flex;
-  }
-
-  /* TAB 1: Chat & TraceHub Split Layout */
+  /* ------------------- SEKME 1: Sohbet + TraceHub ------------------- */
   .chat-pane {
-    flex: 1.25;
+    flex: 1.3;
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--border-color);
-    background: var(--bg-panel);
-    backdrop-filter: blur(12px);
+    border-right: 1px solid var(--line);
+    background: var(--ground);
+    min-width: 0;
   }
 
   .trace-pane {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: #070b14;
+    background: var(--surface-sunken);
     min-width: 380px;
   }
 
-  /* Chat Pane */
   #chat-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 24px;
+    padding: 26px 24px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
   }
 
   .msg {
-    max-width: 80%;
-    padding: 12px 18px;
-    border-radius: 16px;
-    font-size: 14px;
-    line-height: 1.6;
-    animation: fadeIn 0.25s ease-out;
+    max-width: 78%;
+    padding: 12px 17px;
+    border-radius: var(--radius-lg);
+    font-size: 14.5px;
+    line-height: 1.65;
+    animation: fadeIn 0.22s ease-out;
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(5px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
 
   .msg.user {
     align-self: flex-end;
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-    color: #ffffff;
-    border-bottom-right-radius: 4px;
-    box-shadow: 0 4px 15px rgba(37, 99, 235, 0.25);
+    background: var(--clay);
+    color: var(--on-clay);
+    font-weight: 500;
+    border-bottom-right-radius: 5px;
   }
 
   .msg.bot {
     align-self: flex-start;
-    background: var(--bg-panel-solid);
-    border: 1px solid var(--border-color);
-    color: var(--text-main);
-    border-bottom-left-radius: 4px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--bone);
+    border-bottom-left-radius: 5px;
   }
 
-  .msg.bot p { margin-bottom: 8px; }
+  .msg.bot p { margin-bottom: 9px; }
   .msg.bot p:last-child { margin-bottom: 0; }
-  .msg.bot ul, .msg.bot ol { padding-left: 20px; margin-bottom: 8px; }
+  .msg.bot ul, .msg.bot ol { padding-left: 20px; margin-bottom: 9px; }
+  .msg.bot li { margin-bottom: 3px; }
+  .msg.bot strong { color: var(--bone); font-weight: 600; }
+  .msg.bot code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    padding: 1px 5px;
+    border-radius: 5px;
+    color: var(--clay-bright);
+  }
+  .msg.bot table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 9px; }
+  .msg.bot th, .msg.bot td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); }
+  .msg.bot th { color: var(--bone-dim); font-weight: 600; }
+  .msg.bot td { font-variant-numeric: tabular-nums; }
 
   .msg.sys {
     align-self: center;
-    background: rgba(148, 163, 184, 0.08);
-    border: 1px solid rgba(148, 163, 184, 0.15);
-    color: var(--text-muted);
-    font-size: 12px;
-    padding: 6px 14px;
+    background: rgba(224, 115, 106, 0.10);
+    border: 1px solid rgba(224, 115, 106, 0.28);
+    color: #EFA49D;
+    font-size: 12.5px;
+    padding: 7px 15px;
     border-radius: 99px;
   }
 
@@ -273,718 +293,1002 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 12px 18px;
-    background: var(--bg-panel-solid);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    border-bottom-left-radius: 4px;
+    padding: 14px 18px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    border-bottom-left-radius: 5px;
   }
 
   .dot-flashing {
-    width: 6px;
-    height: 6px;
+    width: 6px; height: 6px;
     border-radius: 50%;
-    background-color: var(--text-muted);
+    background-color: var(--bone-faint);
     animation: dotPulse 1.4s infinite ease-in-out;
   }
-
   .dot-flashing:nth-child(2) { animation-delay: 0.2s; }
   .dot-flashing:nth-child(3) { animation-delay: 0.4s; }
 
   @keyframes dotPulse {
     0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-    40% { opacity: 1; transform: scale(1.2); }
+    40%           { opacity: 1;   transform: scale(1.2); }
   }
 
-  /* HITL Confirmation Card */
+  /* Onay kartı (HITL) */
   .confirm-card {
     align-self: flex-start;
     width: 100%;
-    max-width: 420px;
-    background: rgba(18, 26, 43, 0.95);
-    border: 1px solid var(--border-highlight);
-    border-radius: 18px;
+    max-width: 430px;
+    background: var(--surface);
+    border: 1px solid var(--clay-line);
+    border-radius: var(--radius-lg);
     padding: 20px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 20px var(--primary-glow);
-    animation: fadeIn 0.3s ease-out;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    animation: fadeIn 0.25s ease-out;
   }
 
   .confirm-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 15px;
+    padding-bottom: 13px;
+    border-bottom: 1px solid var(--line);
   }
 
   .confirm-header h3 {
-    font-size: 15px;
+    font-size: 13px;
     font-weight: 600;
-    color: #93c5fd;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--clay-bright);
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 9px;
   }
 
-  .confirm-body {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin-bottom: 20px;
-  }
+  .confirm-body { display: flex; flex-direction: column; margin-bottom: 18px; }
 
   .confirm-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    font-size: 13px;
-    padding: 6px 0;
+    align-items: baseline;
+    gap: 20px;
+    font-size: 13.5px;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(240, 238, 230, 0.05);
   }
+  .confirm-row:last-child { border-bottom: none; }
+  .confirm-row .label { color: var(--bone-dim); flex-shrink: 0; }
+  .confirm-row .value { font-weight: 500; color: var(--bone); text-align: right; font-variant-numeric: tabular-nums; }
+  .confirm-row.total .value { font-size: 17px; font-weight: 600; color: var(--clay-bright); }
 
-  .confirm-row .label { color: var(--text-muted); }
-  .confirm-row .value { font-weight: 500; color: var(--text-main); }
-  .confirm-row.total .value { font-size: 16px; font-weight: 700; color: #fde68a; }
-
-  .confirm-actions {
-    display: flex;
-    gap: 12px;
-  }
+  .confirm-actions { display: flex; gap: 10px; }
 
   .btn-confirm {
     flex: 1;
-    padding: 10px;
+    padding: 11px;
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-sm);
+    font-family: inherit;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    transition: all 0.2s;
+    gap: 7px;
+    transition: background 0.15s, opacity 0.15s;
   }
+  .btn-confirm:disabled { opacity: 0.45; cursor: not-allowed; }
 
-  .btn-approve {
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: white;
-    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
-  }
-  .btn-approve:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4); }
+  .btn-approve { background: var(--clay); color: var(--on-clay); }
+  .btn-approve:hover:not(:disabled) { background: var(--clay-bright); }
 
   .btn-cancel {
-    background: rgba(239, 68, 68, 0.15);
-    color: #fca5a5;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: transparent;
+    color: var(--bone-dim);
+    border: 1px solid var(--line-strong);
   }
-  .btn-cancel:hover { background: rgba(239, 68, 68, 0.25); }
+  .btn-cancel:hover:not(:disabled) { background: rgba(240, 238, 230, 0.06); color: var(--bone); }
 
-  /* Receipt Card */
+  /* Makbuz kartı */
   .receipt-card {
     align-self: flex-start;
     width: 100%;
-    max-width: 400px;
-    background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.05));
-    border: 1px solid rgba(16, 185, 129, 0.4);
-    border-radius: 18px;
+    max-width: 410px;
+    background: var(--surface);
+    border: 1px solid rgba(127, 176, 138, 0.35);
+    border-radius: var(--radius-lg);
     padding: 20px;
-    box-shadow: 0 8px 25px rgba(16, 185, 129, 0.15);
+    animation: fadeIn 0.25s ease-out;
   }
 
   .receipt-header {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 14px;
-    color: #34d399;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+    color: var(--ok);
   }
+  .receipt-header h3 { font-size: 14.5px; font-weight: 600; }
 
-  .receipt-header h3 { font-size: 15px; font-weight: 600; }
-
-  /* Chat Footer Input Area */
+  /* Sohbet giriş alanı */
   .chat-footer {
-    padding: 18px 24px;
-    background: var(--bg-panel-solid);
-    border-top: 1px solid var(--border-color);
+    padding: 14px 24px 18px;
+    background: var(--ground);
+    border-top: 1px solid var(--line);
   }
 
   .chips-row {
     display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 7px;
+    margin-bottom: 11px;
     overflow-x: auto;
-    padding-bottom: 4px;
+    padding-bottom: 3px;
   }
 
   .chip {
-    padding: 6px 14px;
+    padding: 6px 13px;
     border-radius: 99px;
-    background: rgba(30, 41, 59, 0.8);
-    border: 1px solid var(--border-color);
-    color: var(--text-muted);
-    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    color: var(--bone-dim);
+    font-family: inherit;
+    font-size: 12.5px;
     cursor: pointer;
     white-space: nowrap;
-    transition: all 0.2s;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
   }
-
-  .chip:hover {
-    background: var(--primary);
-    color: white;
-    border-color: var(--primary);
-  }
+  .chip i { font-size: 11px; opacity: 0.7; }
+  .chip:hover { border-color: var(--line-strong); color: var(--bone); background: var(--surface-raised); }
 
   .chip.highlight {
-    background: rgba(59, 130, 246, 0.15);
-    border-color: rgba(59, 130, 246, 0.3);
-    color: #60a5fa;
+    background: var(--clay-soft);
+    border-color: var(--clay-line);
+    color: var(--clay-bright);
   }
+  .chip.highlight i { opacity: 1; }
+  .chip.highlight:hover { background: rgba(217, 119, 87, 0.2); color: var(--clay-bright); }
 
   .input-box {
     display: flex;
-    gap: 10px;
-    background: var(--bg-input);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    padding: 4px 6px 4px 14px;
-    transition: border-color 0.2s;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    padding: 6px 6px 6px 16px;
+    transition: border-color 0.15s;
   }
-
-  .input-box:focus-within {
-    border-color: var(--primary);
-    box-shadow: 0 0 12px var(--primary-glow);
-  }
+  .input-box:focus-within { border-color: var(--clay-line); }
 
   .input-box input {
     flex: 1;
     background: transparent;
     border: none;
-    color: var(--text-main);
-    font-size: 14px;
+    color: var(--bone);
+    font-family: inherit;
+    font-size: 14.5px;
     outline: none;
+    padding: 8px 0;
   }
+  .input-box input::placeholder { color: var(--bone-faint); }
 
   .btn-send {
-    width: 40px;
-    height: 40px;
+    width: 36px; height: 36px;
     border-radius: 10px;
-    background: var(--primary);
-    color: white;
+    background: var(--clay);
+    color: var(--on-clay);
     border: none;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+    transition: background 0.15s, opacity 0.15s;
   }
+  .btn-send:hover:not(:disabled) { background: var(--clay-bright); }
+  .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  .btn-send:hover { background: #2563eb; transform: scale(1.03); }
-  .btn-send:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-
-  /* TraceHub Live Stream Pane */
+  /* TraceHub */
   .trace-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 15px 18px;
+    border-bottom: 1px solid var(--line);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: rgba(15, 23, 42, 0.5);
+    flex-shrink: 0;
   }
 
-  .trace-title {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+  .trace-title { display: flex; align-items: center; gap: 10px; }
+
+  .trace-header h2 {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--bone-dim);
   }
 
   .status-dot {
-    width: 8px;
-    height: 8px;
+    width: 7px; height: 7px;
     border-radius: 50%;
-    background: #64748b;
+    background: var(--bone-faint);
+    flex-shrink: 0;
   }
-
-  .status-dot.active {
-    background: var(--accent-emerald);
-    box-shadow: 0 0 10px var(--accent-emerald);
-  }
-
-  .trace-header h2 {
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.2px;
-  }
-
-  .trace-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
+  .status-dot.active { background: var(--ok); box-shadow: 0 0 0 3px rgba(127, 176, 138, 0.18); }
 
   .btn-icon {
-    padding: 6px 10px;
-    background: rgba(30, 41, 59, 0.6);
-    border: 1px solid var(--border-color);
-    color: var(--text-muted);
-    border-radius: 6px;
-    font-size: 11px;
+    padding: 6px 11px;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--bone-faint);
+    border-radius: var(--radius-sm);
+    font-family: inherit;
+    font-size: 11.5px;
     cursor: pointer;
-    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s, border-color 0.15s;
   }
-
-  .btn-icon:hover { color: var(--text-main); background: rgba(51, 65, 85, 0.8); }
+  .btn-icon:hover { color: var(--bone); border-color: var(--line-strong); }
 
   #trace-log {
     flex: 1;
     overflow-y: auto;
-    padding: 14px;
+    padding: 12px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: 11.5px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 5px;
   }
 
   .trace-item {
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    padding: 6px 10px;
-    border-radius: 8px;
-    background: rgba(18, 26, 43, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.03);
-    transition: background 0.15s;
-    animation: fadeIn 0.2s ease-out;
+    padding: 7px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid transparent;
+    animation: fadeIn 0.18s ease-out;
   }
-
-  .trace-item:hover { background: rgba(30, 41, 59, 0.6); }
+  .trace-item:hover { border-color: var(--line); }
 
   .layer-tag {
     flex-shrink: 0;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    color: #ffffff;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
+    color: var(--tag, var(--bone-dim));
+    background: color-mix(in srgb, var(--tag, var(--bone-faint)) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--tag, var(--bone-faint)) 32%, transparent);
+    line-height: 1.5;
   }
 
-  .l-LLM { background: var(--l-llm); }
-  .l-A2A { background: var(--l-a2a); }
-  .l-MCP { background: var(--l-mcp); }
-  .l-SERVICE { background: var(--l-service); }
-  .l-WORKFLOW { background: var(--l-workflow); }
-  .l-SYSTEM { background: var(--l-system); }
-  .l-CONTEXT { background: var(--l-context); }
-  .l-GATEWAY { background: var(--l-gateway); }
-  .l-FLOWROUTER { background: var(--l-flowrouter); }
-  .l-SECURITY { background: var(--l-security); }
-  .l-API-REQUEST { background: var(--l-api-request); }
-  .l-API-RESPONSE { background: var(--l-api-response); }
-  .l-API-ERROR { background: var(--l-api-error); }
+  .l-LLM          { --tag: var(--l-llm); }
+  .l-A2A          { --tag: var(--l-a2a); }
+  .l-MCP          { --tag: var(--l-mcp); }
+  .l-SERVICE      { --tag: var(--l-service); }
+  .l-WORKFLOW     { --tag: var(--l-workflow); }
+  .l-SYSTEM       { --tag: var(--l-system); }
+  .l-CONTEXT      { --tag: var(--l-context); }
+  .l-GATEWAY      { --tag: var(--l-gateway); }
+  .l-FLOWROUTER   { --tag: var(--l-flowrouter); }
+  .l-SECURITY     { --tag: var(--l-security); }
+  .l-API-REQUEST  { --tag: var(--l-api-request); }
+  .l-API-RESPONSE { --tag: var(--l-api-response); }
+  .l-API-ERROR    { --tag: var(--l-api-error); }
 
-  .trace-content {
-    flex: 1;
-    word-break: break-word;
-    line-height: 1.4;
-  }
+  .trace-content { flex: 1; word-break: break-word; line-height: 1.5; min-width: 0; }
+  .trace-text   { color: var(--bone); }
+  .trace-detail { color: var(--bone-faint); font-size: 10.5px; margin-top: 3px; }
+  .trace-time   { color: var(--bone-faint); font-size: 10px; flex-shrink: 0; opacity: 0.7; }
 
-  .trace-text { color: var(--text-main); }
-  .trace-detail { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
-  .trace-time { color: var(--text-dim); font-size: 10px; flex-shrink: 0; }
-
-  /* TAB 2: Declarative Agent Studio */
-  .studio-container {
-    display: flex;
+  /* ------------------ Ortak sayfa / form iskeleti ------------------- */
+  .page {
     width: 100%;
     height: 100%;
-    background: var(--bg-dark);
-  }
-
-  .studio-sidebar {
-    width: 300px;
-    border-right: 1px solid var(--border-color);
-    background: var(--bg-panel-solid);
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .studio-sidebar h2 {
-    font-size: 15px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--primary);
-  }
-
-  .template-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .template-card {
-    padding: 12px 14px;
-    border-radius: 10px;
-    background: rgba(30, 41, 59, 0.5);
-    border: 1px solid var(--border-color);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .template-card:hover {
-    border-color: var(--primary);
-    background: rgba(59, 130, 246, 0.08);
-  }
-
-  .template-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
-  .template-card p { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
-
-  .studio-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    padding: 20px;
-    gap: 16px;
     overflow-y: auto;
   }
 
-  .editor-header {
+  .page-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 32px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+
+  .page-head { display: flex; flex-direction: column; gap: 7px; }
+
+  .page-head h2 {
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 26px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  .page-head p {
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--bone-dim);
+    max-width: 68ch;
+  }
+
+  /* Bölüm kartı — tanımlama alanları buraya gruplanır */
+  /* overflow kırpılmaz — araç seçici paneli kartın dışına açılır */
+  .section-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+  }
+
+  .section-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 12px;
-    border-bottom: 1px solid var(--border-color);
+    gap: 16px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(240, 238, 230, 0.02);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
 
-  .mode-switcher {
-    display: flex;
-    background: rgba(30, 41, 59, 0.6);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 3px;
-    gap: 4px;
-  }
-
-  .mode-btn {
-    padding: 6px 14px;
-    font-size: 12px;
+  .section-head h3 {
+    font-size: 11.5px;
     font-weight: 600;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    border-radius: 6px;
-    cursor: pointer;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--bone-dim);
     display: flex;
     align-items: center;
-    gap: 6px;
-    transition: all 0.2s;
+    gap: 9px;
   }
+  .section-head h3 i { color: var(--clay); font-size: 11px; }
+  .section-head .section-note { font-size: 12px; color: var(--bone-faint); }
 
-  .mode-btn.active {
-    background: var(--primary);
-    color: white;
-  }
-
-  .btn-primary {
-    padding: 8px 18px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-    color: white;
-    border: none;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    box-shadow: 0 4px 15px var(--primary-glow);
-    transition: all 0.2s;
-  }
-
-  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px var(--primary-glow); }
-
-  /* Visual Form Styles */
-  .visual-form-container {
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    background: var(--bg-panel-solid);
-    border: 1px solid var(--border-color);
-    border-radius: 14px;
-    padding: 24px;
-  }
+  .section-body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
 
   .form-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .form-group.full-width { grid-column: 1 / -1; }
+
+  @media (max-width: 780px) {
+    .form-grid { grid-template-columns: minmax(0, 1fr); }
   }
 
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .form-group.full-width {
-    grid-column: span 2;
-  }
+  .form-group { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 
   .form-group label {
     font-size: 13px;
     font-weight: 600;
-    color: var(--text-main);
+    color: var(--bone);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
   }
 
-  .form-group label span.hint {
-    font-size: 11px;
-    font-weight: 400;
-    color: var(--text-muted);
+  /* İpucu etiketin içinde değil altında durur; etiket kısa, ipucu okunur kalır */
+  .field-hint {
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--bone-faint);
+    order: 3;
+  }
+  .field-hint code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--bone-dim);
+    background: var(--surface-sunken);
+    padding: 1px 4px;
+    border-radius: 4px;
   }
 
   .form-control {
-    background: var(--bg-input);
-    border: 1px solid var(--border-color);
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
     border-radius: 10px;
-    padding: 10px 14px;
-    color: var(--text-main);
-    font-size: 13px;
-    outline: none;
+    padding: 10px 13px;
+    color: var(--bone);
     font-family: inherit;
-    transition: border-color 0.2s;
+    font-size: 13.5px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.15s, background 0.15s;
   }
-
-  .form-control:focus {
-    border-color: var(--primary);
-    box-shadow: 0 0 10px var(--primary-glow);
-  }
+  .form-control::placeholder { color: var(--bone-faint); }
+  .form-control:hover { border-color: var(--line-strong); }
+  .form-control:focus { border-color: var(--clay-line); background: var(--ground); }
 
   select.form-control {
     cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%23948F82' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
   }
 
-  textarea.form-control {
-    resize: vertical;
-    line-height: 1.5;
+  textarea.form-control { resize: vertical; line-height: 1.6; min-height: 68px; }
+
+  input.form-control.mono, textarea.form-control.mono {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
   }
 
-  /* Slot / Parameter Builder Table */
-  .params-section {
-    border-top: 1px solid var(--border-color);
-    padding-top: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
+  .form-control.invalid { border-color: rgba(224, 115, 106, 0.6); }
 
-  .params-header {
+  /* Butonlar */
+  .btn-primary {
+    padding: 10px 18px;
+    border-radius: 10px;
+    background: var(--clay);
+    color: var(--on-clay);
+    border: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .btn-primary:hover { background: var(--clay-bright); }
+
+  .btn-ghost {
+    padding: 9px 15px;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--bone-dim);
+    border: 1px solid var(--line-strong);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .btn-ghost:hover { color: var(--bone); border-color: var(--bone-faint); background: rgba(240, 238, 230, 0.04); }
+
+  /* Kaydetme çubuğu — sayfa kaydırılırken üstte kalır */
+  .action-bar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 16px;
+    padding: 12px 0;
+    background: var(--ground);
+    border-bottom: 1px solid var(--line);
   }
 
-  .params-header h4 {
-    font-size: 14px;
+  .mode-switcher {
+    display: flex;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 2px;
+  }
+
+  .mode-btn {
+    padding: 7px 14px;
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 500;
+    border: none;
+    background: transparent;
+    color: var(--bone-dim);
+    border-radius: 7px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: background 0.15s, color 0.15s;
+  }
+  .mode-btn:hover { color: var(--bone); }
+  .mode-btn.active { background: var(--surface-raised); color: var(--bone); box-shadow: inset 0 0 0 1px var(--line-strong); }
+
+  .action-bar-right { display: flex; align-items: center; gap: 12px; }
+  .action-bar-hint { font-size: 11.5px; color: var(--bone-faint); text-align: right; max-width: 30ch; line-height: 1.4; }
+
+  /* Durum bildirimi */
+  .status-toast {
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    display: none;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .status-toast.show { display: flex; }
+  .status-toast.success { background: rgba(127, 176, 138, 0.12); border: 1px solid rgba(127, 176, 138, 0.32); color: #9AC4A3; }
+  .status-toast.error   { background: rgba(224, 115, 106, 0.12); border: 1px solid rgba(224, 115, 106, 0.32); color: #EFA49D; }
+
+  /* ------------------ SEKME 2: Deklaratif Studio -------------------- */
+  .studio-container { display: flex; width: 100%; height: 100%; min-width: 0; }
+
+  .studio-sidebar {
+    width: 268px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--line);
+    background: var(--surface);
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+
+  .sidebar-title {
+    font-size: 11.5px;
     font-weight: 600;
-    color: #93c5fd;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--bone-faint);
     display: flex;
     align-items: center;
     gap: 8px;
+    padding: 0 4px;
   }
 
-  .btn-add-param {
-    padding: 6px 12px;
-    border-radius: 8px;
-    background: rgba(16, 185, 129, 0.15);
-    border: 1px solid rgba(16, 185, 129, 0.3);
-    color: #34d399;
-    font-size: 12px;
-    font-weight: 600;
+  .template-list { display: flex; flex-direction: column; gap: 7px; }
+
+  .template-card {
+    padding: 12px 14px;
+    border-radius: var(--radius);
+    background: transparent;
+    border: 1px solid var(--line);
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.2s;
+    text-align: left;
+    font-family: inherit;
+    color: inherit;
+    width: 100%;
+    transition: border-color 0.15s, background 0.15s;
   }
+  .template-card:hover { border-color: var(--clay-line); background: var(--clay-soft); }
+  .template-card.active { border-color: var(--clay-line); background: var(--clay-soft); }
 
-  .btn-add-param:hover {
-    background: rgba(16, 185, 129, 0.25);
+  .template-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--bone); }
+  .template-card p  { font-size: 11.5px; color: var(--bone-faint); line-height: 1.5; }
+
+  .studio-main { flex: 1; overflow-y: auto; min-width: 0; }
+  .studio-main .page-inner { max-width: 940px; padding-top: 0; }
+
+  /* Parametre satırları */
+  .params-table { display: flex; flex-direction: column; gap: 8px; }
+
+  .params-legend {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1.9fr 84px 36px;
+    gap: 10px;
+    padding: 0 2px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--bone-faint);
   }
+  .params-legend span:nth-child(4) { text-align: center; }
 
   .param-row {
     display: grid;
-    grid-template-columns: 1.5fr 1fr 2fr 80px 40px;
+    grid-template-columns: 1.4fr 1fr 1.9fr 84px 36px;
     gap: 10px;
     align-items: center;
-    background: rgba(15, 23, 42, 0.5);
-    padding: 10px;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-    animation: fadeIn 0.2s ease-out;
+    animation: fadeIn 0.18s ease-out;
+  }
+
+  @media (max-width: 880px) {
+    .params-legend { display: none; }
+    .param-row {
+      grid-template-columns: minmax(0, 1fr) 36px;
+      gap: 8px;
+      padding: 12px;
+      background: var(--surface-sunken);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+    .param-row .p-key  { grid-column: 1; }
+    .param-row .p-type { grid-column: 1; }
+    .param-row .p-desc { grid-column: 1; }
+    .param-row .checkbox-group { grid-column: 1; justify-content: flex-start; }
+    .param-row .btn-del-param { grid-column: 2; grid-row: 1; }
   }
 
   .btn-del-param {
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    color: #fca5a5;
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--bone-faint);
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
   }
-
-  .btn-del-param:hover { background: rgba(239, 68, 68, 0.3); }
+  .btn-del-param:hover { color: var(--danger); border-color: rgba(224, 115, 106, 0.4); background: rgba(224, 115, 106, 0.1); }
 
   .checkbox-group {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .checkbox-group input {
+    gap: 7px;
+    font-size: 12.5px;
+    color: var(--bone-dim);
     cursor: pointer;
-    accent-color: var(--primary);
+    user-select: none;
+  }
+  .checkbox-group input { cursor: pointer; accent-color: var(--clay); width: 15px; height: 15px; }
+
+  .empty-state {
+    padding: 26px 20px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--bone-faint);
+    line-height: 1.6;
+    border: 1px dashed var(--line-strong);
+    border-radius: var(--radius);
   }
 
-  .yaml-editor-pane {
-    display: none;
-    flex-direction: column;
-    flex: 1;
-    gap: 10px;
-  }
-
-  .yaml-editor-pane.active {
-    display: flex;
-  }
-
+  /* YAML editörü */
   .yaml-editor {
-    flex: 1;
-    min-height: 420px;
-    background: #080d1a;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
+    width: 100%;
+    min-height: 460px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
     padding: 16px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    color: #a5b4fc;
-    line-height: 1.6;
+    font-size: 12.5px;
+    color: var(--bone);
+    line-height: 1.7;
     outline: none;
-    resize: none;
+    resize: vertical;
+    tab-size: 2;
+  }
+  .yaml-editor:focus { border-color: var(--clay-line); }
+  .yaml-editor[readonly] { color: var(--bone-dim); }
+
+  #pane-yaml { display: none; flex-direction: column; gap: 10px; }
+  #pane-yaml.active { display: flex; }
+  #pane-form.hidden { display: none; }
+
+  details.yaml-preview { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+  details.yaml-preview > summary {
+    padding: 13px 18px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--bone-dim);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  details.yaml-preview > summary::-webkit-details-marker { display: none; }
+  details.yaml-preview > summary::before { content: '\f105'; font-family: 'Font Awesome 6 Free'; font-weight: 900; color: var(--clay); transition: transform 0.15s; }
+  details.yaml-preview[open] > summary::before { transform: rotate(90deg); }
+  details.yaml-preview .yaml-editor { border: none; border-top: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); min-height: 220px; }
+
+  /* -------------------- Araç seçici (dropdown) ---------------------- */
+  .tool-picker { position: relative; display: flex; flex-direction: column; gap: 10px; }
+
+  .tool-picker-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 11px 14px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--bone);
+    font-family: inherit;
+    font-size: 13.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .tool-picker-trigger:hover { border-color: var(--line-strong); }
+  .tool-picker-trigger[aria-expanded="true"] { border-color: var(--clay-line); }
+  .tool-picker-trigger .placeholder { color: var(--bone-faint); }
+  .tool-picker-trigger .chevron { color: var(--bone-faint); font-size: 11px; transition: transform 0.15s; }
+  .tool-picker-trigger[aria-expanded="true"] .chevron { transform: rotate(180deg); }
+
+  .tool-picker-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    z-index: 60;
+    background: var(--surface-raised);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--radius);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: fadeIn 0.14s ease-out;
+  }
+  .tool-picker-panel[hidden] { display: none; }
+
+  .tool-picker-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tool-picker-search i { color: var(--bone-faint); font-size: 12px; }
+  .tool-picker-search input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--bone);
+    font-family: inherit;
+    font-size: 13.5px;
+  }
+  .tool-picker-search input::placeholder { color: var(--bone-faint); }
+
+  /* Kategori filtresi — değerler sunucudan gelen gruplardan üretilir */
+  .tool-picker-cats {
+    display: flex;
+    gap: 6px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
   }
 
-  .status-toast {
-    padding: 12px 16px;
-    border-radius: 10px;
-    font-size: 13px;
-    display: none;
+  .cat-pill {
+    padding: 5px 12px;
+    border-radius: 99px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--bone-dim);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    display: flex;
     align-items: center;
+    gap: 7px;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .cat-pill:hover { color: var(--bone); border-color: var(--line-strong); }
+  .cat-pill.active { background: var(--clay-soft); border-color: var(--clay-line); color: var(--clay-bright); }
+  .cat-pill .cat-count {
+    font-size: 10.5px;
+    color: var(--bone-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .cat-pill.active .cat-count { color: var(--clay-bright); opacity: 0.75; }
+
+  .tool-picker-list {
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .tool-group-label {
+    padding: 10px 10px 5px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--bone-faint);
+  }
+
+  .tool-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 9px 10px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .tool-option:hover { background: rgba(240, 238, 230, 0.05); }
+  .tool-option input { margin-top: 2px; accent-color: var(--clay); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+  .tool-option .tool-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    color: var(--bone);
+    display: block;
+    margin-bottom: 2px;
+    word-break: break-all;
+  }
+  .tool-option .tool-desc { font-size: 11.5px; color: var(--bone-faint); line-height: 1.45; display: block; }
+  .tool-option mark { background: rgba(217, 119, 87, 0.28); color: var(--clay-bright); border-radius: 2px; padding: 0 1px; }
+
+  .tool-picker-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--line);
+    background: rgba(240, 238, 230, 0.02);
+  }
+  .tool-picker-foot .count { font-size: 12px; color: var(--bone-dim); font-variant-numeric: tabular-nums; }
+  .tool-picker-foot .foot-actions { display: flex; gap: 8px; }
+
+  .btn-link {
+    background: none;
+    border: none;
+    color: var(--bone-dim);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: color 0.15s, background 0.15s;
+  }
+  .btn-link:hover { color: var(--clay-bright); background: var(--clay-soft); }
+
+  /* Seçilen araçların rozetleri */
+  .tool-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  .tool-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 7px 5px 11px;
+    border-radius: 99px;
+    background: var(--clay-soft);
+    border: 1px solid var(--clay-line);
+    color: var(--clay-bright);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+  }
+  .tool-chip button {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    opacity: 0.6;
+    font-size: 11px;
+    padding: 2px;
+    line-height: 1;
+    border-radius: 50%;
+    transition: opacity 0.15s;
+  }
+  .tool-chip button:hover { opacity: 1; }
+
+  /* --------------- Kart listeleri (uzman / tanılama) ---------------- */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+    gap: 14px;
+  }
+
+  .info-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+
+  .info-card h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .info-card h4 i { color: var(--clay); font-size: 12px; }
+  .info-card .card-desc { font-size: 12px; color: var(--bone-dim); line-height: 1.5; margin-bottom: 12px; }
+
+  .card-meta { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; }
+  .card-meta-row { display: flex; gap: 8px; align-items: baseline; }
+  .card-meta-row .k { color: var(--bone-faint); flex-shrink: 0; min-width: 52px; }
+  .card-meta-row .v { color: var(--bone-dim); word-break: break-all; }
+  .card-meta-row code { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--bone); }
+
+  /* Tanılama metrik kartı */
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
     gap: 10px;
   }
 
-  .status-toast.success { background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); color: #34d399; }
-  .status-toast.error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #fca5a5; }
-
-  /* TAB 3: Diagnostics Page */
-  .diag-container {
-    width: 100%;
-    height: 100%;
-    padding: 30px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .diag-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
-  }
-
-  .diag-card {
-    background: var(--bg-panel-solid);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    padding: 20px;
-  }
-
-  .diag-card h3 {
-    font-size: 14px;
-    color: var(--text-muted);
-    margin-bottom: 12px;
+  .metric-card h3 {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--bone-faint);
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .diag-card .val {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--primary);
+  .metric-card .val {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--bone);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    word-break: break-word;
   }
+  .metric-card .val.sm { font-size: 15px; font-weight: 500; }
+  .metric-card .val.ok { color: var(--ok); }
+  .metric-card .val.accent { color: var(--clay-bright); }
 </style>
 </head>
 <body>
 
-  <!-- Header -->
   <header>
     <div class="brand">
-      <div class="brand-logo"><i class="fa-solid fa-brain"></i></div>
+      <div class="brand-logo"><i class="fa-solid fa-diagram-project"></i></div>
       <div class="brand-title">
-        <h1>TKFB Agentic Platform</h1>
-        <span>Microsoft Agent Framework · MCP · A2A Engine</span>
+        <h1>TKFB Agentic</h1>
+        <span>Agent Framework · MCP · A2A</span>
       </div>
     </div>
 
-    <div class="nav-tabs">
+    <nav class="nav-tabs">
       <button class="tab-btn active" onclick="switchTab('chat-tab', event)">
-        <i class="fa-solid fa-comments"></i> AI Asistan & Canlı İzleme
+        <i class="fa-solid fa-comments"></i> Asistan
       </button>
       <button class="tab-btn" onclick="switchTab('studio-tab', event)">
-        <i class="fa-solid fa-wand-magic-sparkles"></i> Deklaratif Agent Studio (Görsel Form)
+        <i class="fa-solid fa-wand-magic-sparkles"></i> İş Akışları
       </button>
       <button class="tab-btn" onclick="switchTab('specialist-tab', event); loadSpecialistStudio();">
-        <i class="fa-solid fa-user-gear"></i> Uzman Ajan Studio (A2A)
+        <i class="fa-solid fa-user-gear"></i> Uzman Ajanlar
       </button>
       <button class="tab-btn" onclick="switchTab('diag-tab', event); fetchDiag();">
-        <i class="fa-solid fa-chart-line"></i> Sistem Tanılama
+        <i class="fa-solid fa-gauge-high"></i> Tanılama
       </button>
-    </div>
+    </nav>
 
-    <div class="header-actions">
-      <div class="user-badge">
-        <div class="user-avatar">YE</div>
-        <span>Yusuf Efe Mayda</span>
-      </div>
+    <div class="user-badge">
+      <div class="user-avatar">YE</div>
+      <span>Yusuf Efe Mayda</span>
     </div>
   </header>
 
-  <!-- Main Content -->
   <div id="app-content">
 
-    <!-- TAB 1: Chat & TraceHub Split Layout -->
+    <!-- ================= SEKME 1: Sohbet + TraceHub ================= -->
     <div id="chat-tab" class="tab-content active">
-      <!-- Chat Left Pane -->
       <div class="chat-pane">
         <div id="chat-messages">
           <div class="msg bot">
@@ -998,229 +1302,397 @@
             <button class="chip" onclick="quick('Hesaplarımı ve bakiyelerimi listeler misin?')"><i class="fa-solid fa-wallet"></i> Hesaplarım</button>
             <button class="chip" onclick="quick('Kredi kartı borçlarım ne kadar?')"><i class="fa-solid fa-credit-card"></i> Kart Borcum</button>
             <button class="chip" onclick="quick('Kartımın kullanılabilir limiti nedir?')"><i class="fa-solid fa-gauge-high"></i> Limitim</button>
-            <button class="chip highlight" onclick="quick('Kart borcumu ödemek istiyorum')"><i class="fa-solid fa-money-bill-transfer"></i> 💳 Kart Borcu Öde</button>
+            <button class="chip highlight" onclick="quick('Kart borcumu ödemek istiyorum')"><i class="fa-solid fa-money-bill-transfer"></i> Kart Borcu Öde</button>
           </div>
           <div class="input-box">
-            <input id="input-msg" placeholder="Bir bankacılık sorusu sorun veya işlem başlatın..." autocomplete="off" onkeydown="if(event.key==='Enter')sendMsg()" />
-            <button class="btn-send" id="btn-send" onclick="sendMsg()"><i class="fa-solid fa-paper-plane"></i></button>
+            <input id="input-msg" placeholder="Bir bankacılık sorusu sorun veya işlem başlatın…" autocomplete="off" onkeydown="if(event.key==='Enter')sendMsg()" />
+            <button class="btn-send" id="btn-send" onclick="sendMsg()" aria-label="Gönder"><i class="fa-solid fa-arrow-up"></i></button>
           </div>
         </div>
       </div>
 
-      <!-- TraceHub Right Pane -->
       <div class="trace-pane">
         <div class="trace-header">
           <div class="trace-title">
             <div class="status-dot" id="status-dot"></div>
-            <h2>TraceHub Live Stream</h2>
+            <h2>TraceHub · Canlı Akış</h2>
           </div>
-          <div class="trace-actions">
-            <button class="btn-icon" onclick="clearTrace()"><i class="fa-solid fa-trash-can"></i> Temizle</button>
-          </div>
+          <button class="btn-icon" onclick="clearTrace()"><i class="fa-solid fa-eraser"></i> Temizle</button>
         </div>
         <div id="trace-log"></div>
       </div>
     </div>
 
-    <!-- TAB 2: Declarative Agent Studio (User-Friendly Visual Form + Live YAML) -->
+    <!-- ================= SEKME 2: Deklaratif İş Akışı Studio ========= -->
     <div id="studio-tab" class="tab-content">
       <div class="studio-container">
-        <!-- Studio Sidebar Templates -->
-        <div class="studio-sidebar">
-          <h2><i class="fa-solid fa-layer-group"></i> Hazır Şablonlar</h2>
+
+        <aside class="studio-sidebar">
+          <div class="sidebar-title"><i class="fa-solid fa-layer-group"></i> Hazır Şablonlar</div>
           <div class="template-list">
-            <div class="template-card" onclick="loadTemplate('limit')">
-              <h4>💳 Limit Artırım Akışı</h4>
-              <p>Kredi kartı limit artırım taleplerini toplar ve onay sürecini başlatır.</p>
-            </div>
-            <div class="template-card" onclick="loadTemplate('otomatik')">
-              <h4>🔄 Otomatik Ödeme Talimatı</h4>
-              <p>Fatura ve kart ödemeleri için otomatik ödeme talimatı tanımlar.</p>
-            </div>
-            <div class="template-card" onclick="loadTemplate('kayip')">
-              <h4>🚨 Kayıp/Çalıntı Kart İptali</h4>
-              <p>Kayıp kart bildirimini alıp anında dondurma teklifi sunar.</p>
-            </div>
+            <button class="template-card" data-template="limit" onclick="loadTemplate('limit')">
+              <h4>Limit Artırım Akışı</h4>
+              <p>Kart limiti artırma talebini toplar, onay sürecini başlatır.</p>
+            </button>
+            <button class="template-card" data-template="otomatik" onclick="loadTemplate('otomatik')">
+              <h4>Otomatik Ödeme Talimatı</h4>
+              <p>Fatura ve kart ödemeleri için talimat tanımlar.</p>
+            </button>
+            <button class="template-card" data-template="kayip" onclick="loadTemplate('kayip')">
+              <h4>Kayıp / Çalıntı Kart</h4>
+              <p>Kayıp kart bildirimini alır, anında dondurma teklifi sunar.</p>
+            </button>
           </div>
-        </div>
-
-        <!-- Studio Main Form -->
-        <div class="studio-main">
-          <div class="editor-header">
-            <div class="mode-switcher">
-              <button class="mode-btn active" id="btn-mode-form" onclick="setStudioMode('form')">
-                <i class="fa-solid fa-list-check"></i> Kullanıcı Dostu Görsel Form
-              </button>
-              <button class="mode-btn" id="btn-mode-yaml" onclick="setStudioMode('yaml')">
-                <i class="fa-solid fa-code"></i> YAML Kod Önizleme
-              </button>
-            </div>
-
-            <div class="editor-actions">
-              <button class="btn-primary" onclick="registerDeclarative()"><i class="fa-solid fa-cloud-arrow-up"></i> Sisteme Kaydet & Indeksle (Zero Cold-Start)</button>
-            </div>
-          </div>
-
-          <!-- Mode 1: Visual Form Builder -->
-          <div id="pane-form" class="visual-form-container">
-            <div class="form-grid">
-              <div class="form-group">
-                <label><i class="fa-solid fa-cube"></i> Ajan / Akış Türü Seçimi</label>
-                <select id="form-kind" class="form-control" onchange="updateYamlFromForm()">
-                  <option value="Prompt">Prompt (İş Akışı / Dynamic Workflow)</option>
-                  <option value="Agent">Agent (Diyalog / Sohbet Ajanı)</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label><i class="fa-solid fa-tag"></i> Sistem İsim Kodu <span class="hint">(Küçük harf, tireli: örn limit-artirim)</span></label>
-                <input id="form-name" class="form-control" placeholder="limit-artirim" oninput="updateYamlFromForm()" />
-              </div>
-
-              <div class="form-group">
-                <label><i class="fa-solid fa-heading"></i> Görünür Başlık (DisplayName)</label>
-                <input id="form-displayname" class="form-control" placeholder="Kredi Kartı Limit Artırım Akışı" oninput="updateYamlFromForm()" />
-              </div>
-
-              <div class="form-group">
-                <label><i class="fa-solid fa-sliders"></i> Model Sıcaklığı (Temperature)</label>
-                <select id="form-temp" class="form-control" onchange="updateYamlFromForm()">
-                  <option value="0.0">0.0 (Kesin / Deterministik)</option>
-                  <option value="0.1" selected>0.1 (Önerilen)</option>
-                  <option value="0.2">0.2 (Dengeli)</option>
-                  <option value="0.7">0.7 (Yaratıcı)</option>
-                </select>
-              </div>
-
-              <div class="form-group full-width">
-                <label><i class="fa-solid fa-align-left"></i> Akış Açıklaması (Description) <span class="hint">(RAG Vektör aramasında ne zaman tetikleneceğini belirler)</span></label>
-                <textarea id="form-desc" class="form-control" rows="2" placeholder="Kullanıcının kredi kartı limitini artırma taleplerini ve gerekli tutar bilgilerini toplar." oninput="updateYamlFromForm()"></textarea>
-              </div>
-
-              <div class="form-group full-width">
-                <label><i class="fa-solid fa-comment-dots"></i> Ajan Talimatları (Instructions) <span class="hint">(Yapay Zekanın kullanıcıdan hangi bilgileri sırayla isteyeceği)</span></label>
-                <textarea id="form-instructions" class="form-control" rows="3" placeholder="Kullanıcıdan limit artırımı istediği kartı ve talep ettiği yeni limiti sırayla iste. Bilgiler tamamlandığında propose_limit_artirim çağır." oninput="updateYamlFromForm()"></textarea>
-              </div>
-            </div>
-
-            <!-- Dynamic Parameter (Slot) Builder -->
-            <div class="params-section">
-              <div class="params-header">
-                <h4><i class="fa-solid fa-list-ol"></i> İş Akışı Parametreleri / Slotlar (inputSchema)</h4>
-                <button class="btn-add-param" onclick="addParamRow()"><i class="fa-solid fa-plus"></i> Yeni Parametre Ekle</button>
-              </div>
-
-              <div id="params-container" style="display: flex; flex-direction: column; gap: 10px;">
-                <!-- Rows injected dynamically -->
-              </div>
-            </div>
-          </div>
-
-          <!-- Mode 2: Raw YAML Code Editor -->
-          <div id="pane-yaml" class="yaml-editor-pane">
-            <textarea id="yaml-input" class="yaml-editor" spellcheck="false" oninput="updateFormFromYaml()"></textarea>
-          </div>
-
-          <div id="studio-status" class="status-toast"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- TAB 3: Uzman Ajan Studio — uzman tanımı, araç kapsamı ve A2A adresi arayüzden -->
-    <div id="specialist-tab" class="tab-content">
-      <div class="diag-container">
-        <h2 style="font-size: 20px; font-weight: 700;">Uzman Ajan Studio</h2>
-        <p style="color: var(--text-muted); margin: 6px 0 18px; font-size: 13px;">
-          Uzman ajanlar banka verisine erişen tek katmandır; iş akışı ajanları veriyi yalnızca buradan,
-          A2A üzerinden alır. Kaydettiğiniz uzman <b>yeniden başlatmaya gerek kalmadan</b> anında konuşulabilir olur.
-        </p>
-
-        <div class="form-grid">
-          <div class="form-group">
-            <label><i class="fa-solid fa-id-badge"></i> Uzman Adı (teknik kimlik)</label>
-            <input id="sp-name" class="form-control" placeholder="kredi" oninput="updateSpecialistYaml()">
-          </div>
-          <div class="form-group">
-            <label><i class="fa-solid fa-tag"></i> Görünen Ad</label>
-            <input id="sp-display" class="form-control" placeholder="Kredi Uzmanı" oninput="updateSpecialistYaml()">
-          </div>
-          <div class="form-group" style="grid-column: 1 / -1;">
-            <label><i class="fa-solid fa-circle-info"></i> Açıklama — <b>ne zaman bu uzmana sorulacağını</b> bu metin belirler</label>
-            <input id="sp-desc" class="form-control" placeholder="Kredi, taksit ve finansman sorularını yanıtlayan uzman." oninput="updateSpecialistYaml()">
-          </div>
-          <div class="form-group" style="grid-column: 1 / -1;">
-            <label><i class="fa-solid fa-scroll"></i> Talimat (nasıl davranacağı)</label>
-            <textarea id="sp-instructions" class="form-control" rows="4" oninput="updateSpecialistYaml()"
-              placeholder="Kullanıcıya uygun finansman seçeneklerini bul ve faiz oranıyla birlikte sade bir dille anlat."></textarea>
-          </div>
-          <div class="form-group">
-            <label><i class="fa-solid fa-diagram-project"></i> A2A Adresi</label>
-            <input id="sp-route" class="form-control" placeholder="kredi" oninput="updateSpecialistYaml()">
-            <small style="color: var(--text-muted);">Adres: <code id="sp-route-preview">/a2a/...</code></small>
-          </div>
-          <div class="form-group">
-            <label><i class="fa-solid fa-plug"></i> Köprü Aracı Adı (çağıranların göreceği ad)</label>
-            <input id="sp-bridge" class="form-control" placeholder="kredi_uzmanina_sor" oninput="updateSpecialistYaml()">
-          </div>
-          <div class="form-group">
-            <label><i class="fa-solid fa-temperature-half"></i> Temperature</label>
-            <input id="sp-temp" class="form-control" type="number" step="0.1" min="0" max="2" placeholder="0.1" oninput="updateSpecialistYaml()">
-          </div>
-        </div>
-
-        <div class="form-group" style="margin-top: 14px;">
-          <label><i class="fa-solid fa-screwdriver-wrench"></i> Kullanabileceği Araçlar — seçilmeyen araca <b>erişemez</b></label>
-          <div id="sp-tools" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; max-height: 260px; overflow-y: auto; padding: 10px; border: 1px solid var(--border); border-radius: 8px;"></div>
-        </div>
-
-        <div class="editor-actions" style="margin-top: 16px;">
-          <button class="btn-primary" onclick="registerSpecialist()">
-            <i class="fa-solid fa-cloud-arrow-up"></i> Uzmanı Kaydet & A2A'ya Bağla
+          <div class="sidebar-title" style="margin-top: 8px;"><i class="fa-solid fa-file-circle-plus"></i> Yeni</div>
+          <button class="template-card" onclick="resetWorkflowForm()">
+            <h4>Boş Tanımdan Başla</h4>
+            <p>Formu temizler, sıfırdan iş akışı tanımlarsınız.</p>
           </button>
-        </div>
+        </aside>
 
-        <div id="sp-status" class="status-toast"></div>
+        <main class="studio-main">
+          <div class="page-inner">
 
-        <h3 style="margin-top: 26px; font-size: 16px; font-weight: 700;">Kayıtlı Uzmanlar</h3>
-        <div id="sp-list" class="diag-grid" style="margin-top: 10px;"></div>
+            <div class="action-bar">
+              <div class="mode-switcher">
+                <button class="mode-btn active" id="btn-mode-form" onclick="setStudioMode('form')">
+                  <i class="fa-solid fa-list-check"></i> Form
+                </button>
+                <button class="mode-btn" id="btn-mode-yaml" onclick="setStudioMode('yaml')">
+                  <i class="fa-solid fa-code"></i> YAML
+                </button>
+              </div>
+              <div class="action-bar-right">
+                <span class="action-bar-hint">Kayıt anında indekslenir, yeniden başlatma gerekmez.</span>
+                <button class="btn-primary" onclick="registerDeclarative()">
+                  <i class="fa-solid fa-cloud-arrow-up"></i> Kaydet ve Yayına Al
+                </button>
+              </div>
+            </div>
 
-        <h3 style="margin-top: 26px; font-size: 16px; font-weight: 700;">Üretilen Tanım</h3>
-        <textarea id="sp-yaml" class="yaml-editor" spellcheck="false" readonly style="min-height: 200px;"></textarea>
+            <div class="page-head">
+              <h2>İş Akışı Tanımı</h2>
+              <p>Bir iş akışı, kullanıcıdan sırayla bilgi toplayıp onay sonrası bankaya işlem gönderen adımlar bütünüdür. Aşağıdaki alanlar Microsoft Agent Framework YAML tanımına birebir çevrilir.</p>
+            </div>
+
+            <div id="studio-status" class="status-toast"></div>
+
+            <!-- Form modu -->
+            <div id="pane-form" style="display: flex; flex-direction: column; gap: 18px;">
+
+              <section class="section-card">
+                <div class="section-head">
+                  <h3><i class="fa-solid fa-id-card"></i> Kimlik</h3>
+                  <span class="section-note">Akışın sistemdeki adı ve türü</span>
+                </div>
+                <div class="section-body">
+                  <div class="form-grid">
+                    <div class="form-group">
+                      <label for="form-kind">Akış türü</label>
+                      <select id="form-kind" class="form-control" onchange="updateYamlFromForm()">
+                        <option value="Prompt">İş akışı — Adımlardan oluşan iş akışı </option>
+                        <option value="Agent">Agent — serbest diyalog kurar</option>
+                      </select>
+                      <span class="field-hint">Para hareketi vb. hareketler içeren akışlar <code>İş akışı</code> olmalıdır; onay adımı bu türde kurulur.</span>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-name">Sistem adı</label>
+                      <input id="form-name" class="form-control mono" placeholder="limit-artirim" oninput="updateYamlFromForm()" onblur="slugifyField(this)" />
+                      <span class="field-hint">Küçük harf ve tire. Dosya adı ve kayıt anahtarı olarak kullanılır. Alandan çıkınca otomatik düzeltilir.</span>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-displayname">Görünen ad</label>
+                      <input id="form-displayname" class="form-control" placeholder="Kredi Kartı Limit Artırım Akışı" oninput="updateYamlFromForm()" />
+                      <span class="field-hint">Ekranlarda ve kayıt listelerinde bu ad görünür.</span>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-temp">Model sıcaklığı</label>
+                      <select id="form-temp" class="form-control" onchange="updateYamlFromForm()">
+                        <option value="0.0">0.0 — kesin, hep aynı yanıt</option>
+                        <option value="0.1" selected>0.1 — önerilen</option>
+                        <option value="0.2">0.2 — dengeli</option>
+                        <option value="0.7">0.7 — serbest ifade</option>
+                      </select>
+                      <span class="field-hint">Bilgi toplayan akışlarda düşük tutun; yüksek değer alan değerlerini tutarsızlaştırır.</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="section-card">
+                <div class="section-head">
+                  <h3><i class="fa-solid fa-comment-dots"></i> Davranış</h3>
+                  <span class="section-note">Ne zaman tetiklenir, nasıl konuşur</span>
+                </div>
+                <div class="section-body">
+                  <div class="form-grid">
+                    <div class="form-group full-width">
+                      <label for="form-desc">Ne zaman tetiklenmeli?</label>
+                      <textarea id="form-desc" class="form-control" rows="2" placeholder="Kullanıcının kredi kartı limitini artırma taleplerini ve gerekli tutar bilgilerini toplar." oninput="updateYamlFromForm()"></textarea>
+                      <span class="field-hint">Kullanıcı cümlesiyle bu metin karşılaştırılarak akış aday listesine girer. Kullanıcının kuracağı cümleleri anlatan bir dil kullanın.</span>
+                    </div>
+
+                    <div class="form-group full-width">
+                      <label for="form-instructions">Ajan talimatı</label>
+                      <textarea id="form-instructions" class="form-control" rows="4" placeholder="Kullanıcıdan limit artırımı istediği kartı ve talep ettiği yeni limiti sırayla iste. Bilgiler tamamlandığında propose_limit_artirim çağır." oninput="updateYamlFromForm()"></textarea>
+                      <span class="field-hint">Hangi bilgiyi hangi sırayla isteyeceğini yazın. Eksik bilgiyi ajanın uydurması yasaktır; bu kural sistem tarafından ayrıca eklenir.</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="section-card">
+                <div class="section-head">
+                  <h3><i class="fa-solid fa-list-ol"></i> Parametreler</h3>
+                  <button class="btn-ghost" onclick="addParamRow()"><i class="fa-solid fa-plus"></i> Parametre ekle</button>
+                </div>
+                <div class="section-body">
+                  <div class="params-table">
+                    <div class="params-legend">
+                      <span>Ad</span><span>Tip</span><span>Açıklama</span><span>Zorunlu</span><span></span>
+                    </div>
+                    <div id="params-container" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                    <div id="params-empty" class="empty-state" style="display: none;">
+                      Henüz parametre yok. Akışın kullanıcıdan toplayacağı her bilgi için bir parametre ekleyin.
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="section-card">
+                <div class="section-head">
+                  <h3><i class="fa-solid fa-paper-plane"></i> Banka Aksiyonu</h3>
+                  <span class="section-note">Onaydan sonra çağrılacak uç</span>
+                </div>
+                <div class="section-body">
+                  <div class="form-grid">
+                    <div class="form-group">
+                      <label for="form-action-method">HTTP metodu</label>
+                      <select id="form-action-method" class="form-control" onchange="updateYamlFromForm()">
+                        <option value="PUT" selected>PUT</option>
+                        <option value="POST">POST</option>
+                        <option value="PATCH">PATCH</option>
+                        <option value="DELETE">DELETE</option>
+                      </select>
+                      <span class="field-hint">Yol boşsa bu seçim kullanılmaz.</span>
+                    </div>
+
+                    <div class="form-group">
+                      <label for="form-action-path">İstek yolu</label>
+                      <input id="form-action-path" class="form-control mono" placeholder="/api/newCreditCardRequest" oninput="updateYamlFromForm()" />
+                      <span class="field-hint">Bankadaki uç; parametreler bu gövdeye yazılır. <strong>Boş bırakılırsa</strong> akış bankaya hiç istek atmaz ve onay ekranı kurulmaz — talep yalnızca kaydedilmiş sayılır.</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <details class="yaml-preview">
+                <summary>Üretilen YAML</summary>
+                <textarea id="yaml-mirror" class="yaml-editor" spellcheck="false" readonly></textarea>
+              </details>
+            </div>
+
+            <!-- YAML modu -->
+            <div id="pane-yaml">
+              <div class="status-toast show" style="background: rgba(240,238,230,0.04); border: 1px solid var(--line); color: var(--bone-dim);">
+                <i class="fa-solid fa-circle-info" style="margin-top: 2px;"></i>
+                <span>Bu alanı elle düzenleyebilirsiniz; kayıt buradaki içerikle yapılır. Form moduna dönüp bir alanı değiştirirseniz içerik formdan yeniden üretilir.</span>
+              </div>
+              <textarea id="yaml-input" class="yaml-editor" spellcheck="false"></textarea>
+            </div>
+
+          </div>
+        </main>
       </div>
     </div>
 
-    <!-- TAB 4: Diagnostics Page -->
-    <div id="diag-tab" class="tab-content">
-      <div class="diag-container">
-        <h2 style="font-size: 20px; font-weight: 700;">Sistem Diagnostik & RAG Durumu</h2>
-        <div class="diag-grid">
-          <div class="diag-card">
-            <h3><i class="fa-solid fa-key"></i> LLM Bağlantı Durumu</h3>
-            <div class="val" id="diag-key" style="font-size: 18px; color: var(--accent-emerald);">Yükleniyor...</div>
-          </div>
-          <div class="diag-card">
-            <h3><i class="fa-solid fa-microchip"></i> Model</h3>
-            <div class="val" id="diag-model">...</div>
-          </div>
-          <div class="diag-card">
-            <h3><i class="fa-solid fa-screwdriver-wrench"></i> Aktif MCP Araç Sayısı</h3>
-            <div class="val" id="diag-mcp">0</div>
-          </div>
-          <div class="diag-card">
-            <h3><i class="fa-solid fa-network-wired"></i> Uzman Ajan Transport</h3>
-            <div class="val" id="diag-transport" style="font-size: 18px; color: var(--accent-cyan);">...</div>
-          </div>
-        </div>
+    <!-- ================= SEKME 3: Uzman Ajan Studio ================== -->
+    <div id="specialist-tab" class="tab-content">
+      <div class="page">
+        <div class="page-inner">
 
-        <h2 style="font-size: 20px; font-weight: 700; margin-top: 24px;">Kampanya Senkronizasyonu</h2>
-        <div class="diag-card" style="max-width: 480px;">
-          <h3><i class="fa-solid fa-rotate"></i> Backend Kampanya Senkronizasyonu</h3>
-          <p style="font-size: 13px; opacity: 0.75; margin: 4px 0 12px;">
-            Backend'deki yeni/güncellenmiş kampanyaları çeker, kataloğa yazar ve arama kesintiye
-            uğramadan (zero-downtime) semantik indekse ekler.
-          </p>
-          <button class="btn-primary" onclick="syncCampaigns()"><i class="fa-solid fa-rotate"></i> Kampanyaları Senkronize Et</button>
-          <div class="val" id="campaign-sync-result" style="font-size: 14px; margin-top: 10px;"></div>
+          <div class="action-bar">
+            <div class="page-head" style="gap: 0;">
+              <h2 style="font-size: 20px;">Uzman Ajan Tanımı</h2>
+            </div>
+            <div class="action-bar-right">
+              <span class="action-bar-hint">Kayıt sonrası uzman anında konuşulabilir olur.</span>
+              <button class="btn-primary" onclick="registerSpecialist()">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Uzmanı Kaydet
+              </button>
+            </div>
+          </div>
+
+          <div class="page-head">
+            <p>Uzman ajanlar banka verisine erişen tek katmandır; iş akışı ajanları veriyi yalnızca buradan, A2A üzerinden alır. Kaydettiğiniz uzman <strong>yeniden başlatmaya gerek kalmadan</strong> devreye girer.</p>
+          </div>
+
+          <div id="sp-status" class="status-toast"></div>
+
+          <section class="section-card">
+            <div class="section-head">
+              <h3><i class="fa-solid fa-id-card"></i> Kimlik</h3>
+              <span class="section-note">Uzmanın adı ve uzmanlık alanı</span>
+            </div>
+            <div class="section-body">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="sp-name">Sistem adı</label>
+                  <input id="sp-name" class="form-control mono" placeholder="kredi" oninput="updateSpecialistYaml()" onblur="slugifyField(this); updateSpecialistYaml();">
+                  <span class="field-hint">Küçük harf ve tire. Derlenmiş bir uzmanın adıyla aynı olamaz.</span>
+                </div>
+
+                <div class="form-group">
+                  <label for="sp-display">Görünen ad</label>
+                  <input id="sp-display" class="form-control" placeholder="Kredi Uzmanı" oninput="updateSpecialistYaml()">
+                  <span class="field-hint">Listelerde ve izleme kayıtlarında bu ad görünür.</span>
+                </div>
+
+                <div class="form-group full-width">
+                  <label for="sp-desc">Bu uzmana ne zaman sorulmalı?</label>
+                  <textarea id="sp-desc" class="form-control" rows="2" placeholder="Kredi, taksit ve finansman sorularını yanıtlayan uzman." oninput="updateSpecialistYaml()"></textarea>
+                  <span class="field-hint">Orkestratör yönlendirme kararını bu metne bakarak verir — kapsamı net yazın.</span>
+                </div>
+
+                <div class="form-group full-width">
+                  <label for="sp-instructions">Talimat</label>
+                  <textarea id="sp-instructions" class="form-control" rows="4" placeholder="Kullanıcıya uygun finansman seçeneklerini bul ve faiz oranıyla birlikte sade bir dille anlat." oninput="updateSpecialistYaml()"></textarea>
+                  <span class="field-hint">Uzmanın nasıl davranacağı: hangi aracı ne zaman çağıracağı, yanıtı hangi ayrıntıda vereceği.</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section-card">
+            <div class="section-head">
+              <h3><i class="fa-solid fa-screwdriver-wrench"></i> Araç Erişimi</h3>
+              <span class="section-note">Seçilmeyen araca erişemez</span>
+            </div>
+            <div class="section-body">
+              <div class="form-group">
+                <label for="tool-picker-trigger">Kullanabileceği araçlar</label>
+
+                <div class="tool-picker" id="tool-picker">
+                  <button type="button" class="tool-picker-trigger" id="tool-picker-trigger"
+                          aria-expanded="false" aria-haspopup="listbox" onclick="toggleToolPicker()">
+                    <span id="tool-picker-summary" class="placeholder">Araç seçmek için tıklayın…</span>
+                    <i class="fa-solid fa-chevron-down chevron"></i>
+                  </button>
+
+                  <div class="tool-picker-panel" id="tool-picker-panel" hidden role="listbox">
+                    <div class="tool-picker-search">
+                      <i class="fa-solid fa-magnifying-glass"></i>
+                      <input id="tool-search" placeholder="Araç adı veya açıklamasında ara…" autocomplete="off" oninput="renderToolOptions()">
+                    </div>
+                    <div class="tool-picker-cats" id="tool-cats"></div>
+                    <div class="tool-picker-list" id="tool-list"></div>
+                    <div class="tool-picker-foot">
+                      <span class="count" id="tool-picker-count">0 araç seçili</span>
+                      <div class="foot-actions">
+                        <button type="button" class="btn-link" onclick="selectVisibleTools()">Görünenleri seç</button>
+                        <button type="button" class="btn-link" onclick="clearSelectedTools()">Seçimi temizle</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="tool-chips" id="tool-chips"></div>
+                </div>
+
+                <span class="field-hint">Listedeki araçlar MCP kayıt defterinden okunur; yeni bir araç eklendiğinde burada kendiliğinden görünür.</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="section-card">
+            <div class="section-head">
+              <h3><i class="fa-solid fa-diagram-project"></i> Bağlantı</h3>
+              <span class="section-note">A2A adresi ve köprü aracı</span>
+            </div>
+            <div class="section-body">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label for="sp-route">A2A adresi</label>
+                  <input id="sp-route" class="form-control mono" placeholder="kredi" oninput="updateSpecialistYaml()">
+                  <span class="field-hint">Boş bırakılırsa sistem adı kullanılır. Oluşacak adres: <code id="sp-route-preview">/a2a/…</code></span>
+                </div>
+
+                <div class="form-group">
+                  <label for="sp-bridge">Köprü aracı adı</label>
+                  <input id="sp-bridge" class="form-control mono" placeholder="kredi_uzmanina_sor" oninput="updateSpecialistYaml()">
+                  <span class="field-hint">Orkestratörün bu uzmanı çağırırken göreceği araç adı. Boş bırakılırsa sistem adından türetilir.</span>
+                </div>
+
+                <div class="form-group">
+                  <label for="sp-temp">Model sıcaklığı</label>
+                  <input id="sp-temp" class="form-control" type="number" step="0.1" min="0" max="2" placeholder="0.1" oninput="updateSpecialistYaml()">
+                  <span class="field-hint">Veri okuyup özetleyen uzmanlarda düşük tutun.</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <details class="yaml-preview">
+            <summary>Üretilen Tanım</summary>
+            <textarea id="sp-yaml" class="yaml-editor" spellcheck="false" readonly></textarea>
+          </details>
+
+          <div class="page-head" style="margin-top: 8px;">
+            <h2 style="font-size: 19px;">Kayıtlı Uzmanlar</h2>
+          </div>
+          <div id="sp-list" class="card-grid"></div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= SEKME 4: Tanılama =========================== -->
+    <div id="diag-tab" class="tab-content">
+      <div class="page">
+        <div class="page-inner">
+
+          <div class="page-head">
+            <h2>Sistem Tanılama</h2>
+            <p>Çalışan sürecin model bağlantısı, araç kaydı ve uzman taşıma katmanı durumu.</p>
+          </div>
+
+          <div class="card-grid">
+            <div class="metric-card">
+              <h3><i class="fa-solid fa-key"></i> LLM Bağlantısı</h3>
+              <div class="val sm ok" id="diag-key">Yükleniyor…</div>
+            </div>
+            <div class="metric-card">
+              <h3><i class="fa-solid fa-microchip"></i> Model</h3>
+              <div class="val sm" id="diag-model">…</div>
+            </div>
+            <div class="metric-card">
+              <h3><i class="fa-solid fa-screwdriver-wrench"></i> Aktif MCP Aracı</h3>
+              <div class="val" id="diag-mcp">0</div>
+            </div>
+            <div class="metric-card">
+              <h3><i class="fa-solid fa-network-wired"></i> Uzman Taşıma</h3>
+              <div class="val sm accent" id="diag-transport">…</div>
+            </div>
+          </div>
+
+          <section class="section-card">
+            <div class="section-head">
+              <h3><i class="fa-solid fa-rotate"></i> Kampanya Senkronizasyonu</h3>
+            </div>
+            <div class="section-body">
+              <p style="font-size: 13px; color: var(--bone-dim); line-height: 1.6; max-width: 68ch;">
+                Bankadaki yeni ve güncellenmiş kampanyaları çeker, kataloğa yazar ve arama kesintiye
+                uğramadan semantik indekse ekler.
+              </p>
+              <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                <button class="btn-primary" onclick="syncCampaigns()"><i class="fa-solid fa-rotate"></i> Senkronize Et</button>
+                <span id="campaign-sync-result" style="font-size: 13px; color: var(--bone-dim);"></span>
+              </div>
+            </div>
+          </section>
+
         </div>
       </div>
     </div>
@@ -1245,18 +1717,35 @@ function switchTab(tabId, evt) {
   document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
-  if (evt && evt.currentTarget) {
-    evt.currentTarget.classList.add('active');
-  }
+  if (evt && evt.currentTarget) evt.currentTarget.classList.add('active');
   document.getElementById(tabId).classList.add('active');
 }
 
+function escapeHtml(s) { return (s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/** Sistem adı alanlarını küçük harf + tire biçimine çevirir. */
+function slugifyField(el) {
+  const map = { 'ç':'c', 'ğ':'g', 'ı':'i', 'ö':'o', 'ş':'s', 'ü':'u', 'İ':'i' };
+  el.value = (el.value || '')
+    .trim()
+    .replace(/[çğıöşüİ]/g, c => map[c] || c)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 // =====================================================================
-// UZMAN AJAN STUDIO
-// Araç listesi ve kayıtlı uzmanlar sunucudan okunur; hiçbiri burada sabit
-// yazılmaz — yeni bir MCP aracı eklendiğinde bu ekran kendiliğinden görür.
+// ARAÇ SEÇİCİ
+// Katalog ve kategoriler sunucudan okunur; hiçbiri burada sabit yazılmaz —
+// yeni bir MCP aracı eklendiğinde bu ekran kendiliğinden görür.
 // =====================================================================
 let specialistToolCatalog = [];
+let selectedTools = new Set();
+let activeToolGroup = 'ALL';
+
+/** Grup adları teknik enum değerleridir; bilinenler Türkçeleştirilir, bilinmeyen olduğu gibi gösterilir. */
+const TOOL_GROUP_LABELS = { Account: 'Hesap', Card: 'Kart', Analyze: 'Analiz' };
+const groupLabel = g => TOOL_GROUP_LABELS[g] || g;
 
 async function loadSpecialistStudio() {
   try {
@@ -1266,7 +1755,9 @@ async function loadSpecialistStudio() {
     ]);
 
     specialistToolCatalog = tools;
-    renderSpecialistTools(tools);
+    renderToolCategories();
+    renderToolOptions();
+    renderSelectedTools();
     renderSpecialistList(specialists);
     updateSpecialistYaml();
   } catch (err) {
@@ -1274,34 +1765,161 @@ async function loadSpecialistStudio() {
   }
 }
 
-function renderSpecialistTools(tools) {
-  const container = document.getElementById('sp-tools');
+function toolGroups() {
+  return [...new Set(specialistToolCatalog.map(t => t.group))].sort();
+}
+
+function renderToolCategories() {
+  const groups = toolGroups();
+  const counts = g => specialistToolCatalog.filter(t => t.group === g).length;
+
+  document.getElementById('tool-cats').innerHTML = [
+    `<button type="button" class="cat-pill ${activeToolGroup === 'ALL' ? 'active' : ''}" onclick="setToolGroup('ALL')">
+       Tümü <span class="cat-count">${specialistToolCatalog.length}</span></button>`,
+    ...groups.map(g => `
+      <button type="button" class="cat-pill ${activeToolGroup === g ? 'active' : ''}" onclick="setToolGroup('${escapeHtml(g)}')">
+        ${escapeHtml(groupLabel(g))} <span class="cat-count">${counts(g)}</span></button>`)
+  ].join('');
+}
+
+function setToolGroup(group) {
+  activeToolGroup = group;
+  renderToolCategories();
+  renderToolOptions();
+}
+
+/** Etkin kategori ve arama metnine göre süzülmüş araç listesi. */
+function visibleTools() {
+  const query = (document.getElementById('tool-search').value || '').trim().toLowerCase();
+  return specialistToolCatalog.filter(tool => {
+    if (activeToolGroup !== 'ALL' && tool.group !== activeToolGroup) return false;
+    if (!query) return true;
+    return tool.name.toLowerCase().includes(query)
+        || (tool.description || '').toLowerCase().includes(query);
+  });
+}
+
+function highlight(text, query) {
+  const safe = escapeHtml(text);
+  if (!query) return safe;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return safe.replace(new RegExp(escaped, 'gi'), m => `<mark>${m}</mark>`);
+}
+
+function renderToolOptions() {
+  const query = (document.getElementById('tool-search').value || '').trim().toLowerCase();
+  const tools = visibleTools();
+  const list = document.getElementById('tool-list');
+
+  if (!tools.length) {
+    list.innerHTML = `<div class="empty-state" style="border: none; padding: 28px 16px;">Eşleşen araç yok.</div>`;
+    return;
+  }
+
+  const option = tool => `
+    <label class="tool-option">
+      <input type="checkbox" value="${escapeHtml(tool.name)}"
+             ${selectedTools.has(tool.name) ? 'checked' : ''}
+             onchange="toggleTool(this.value, this.checked)">
+      <span>
+        <span class="tool-name">${highlight(tool.name, query)}</span>
+        <span class="tool-desc">${highlight(tool.description || 'Açıklama yok', query)}</span>
+      </span>
+    </label>`;
+
+  // Tek kategori seçiliyse başlık tekrarına gerek yok
+  if (activeToolGroup !== 'ALL') {
+    list.innerHTML = tools.map(option).join('');
+    return;
+  }
+
   const byGroup = {};
   tools.forEach(tool => (byGroup[tool.group] ||= []).push(tool));
 
-  container.innerHTML = Object.keys(byGroup).sort().map(group => `
-    <div style="grid-column: 1 / -1; font-weight: 700; font-size: 12px; color: var(--text-muted); margin-top: 6px;">${group}</div>
-    ${byGroup[group].map(tool => `
-      <label style="display: flex; gap: 8px; align-items: flex-start; font-size: 12px; cursor: pointer;">
-        <input type="checkbox" class="sp-tool" value="${tool.name}" onchange="updateSpecialistYaml()">
-        <span><b>${tool.name}</b><br><span style="color: var(--text-muted);">${(tool.description || '').slice(0, 90)}</span></span>
-      </label>`).join('')}
-  `).join('');
+  list.innerHTML = Object.keys(byGroup).sort().map(group => `
+    <div class="tool-group-label">${escapeHtml(groupLabel(group))}</div>
+    ${byGroup[group].map(option).join('')}`).join('');
 }
 
+function toggleTool(name, checked) {
+  if (checked) selectedTools.add(name); else selectedTools.delete(name);
+  renderSelectedTools();
+  updateSpecialistYaml();
+}
+
+function selectVisibleTools() {
+  visibleTools().forEach(tool => selectedTools.add(tool.name));
+  renderToolOptions();
+  renderSelectedTools();
+  updateSpecialistYaml();
+}
+
+function clearSelectedTools() {
+  selectedTools.clear();
+  renderToolOptions();
+  renderSelectedTools();
+  updateSpecialistYaml();
+}
+
+function renderSelectedTools() {
+  const count = selectedTools.size;
+  const summary = document.getElementById('tool-picker-summary');
+
+  summary.className = count ? '' : 'placeholder';
+  summary.textContent = count
+    ? `${count} araç seçildi`
+    : 'Araç seçmek için tıklayın…';
+
+  document.getElementById('tool-picker-count').textContent = `${count} araç seçili`;
+
+  document.getElementById('tool-chips').innerHTML = [...selectedTools].map(name => `
+    <span class="tool-chip">${escapeHtml(name)}
+      <button type="button" aria-label="${escapeHtml(name)} aracını kaldır" onclick="toggleTool('${escapeHtml(name)}', false); renderToolOptions();">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </span>`).join('');
+}
+
+function toggleToolPicker(force) {
+  const panel = document.getElementById('tool-picker-panel');
+  const trigger = document.getElementById('tool-picker-trigger');
+  const open = force !== undefined ? force : panel.hidden;
+
+  panel.hidden = !open;
+  trigger.setAttribute('aria-expanded', String(open));
+
+  // preventScroll: odaklanma sayfayı zıplatmasın, paneli görünür alana kendimiz getiriyoruz
+  if (open) {
+    document.getElementById('tool-search').focus({ preventScroll: true });
+    panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+document.addEventListener('click', e => {
+  if (!document.getElementById('tool-picker')?.contains(e.target)) toggleToolPicker(false);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') toggleToolPicker(false);
+});
+
+function selectedSpecialistTools() { return [...selectedTools]; }
+
+// =====================================================================
+// UZMAN AJAN TANIMI
+// =====================================================================
 function renderSpecialistList(specialists) {
   document.getElementById('sp-list').innerHTML = specialists.map(s => `
-    <div class="diag-card">
-      <h3><i class="fa-solid fa-user-gear"></i> ${s.displayName || s.name}</h3>
-      <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 6px;">${s.description || ''}</div>
-      <div style="font-size: 12px;"><b>Köprü:</b> <code>${s.bridgeToolName}</code></div>
-      <div style="font-size: 12px;"><b>A2A:</b> <code>${s.a2aUrl}</code></div>
-      <div style="font-size: 12px;"><b>Araçlar:</b> ${(s.tools && s.tools.length) ? s.tools.join(', ') : ('grup: ' + s.toolGroup)}</div>
-    </div>`).join('') || '<div style="color: var(--text-muted);">Kayıtlı uzman yok.</div>';
-}
-
-function selectedSpecialistTools() {
-  return Array.from(document.querySelectorAll('.sp-tool:checked')).map(c => c.value);
+    <div class="info-card">
+      <h4><i class="fa-solid fa-user-gear"></i> ${escapeHtml(s.displayName || s.name)}</h4>
+      <div class="card-desc">${escapeHtml(s.description || '')}</div>
+      <div class="card-meta">
+        <div class="card-meta-row"><span class="k">Köprü</span><span class="v"><code>${escapeHtml(s.bridgeToolName)}</code></span></div>
+        <div class="card-meta-row"><span class="k">A2A</span><span class="v"><code>${escapeHtml(s.a2aUrl)}</code></span></div>
+        <div class="card-meta-row"><span class="k">Araçlar</span><span class="v">${
+          (s.tools && s.tools.length) ? escapeHtml(s.tools.join(', ')) : ('grup: ' + escapeHtml(s.toolGroup || '—'))
+        }</span></div>
+      </div>
+    </div>`).join('') || '<div class="empty-state">Kayıtlı uzman yok.</div>';
 }
 
 function updateSpecialistYaml() {
@@ -1314,7 +1932,7 @@ function updateSpecialistYaml() {
   const instructions = value('sp-instructions');
   const tools = selectedSpecialistTools();
 
-  document.getElementById('sp-route-preview').textContent = '/a2a/' + (route || '...');
+  document.getElementById('sp-route-preview').textContent = '/a2a/' + (route || '…');
 
   let yaml = `kind: Specialist\nname: ${name}\n`;
   if (value('sp-display')) yaml += `displayName: ${value('sp-display')}\n`;
@@ -1328,18 +1946,21 @@ function updateSpecialistYaml() {
   document.getElementById('sp-yaml').value = yaml;
 }
 
-function showSpecialistStatus(message, ok) {
-  const status = document.getElementById('sp-status');
-  status.textContent = message;
-  status.style.color = ok ? 'var(--accent-emerald)' : '#e5484d';
+function showToast(elementId, message, ok) {
+  const toast = document.getElementById(elementId);
+  toast.className = 'status-toast show ' + (ok ? 'success' : 'error');
+  toast.innerHTML = `<i class="fa-solid ${ok ? 'fa-circle-check' : 'fa-triangle-exclamation'}" style="margin-top: 2px;"></i><span>${escapeHtml(message)}</span>`;
+  toast.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
+
+function showSpecialistStatus(message, ok) { showToast('sp-status', message, ok); }
 
 async function registerSpecialist() {
   const name = (document.getElementById('sp-name').value || '').trim();
   const description = (document.getElementById('sp-desc').value || '').trim();
 
   if (!name || !description) {
-    showSpecialistStatus('Ad ve açıklama zorunludur — açıklama, çağıranların bu uzmana ne zaman soracağını belirler.', false);
+    showSpecialistStatus('Sistem adı ve açıklama zorunludur — açıklama, bu uzmana ne zaman sorulacağını belirler.', false);
     return;
   }
   if (!selectedSpecialistTools().length) {
@@ -1367,14 +1988,14 @@ async function registerSpecialist() {
   }
 }
 
+// =====================================================================
+// SOHBET
+// =====================================================================
 function addMsg(text, type) {
   const d = document.createElement('div');
   d.className = 'msg ' + type;
-  if (type === 'bot') {
-    d.innerHTML = marked.parse(text);
-  } else {
-    d.textContent = text;
-  }
+  if (type === 'bot') d.innerHTML = marked.parse(text);
+  else d.textContent = text;
   chatMsgs.appendChild(d);
   chatMsgs.scrollTop = chatMsgs.scrollHeight;
   return d;
@@ -1444,9 +2065,9 @@ function renderConfirm(r) {
   const card = document.createElement('div');
   card.className = 'confirm-card';
 
-  let title = '🔐 İŞLEM ONAYI';
-  if (params.cardId || params.cardMasked) title = '💳 ÖDEME ONAYI';
-  else if (params.targetIban) title = '💸 TRANSFER ONAYI';
+  let title = 'İşlem Onayı';
+  if (params.cardId || params.cardMasked) title = 'Ödeme Onayı';
+  else if (params.targetIban) title = 'Transfer Onayı';
 
   const keyLabels = {
     cardId: 'Kart ID',
@@ -1465,14 +2086,12 @@ function renderConfirm(r) {
     if (val === null || val === undefined || val === '') return;
     const label = keyLabels[k] || k;
     let displayVal = val;
-    if (k.toLowerCase().includes('amount') || typeof val === 'number') {
-      displayVal = fmt(val);
-    }
+    if (k.toLowerCase().includes('amount') || typeof val === 'number') displayVal = fmt(val);
     const isTotal = k.toLowerCase().includes('amount');
     rows += `
       <div class="confirm-row ${isTotal ? 'total' : ''}">
-        <span class="label">${label}</span>
-        <span class="value">${displayVal}</span>
+        <span class="label">${escapeHtml(label)}</span>
+        <span class="value">${escapeHtml(String(displayVal))}</span>
       </div>`;
   });
 
@@ -1483,7 +2102,7 @@ function renderConfirm(r) {
     <div class="confirm-body">${rows}</div>
     <div class="confirm-actions">
       <button class="btn-confirm btn-approve"><i class="fa-solid fa-check"></i> Onayla</button>
-      <button class="btn-confirm btn-cancel"><i class="fa-solid fa-xmark"></i> İptal</button>
+      <button class="btn-confirm btn-cancel"><i class="fa-solid fa-xmark"></i> Vazgeç</button>
     </div>`;
 
   chatMsgs.appendChild(card);
@@ -1515,13 +2134,13 @@ function renderReceipt(rc) {
   card.className = 'receipt-card';
   card.innerHTML = `
     <div class="receipt-header">
-      <i class="fa-solid fa-circle-check" style="font-size: 20px;"></i>
-      <h3>İşlem Başarıyla Tamamlandı</h3>
+      <i class="fa-solid fa-circle-check" style="font-size: 17px;"></i>
+      <h3>İşlem Tamamlandı</h3>
     </div>
-    <div class="confirm-row"><span class="label">Makbuz No</span><span class="value">${rc.receiptId}</span></div>
+    <div class="confirm-row"><span class="label">Makbuz No</span><span class="value">${escapeHtml(String(rc.receiptId))}</span></div>
     <div class="confirm-row"><span class="label">Tutar</span><span class="value">${fmt(rc.amount)}</span></div>
     <div class="confirm-row"><span class="label">Kalan Borç/Bakiye</span><span class="value">${fmt(rc.remainingDebt)}</span></div>
-    <div class="confirm-row"><span class="label">Tarih</span><span class="value">${rc.date}</span></div>`;
+    <div class="confirm-row"><span class="label">Tarih</span><span class="value">${escapeHtml(String(rc.date))}</span></div>`;
   chatMsgs.appendChild(card);
   chatMsgs.scrollTop = chatMsgs.scrollHeight;
 }
@@ -1532,8 +2151,9 @@ async function postJson(url, body) {
   return res.json();
 }
 
-/* --- TraceHub SSE Connection --- */
-function escapeHtml(s) { return (s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+// =====================================================================
+// TRACEHUB (SSE)
+// =====================================================================
 function clearTrace() { traceLog.innerHTML = ''; }
 
 function addTrace(ev) {
@@ -1541,12 +2161,12 @@ function addTrace(ev) {
   const item = document.createElement('div');
   item.className = 'trace-item';
   item.innerHTML = `
-    <span class="layer-tag l-${layer}">${layer}</span>
+    <span class="layer-tag l-${layer}">${escapeHtml(layer)}</span>
     <div class="trace-content">
       <div class="trace-text">${escapeHtml(ev.text)}</div>
       ${ev.detail ? `<div class="trace-detail">${escapeHtml(ev.detail)}</div>` : ''}
     </div>
-    <span class="trace-time">${ev.t || ''}</span>`;
+    <span class="trace-time">${escapeHtml(ev.t || '')}</span>`;
   traceLog.appendChild(item);
   traceLog.scrollTop = traceLog.scrollHeight;
 }
@@ -1559,7 +2179,9 @@ function connectTrace() {
 }
 connectTrace();
 
-/* --- STUDIO VISUAL FORM & LIVE YAML SYNC ENGINE --- */
+// =====================================================================
+// DEKLARATİF İŞ AKIŞI STUDIO
+// =====================================================================
 function setStudioMode(mode) {
   document.getElementById('btn-mode-form').classList.toggle('active', mode === 'form');
   document.getElementById('btn-mode-yaml').classList.toggle('active', mode === 'yaml');
@@ -1582,19 +2204,22 @@ function addParamRow(key = '', type = 'string', desc = '', required = true) {
   const row = document.createElement('div');
   row.className = 'param-row';
   row.innerHTML = `
-    <input class="form-control p-key" placeholder="Parametre Adı (örn: cardId)" value="${escapeHtml(key)}" oninput="updateYamlFromForm()" />
-    <select class="form-control p-type" onchange="updateYamlFromForm()">
-      <option value="string" ${type==='string'?'selected':''}>string (Metin)</option>
-      <option value="number" ${type==='number'?'selected':''}>number (Sayı)</option>
-      <option value="boolean" ${type==='boolean'?'selected':''}>boolean (Evet/Hayır)</option>
-      <option value="date" ${type==='date'?'selected':''}>date (Tarih)</option>
+    <input class="form-control mono p-key" placeholder="cardId" value="${escapeHtml(key)}" oninput="updateYamlFromForm()" aria-label="Parametre adı" />
+    <select class="form-control p-type" onchange="updateYamlFromForm()" aria-label="Parametre tipi">
+      <option value="string"  ${type==='string' ?'selected':''}>Metin</option>
+      <option value="number"  ${type==='number' ?'selected':''}>Sayı</option>
+      <option value="boolean" ${type==='boolean'?'selected':''}>Evet/Hayır</option>
+      <option value="date"    ${type==='date'   ?'selected':''}>Tarih</option>
     </select>
-    <input class="form-control p-desc" placeholder="Açıklama (örn: Kart ID)" value="${escapeHtml(desc)}" oninput="updateYamlFromForm()" />
-    <div class="checkbox-group">
+    <input class="form-control p-desc" placeholder="Ödeme yapılacak kart" value="${escapeHtml(desc)}" oninput="updateYamlFromForm()" aria-label="Parametre açıklaması" />
+    <label class="checkbox-group">
       <input type="checkbox" class="p-req" ${required?'checked':''} onchange="updateYamlFromForm()" />
-      <label>Zorunlu</label>
-    </div>
-    <button class="btn-del-param" onclick="this.closest('.param-row').remove(); updateYamlFromForm();"><i class="fa-solid fa-trash"></i></button>`;
+      Zorunlu
+    </label>
+    <button class="btn-del-param" aria-label="Parametreyi sil"
+            onclick="this.closest('.param-row').remove(); updateYamlFromForm();">
+      <i class="fa-solid fa-trash-can"></i>
+    </button>`;
   container.appendChild(row);
   updateYamlFromForm();
 }
@@ -1606,8 +2231,12 @@ function updateYamlFromForm() {
   const temp = document.getElementById('form-temp').value || '0.1';
   const desc = document.getElementById('form-desc').value.trim() || 'İş akışı açıklaması';
   const inst = document.getElementById('form-instructions').value.trim() || 'Gerekli bilgileri sırayla kullanıcıdan iste.';
+  const actionMethod = document.getElementById('form-action-method').value || 'PUT';
+  const actionPath = document.getElementById('form-action-path').value.trim();
 
   const paramRows = document.querySelectorAll('.param-row');
+  document.getElementById('params-empty').style.display = paramRows.length ? 'none' : 'block';
+
   let propsYaml = '';
   let reqYaml = '';
 
@@ -1619,9 +2248,7 @@ function updateYamlFromForm() {
 
     if (pKey) {
       propsYaml += `    ${pKey}:\n      type: ${pType}\n      description: ${pDesc || pKey}\n`;
-      if (pReq) {
-        reqYaml += `    - ${pKey}\n`;
-      }
+      if (pReq) reqYaml += `    - ${pKey}\n`;
     }
   });
 
@@ -1647,7 +2274,15 @@ ${reqYaml}`;
     }
   }
 
+  if (actionPath) {
+    yaml += `action:
+  method: ${actionMethod}
+  path: ${actionPath}
+`;
+  }
+
   document.getElementById('yaml-input').value = yaml;
+  document.getElementById('yaml-mirror').value = yaml;
 }
 
 const defaultTemplates = {
@@ -1692,27 +2327,46 @@ function loadTemplate(key) {
   const t = defaultTemplates[key];
   if (!t) return;
 
+  document.querySelectorAll('.template-card').forEach(c => c.classList.toggle('active', c.dataset.template === key));
+
   document.getElementById('form-kind').value = t.kind;
   document.getElementById('form-name').value = t.name;
   document.getElementById('form-displayname').value = t.displayName;
   document.getElementById('form-temp').value = t.temp;
   document.getElementById('form-desc').value = t.desc;
   document.getElementById('form-instructions').value = t.inst;
+  document.getElementById('form-action-method').value = t.actionMethod || 'PUT';
+  document.getElementById('form-action-path').value = t.actionPath || '';
 
-  const container = document.getElementById('params-container');
-  container.innerHTML = '';
+  document.getElementById('params-container').innerHTML = '';
   t.params.forEach(p => addParamRow(p.key, p.type, p.desc, p.req));
 
   updateYamlFromForm();
 }
 
-// Initial Template Load
+function resetWorkflowForm() {
+  document.querySelectorAll('.template-card').forEach(c => c.classList.remove('active'));
+  ['form-name', 'form-displayname', 'form-desc', 'form-instructions', 'form-action-path'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('form-kind').value = 'Prompt';
+  document.getElementById('form-temp').value = '0.1';
+  document.getElementById('form-action-method').value = 'PUT';
+  document.getElementById('params-container').innerHTML = '';
+  document.getElementById('studio-status').className = 'status-toast';
+  updateYamlFromForm();
+  document.getElementById('form-name').focus();
+}
+
 loadTemplate('limit');
 
 async function registerDeclarative() {
   const content = document.getElementById('yaml-input').value;
-  const toast = document.getElementById('studio-status');
-  toast.style.display = 'none';
+  const name = document.getElementById('form-name').value.trim();
+  const desc = document.getElementById('form-desc').value.trim();
+
+  if (!name || !desc) {
+    showToast('studio-status', 'Sistem adı ve tetiklenme açıklaması zorunludur — açıklama olmadan akış aramada bulunamaz.', false);
+    return;
+  }
 
   try {
     const res = await fetch('/api/workflows/register-declarative', {
@@ -1723,17 +2377,15 @@ async function registerDeclarative() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Kayıt başarısız');
 
-    toast.className = 'status-toast success';
-    toast.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${data.message}`;
-    toast.style.display = 'flex';
+    showToast('studio-status', data.message, true);
   } catch (err) {
-    toast.className = 'status-toast error';
-    toast.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${err.message}`;
-    toast.style.display = 'flex';
+    showToast('studio-status', err.message, false);
   }
 }
 
-/* --- Diagnostics Fetcher --- */
+// =====================================================================
+// TANILAMA
+// =====================================================================
 async function fetchDiag() {
   try {
     const res = await fetch('/api/diag');
@@ -1747,13 +2399,13 @@ async function fetchDiag() {
 
 async function syncCampaigns() {
   const resultEl = document.getElementById('campaign-sync-result');
-  resultEl.textContent = 'Senkronize ediliyor...';
+  resultEl.textContent = 'Senkronize ediliyor…';
   try {
     const res = await fetch('/api/campaigns/sync', { method: 'POST' });
     const data = await res.json();
     resultEl.textContent = data.syncedCount > 0
       ? `${data.syncedCount} kampanya eklendi/güncellendi.`
-      : 'Senkronize edilecek yeni kampanya yok (backend bağlantısı henüz kurulmadı).';
+      : 'Senkronize edilecek yeni kampanya yok (banka bağlantısı henüz kurulmadı).';
   } catch {
     resultEl.textContent = 'Senkronizasyon başarısız oldu.';
   }

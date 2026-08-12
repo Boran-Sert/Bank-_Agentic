@@ -7,6 +7,7 @@ using Banking.Agents.Tracing;
 using Banking.Agents.Validation;
 using Banking.Agents.Workflows.Declarative;
 using Banking.Domain.Constants;
+using Banking.Domain.Serialization;
 using Banking.Mcp.Registry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -141,7 +142,8 @@ public sealed class WorkflowAgentFactory(
             {
                 Name = UpdateSlotToolName,
                 Description = definition.SlotUpdateDescription + DescribeExpectedTypes(definition.SlotSchema),
-                JsonSchemaCreateOptions = OllamaCompatibleSchemaOptions
+                JsonSchemaCreateOptions = OllamaCompatibleSchemaOptions,
+                SerializerOptions = AgentJsonPolicy.ToolOptions
             });
 
         return new TracingAIFunction(tool, hub, TraceCategories.Workflow, UpdateSlotToolName, "Oturum Parametresi Güncelleme");
@@ -188,12 +190,13 @@ public sealed class WorkflowAgentFactory(
                 session.StoreProposedSlots(session.ActiveWorkflowName ?? definition.AgentName, proposedSlots);
                 hub.Publish(TraceCategories.Workflow, $"{definition.AgentName} parametreleri onaya hazır");
 
-                return WorkflowAgentSignals.ProposalReady + JsonSerializer.Serialize(proposedSlots);
+                return WorkflowAgentSignals.ProposalReady + proposedSlots.ToReadableJson();
             },
             new AIFunctionFactoryOptions
             {
                 Name = proposeToolName,
-                Description = "Aktif iş akışının tüm zorunlu parametreleri netleştiğinde çağrılır."
+                Description = "Aktif iş akışının tüm zorunlu parametreleri netleştiğinde çağrılır.",
+                SerializerOptions = AgentJsonPolicy.ToolOptions
             });
 
         return new TracingAIFunction(tool, hub, TraceCategories.Workflow, proposeToolName, "Onaya sunuluyor");
@@ -206,7 +209,8 @@ public sealed class WorkflowAgentFactory(
             new AIFunctionFactoryOptions
             {
                 Name = cancelToolName,
-                Description = "Kullanıcı aktif işlemden vazgeçtiğinde akışı sonlandırır."
+                Description = "Kullanıcı aktif işlemden vazgeçtiğinde akışı sonlandırır.",
+                SerializerOptions = AgentJsonPolicy.ToolOptions
             });
 
         return new TracingAIFunction(tool, hub, TraceCategories.Workflow, cancelToolName, "kullanıcı vazgeçti");
@@ -225,7 +229,8 @@ public sealed class WorkflowAgentFactory(
             {
                 Name = handoffToolName,
                 Description = "Kullanıcının mesajı aktif işlemin sorulan parametresiyle ilgili değilse çağrılır; " +
-                              "soru yetkili birime iletilir ve işlem kaldığı yerden devam eder."
+                              "soru yetkili birime iletilir ve işlem kaldığı yerden devam eder.",
+                SerializerOptions = AgentJsonPolicy.ToolOptions
             });
 
         return new TracingAIFunction(tool, hub, TraceCategories.Workflow, handoffToolName, "konu dışı → devrediliyor");

@@ -31,8 +31,7 @@ public static class ServiceRegistration
         // Türkçe karakterler kaçışsız yazılsın diye
         builder.Services.Configure<Microsoft.AspNetCore.Http.Json.JsonOptions>(options =>
         {
-            options.SerializerOptions.Encoder =
-                System.Text.Encodings.Web.JavaScriptEncoder.Create(System.Text.Unicode.UnicodeRanges.All);
+            options.SerializerOptions.Encoder = Banking.Domain.Serialization.JsonPolicy.Readable.Encoder;
         });
 
         // Gizli ayarlar User Secrets'tan da okunur

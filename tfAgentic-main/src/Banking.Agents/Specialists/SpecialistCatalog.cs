@@ -248,7 +248,8 @@ public sealed class SpecialistCatalog(
         var bridgeFunction = specialistAgent.AsAIFunction(new AIFunctionFactoryOptions
         {
             Name = card.BridgeToolName,
-            Description = card.Description
+            Description = card.Description,
+            SerializerOptions = AgentJsonPolicy.ToolOptions
         });
 
         return new TracingAIFunction(bridgeFunction, hub, transportLabel, card.DisplayName, endpointInfo);

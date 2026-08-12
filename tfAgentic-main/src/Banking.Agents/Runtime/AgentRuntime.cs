@@ -211,7 +211,12 @@ public sealed class AgentRuntime(
 
         var tool = AIFunctionFactory.Create(
             StartWorkflowAsync,
-            new AIFunctionFactoryOptions { Name = definition.Name, Description = definition.Description });
+            new AIFunctionFactoryOptions
+            {
+                Name = definition.Name,
+                Description = definition.Description,
+                SerializerOptions = AgentJsonPolicy.ToolOptions
+            });
 
         return new TracingAIFunction(tool, hub, TraceCategories.Workflow, "Jenerik iş akışı tetiklendi");
     }

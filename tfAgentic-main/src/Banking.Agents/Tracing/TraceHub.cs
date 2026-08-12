@@ -1,8 +1,7 @@
 using System.Collections.Concurrent;
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Unicode;
 using System.Threading.Channels;
+using Banking.Domain.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace Banking.Agents.Tracing;
@@ -18,14 +17,10 @@ public sealed class TraceHub
     private readonly ILogger<TraceHub> _logger;
 
     /// <summary>
-    /// İz yükünün serileştirme ayarları. Türkçe karakterler <c>\uXXXX</c> kaçışına çevrilmeden UTF-8
-    /// olarak yazılır.
+    /// İz yükünün serileştirme ayarları. Biçim <see cref="JsonPolicy"/> ile ortaktır; izde görünen
+    /// JSON, modele giden JSON ile birebir aynıdır.
     /// </summary>
-    public static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-        WriteIndented = false
-    };
+    public static readonly JsonSerializerOptions JsonOptions = JsonPolicy.Readable;
 
     /// <summary>İz merkezini kurar. Günlük bağımlılığı verilmezse olaylar yalnızca abonelere gider.</summary>
     public TraceHub(ILogger<TraceHub>? logger = null)

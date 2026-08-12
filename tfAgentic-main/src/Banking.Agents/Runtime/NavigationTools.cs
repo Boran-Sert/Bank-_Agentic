@@ -30,11 +30,11 @@ public sealed class NavigationTools(
         return
         [
             new TracingAIFunction(
-                AIFunctionFactory.Create(SearchScreenCode, new AIFunctionFactoryOptions { Name = searchDefinition.Name, Description = searchDefinition.Description }),
+                AIFunctionFactory.Create(SearchScreenCode, new AIFunctionFactoryOptions { Name = searchDefinition.Name, Description = searchDefinition.Description, SerializerOptions = AgentJsonPolicy.ToolOptions }),
                 hub, TraceCategories.Workflow, "Semantik Ekran Kodu Arama tetiklendi"),
 
             new TracingAIFunction(
-                AIFunctionFactory.Create(OpenScreen, new AIFunctionFactoryOptions { Name = openDefinition.Name, Description = openDefinition.Description }),
+                AIFunctionFactory.Create(OpenScreen, new AIFunctionFactoryOptions { Name = openDefinition.Name, Description = openDefinition.Description, SerializerOptions = AgentJsonPolicy.ToolOptions }),
                 hub, TraceCategories.Workflow, "Ekran yönlendirmesi tetiklendi")
         ];
     }

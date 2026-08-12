@@ -1,0 +1,37 @@
+kind: Prompt
+name: kredi-karti-basvuru
+displayName: Kredi Kartı Başvurusu
+description: Kullanıcı yeni bir kredi kartı başvurusu yapmak istediğinde.
+instructions: |
+  Kullanıcıdan gerekli bilgileri sırasıyla sorarak iste. Kullanıcıya karşı nazik ol. Gereksiz konuşamalardan ve bilgi vermelerden kaçın.
+model:
+  options:
+    temperature: 0.1
+inputSchema:
+  type: object
+  properties:
+    workType:
+      type: string
+      description: Kullanıcının çalışma şekli (Özel,kamu vb.)
+    job:
+      type: string
+      description: Kullanıncın mesleği
+    rank:
+      type: string
+      description: Meslekteki ünvanı(uzman,yardımcı vb.)
+    eduBackground:
+      type: string
+      description: Eğitim durumu
+    firstWorkDay:
+      type: date
+      description: İlk işe başladığı tarih
+    numberOfDependents:
+      type: number
+      description: Bakmakla hükümlü olduğu kişi sayısı
+  required:
+    - workType
+    - job
+    - rank
+    - eduBackground
+    - firstWorkDay
+    - numberOfDependents

@@ -55,6 +55,14 @@ public static class BankRejectionCodes
     public const string InvalidIbanFormat = "INVALID_IBAN_FORMAT";
     public const string InvalidIbanChecksum = "INVALID_IBAN_CHECKSUM";
     public const string TargetIbanSameAsSourceAccount = "TARGET_IBAN_SAME_AS_SOURCE_ACCOUNT";
+    public const string LoanNotFound = "LOAN_NOT_FOUND";
+    public const string LoanAlreadyClosed = "LOAN_ALREADY_CLOSED";
+    public const string BillNotFound = "BILL_NOT_FOUND";
+    public const string BillAlreadyPaid = "BILL_ALREADY_PAID";
+    public const string ExchangeRateNotFound = "EXCHANGE_RATE_NOT_FOUND";
+    public const string InvalidTradeSide = "INVALID_TRADE_SIDE";
+    public const string QuantityMustBePositive = "QUANTITY_MUST_BE_POSITIVE";
+    public const string InsufficientPositionQuantity = "INSUFFICIENT_POSITION_QUANTITY";
 }
 
 /// <summary>
@@ -70,4 +78,10 @@ public static class BankValidationHintKeys
 
     /// <summary>Kartın güncel toplam borcu.</summary>
     public const string OutstandingCardDebt = "outstandingCardDebt";
+
+    /// <summary>Kredinin sıradaki taksit tutarı.</summary>
+    public const string NextInstallmentAmount = "nextInstallmentAmount";
+
+    /// <summary>Satılabilecek azami döviz veya maden miktarı.</summary>
+    public const string MaximumAcceptableQuantity = "maximumAcceptableQuantity";
 }

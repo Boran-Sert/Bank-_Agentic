@@ -27,6 +27,10 @@ public sealed class CardService(InMemoryBankStore store) : ICardService
     public IReadOnlyList<Card> GetOverdueCards(string customerId)
     {
         var today = DateOnly.FromDateTime(DateTime.Now);
-        return store.Cards.Values.Where(card => card.CustomerId == customerId && card.DueDate < today).ToList();
+
+        // Borcu olmayan kart gecikmeye düşmez; son ödeme tarihi taşımayan banka kartları da elenir.
+        return store.Cards.Values
+            .Where(card => card.CustomerId == customerId && card.CurrentDebt > 0 && card.DueDate < today)
+            .ToList();
     }
 }

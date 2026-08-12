@@ -66,6 +66,14 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
 
             return BuildReceipt(action, response);
         }
+        catch (BankApiException exception) when (exception.StatusCode == 404)
+        {
+            // Tanımdaki yol bankada yok
+            hub.Publish(TraceCategories.Service,
+                $"UYARI: {action.Method.Method} {action.Path} bankada bulunamadı (404)",
+                $"'{action.WorkflowName}' tanımındaki action.path bankada karşılığı olmayan bir uca işaret ediyor; işlem yapılmadı.");
+            return WorkflowOutcome.Failure(action.WorkflowName, $"{action.Label} şu anda gerçekleştirilemiyor.");
+        }
         catch (BankApiException exception)
         {
             // Bankanın gerekçesi kullanıcıya taşınır

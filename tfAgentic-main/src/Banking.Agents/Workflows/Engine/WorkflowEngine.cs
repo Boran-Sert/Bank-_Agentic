@@ -100,7 +100,7 @@ public sealed class WorkflowEngine(
         if (agentSignal == WorkflowAgentSignals.Cancelled)
         {
             session.CancelWorkflow();
-            hub.Publish(TraceCategories.System, "Oturum iptal edildi → akıştan çıkıldı");
+            hub.Publish(TraceCategories.Session, "Oturum iptal edildi → akıştan çıkıldı");
             return WorkflowStepResult.Ended(session.SessionId, "İşlem iptal edildi.");
         }
 
@@ -145,7 +145,7 @@ public sealed class WorkflowEngine(
 
         if (!action.CallsBank)
         {
-            hub.Publish(TraceCategories.Workflow,
+            hub.Publish(TraceCategories.Approval,
                 $"{action.WorkflowName} bankaya istek göndermiyor → onay kapısı kurulmadı, akış doğrudan sonuçlandırıldı");
 
             var outcome = await RunActionGraphAsync(slots, confirmationView, isApproved: true, cancellationToken);
@@ -156,7 +156,7 @@ public sealed class WorkflowEngine(
 
         session.Phase = WorkflowPhases.AwaitingApproval;
 
-        hub.Publish(TraceCategories.Workflow, "Onay ekranı kullanıcıya gönderildi → onay bekleniyor (HITL)");
+        hub.Publish(TraceCategories.Approval, "Onay ekranı kullanıcıya gönderildi → onay bekleniyor (HITL)");
         return WorkflowStepResult.AwaitApproval(session.SessionId, confirmationView);
     }
 
@@ -170,14 +170,14 @@ public sealed class WorkflowEngine(
 
         if (intent == ApprovalIntent.Unclear)
         {
-            hub.Publish(TraceCategories.Workflow, "Onay cevabı anlaşılamadı → onay sayılmadı, tekrar soruluyor");
+            hub.Publish(TraceCategories.Approval, "Onay cevabı anlaşılamadı → onay sayılmadı, tekrar soruluyor");
             return WorkflowStepResult.Ask(session.SessionId,
                 "Cevabınızı anlayamadım. İşlemi onaylıyor musunuz? Lütfen \"onaylıyorum\" ya da \"iptal\" yazın.");
         }
 
         if (session.ReadProposedSlots() is not { } slots || session.PendingConfirmation is not { } confirmationView)
         {
-            hub.Publish(TraceCategories.Workflow, "Onay bekleyen veri bulunamadı → oturum zaman aşımı");
+            hub.Publish(TraceCategories.Approval, "Onay bekleyen veri bulunamadı → oturum zaman aşımı");
             session.CancelWorkflow();
             return WorkflowStepResult.Ended(session.SessionId, "Oturumunuzun süresi doldu. Lütfen işlemi yeniden başlatın.");
         }
@@ -185,7 +185,7 @@ public sealed class WorkflowEngine(
         if (session.CompletedOutcome is { } alreadyProducedOutcome &&
             session.IdempotencyToken == GenericConfirmationView.ComputeIdempotencyToken(confirmationView))
         {
-            hub.Publish(TraceCategories.Workflow, "Aynı onay tekrar geldi → eylem yeniden çalıştırılmadı (idempotency)");
+            hub.Publish(TraceCategories.Approval, "Aynı onay tekrar geldi → eylem yeniden çalıştırılmadı (idempotency)");
             return FinishWorkflow(alreadyProducedOutcome);
         }
 
@@ -255,12 +255,12 @@ public sealed class WorkflowEngine(
         if (outcome.IsSuccess)
         {
             session.CompleteWorkflow();
-            hub.Publish(TraceCategories.System, "İşlem tamamlandı → oturum kapandı");
+            hub.Publish(TraceCategories.Session, "İşlem tamamlandı → oturum kapandı");
             return WorkflowStepResult.Completed(session.SessionId, outcome);
         }
 
         session.CancelWorkflow();
-        hub.Publish(TraceCategories.System, $"Oturum kapandı → {outcome.Status}: {outcome.UserMessage}");
+        hub.Publish(TraceCategories.Session, $"Oturum kapandı → {outcome.Status}: {outcome.UserMessage}");
         return WorkflowStepResult.Ended(session.SessionId, outcome.UserMessage, outcome);
     }
 
@@ -277,7 +277,7 @@ public sealed class WorkflowEngine(
             workflowAgent, session.WorkflowConversation, cancellationToken);
 
         if (restored.RestoreFailure is { } restoreFailure)
-            hub.Publish(TraceCategories.Workflow,
+            hub.Publish(TraceCategories.Agent,
                 $"İş akışı ajan oturumu geri yüklenemedi, yeniden başlatıldı: {restoreFailure.Message}");
 
         var response = await workflowAgent.RunAsync(message, restored.Session, cancellationToken: cancellationToken);

@@ -165,7 +165,7 @@ public static class ApiEndpoints
             var savedAs = await DeclarativeFileStore.SaveAsync(
                 environment.ContentRootPath, StartupLoader.SpecialistsFolder, specialistName, content);
 
-            hub.Publish(TraceCategories.System,
+            hub.Publish(TraceCategories.Agent,
                 $"[UZMAN KAYDEDİLDİ] '{card.DisplayName}' çalışma zamanında eklendi ve diske kaydedildi",
                 $"Köprü aracı: {card.BridgeToolName} · Adres: /a2a/{card.A2ARoute} · Dosya: {savedAs}");
 
@@ -208,11 +208,20 @@ public static class ApiEndpoints
                 .Where(tool => tool.Type == ToolType.Mcp)
                 .Select(tool => new { tool.Name, group = tool.Group.ToString(), tool.Description })));
 
+        // Ekran kodu kataloğu; akış tanımlanırken mkCode bu listeden seçilir
+        app.MapGet("/api/mkcodes", async (MkCodeCatalog catalog, CancellationToken ct) =>
+        {
+            await catalog.EnsureLoadedAsync(ct);
+            return Results.Ok(catalog.All
+                .OrderBy(code => code.Label, StringComparer.CurrentCulture)
+                .Select(code => new { code.Value, code.Label }));
+        });
+
         // Kampanya senkronizasyonu
         app.MapPost("/api/campaigns/sync", async (ICampaignSyncService syncService, TraceHub hub, CancellationToken ct) =>
         {
             var syncedCount = await syncService.SyncFromBackendAsync(ct);
-            hub.Publish(TraceCategories.Workflow,
+            hub.Publish(TraceCategories.Semantic,
                 $"[CAMPAIGN SYNC] Banka senkronizasyonu tetiklendi → {syncedCount} kampanya indekste");
             return Results.Ok(new { syncedCount });
         });

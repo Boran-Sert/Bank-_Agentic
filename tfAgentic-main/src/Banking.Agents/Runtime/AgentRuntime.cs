@@ -202,8 +202,16 @@ public sealed class AgentRuntime(
     /// kapsam daraltmadır: akış adları sistem talimatına gömülmediğinden çalışma zamanında eklenen
     /// akışlar da anında yönlendirilebilir olur.
     /// </summary>
-    private List<WorkflowMetadata> SearchCandidateWorkflows(string userMessage) =>
-        workflowSearcher.Search(userMessage, topK: 3).Select(match => match.Metadata).ToList();
+    private List<WorkflowMetadata> SearchCandidateWorkflows(string userMessage)
+    {
+        var matches = workflowSearcher.Search(userMessage, topK: 3);
+
+        hub.Publish(TraceCategories.Semantic,
+            $"Aday akış araması → {matches.Count} eşleşme",
+            matches.Select(match => $"{match.Metadata.WorkflowName} ({match.Score:F2})"));
+
+        return matches.Select(match => match.Metadata).ToList();
+    }
 
     private AITool BuildStartWorkflowTool()
     {

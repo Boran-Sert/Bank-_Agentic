@@ -12,11 +12,26 @@ public static class TraceCategories
     /// <summary>İsteğin akış ile orkestratör arasındaki yönlendirme kararı.</summary>
     public const string FlowRouter = "FLOWROUTER";
 
-    /// <summary>Uygulama yaşam döngüsü ve oturum olayları.</summary>
+    /// <summary>Uygulama yaşam döngüsü olayları.</summary>
     public const string System = "SYSTEM";
 
-    /// <summary>İş akışı motorunun evre geçişleri ve slot olayları.</summary>
+    /// <summary>Oturumun açılması, kapanması ve durumunun saklanması.</summary>
+    public const string Session = "SESSION";
+
+    /// <summary>İş akışı motorunun evre geçişleri ve akış kaydı.</summary>
     public const string Workflow = "WORKFLOW";
+
+    /// <summary>Slot yazma, şema doğrulama ve eksik parametre tespiti.</summary>
+    public const string Slot = "SLOT";
+
+    /// <summary>Onay kapısının kurulması ve kullanıcının onay kararı.</summary>
+    public const string Approval = "APPROVAL";
+
+    /// <summary>Uzman ve akış ajanlarının kurulması, kaydı ve tahliyesi.</summary>
+    public const string Agent = "AGENT";
+
+    /// <summary>Semantik arama ve indeks senkronizasyonu.</summary>
+    public const string Semantic = "SEMANTIC";
 
     /// <summary>Çıktı güvenlik bariyerinin tespit ettiği ihlaller.</summary>
     public const string Security = "SECURITY";
@@ -47,4 +62,10 @@ public static class TraceCategories
 
     /// <summary>Uzmanlarla A2A üzerinden yapılan yazışmalar.</summary>
     public const string A2A = "A2A";
+
+    /// <summary>
+    /// Uzmanlarla süreç içi köprü üzerinden yapılan yazışmalar.
+    /// <see cref="A2A"/> ile aynı çağrının taşıma katmanı farkını gösterir.
+    /// </summary>
+    public const string InProcess = "IN-PROCESS";
 }

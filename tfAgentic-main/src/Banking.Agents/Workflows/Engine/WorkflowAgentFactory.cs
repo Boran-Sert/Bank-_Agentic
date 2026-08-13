@@ -97,7 +97,7 @@ public sealed class WorkflowAgentFactory(
     {
         if (reason is EvictionReason.Replaced or EvictionReason.Removed) return;
 
-        hub.Publish(TraceCategories.Workflow,
+        hub.Publish(TraceCategories.Agent,
             $"Akış ajanı bırakıldı ({reason}) → {state} | sonraki istekte yeniden kurulacak");
     }
 
@@ -146,7 +146,7 @@ public sealed class WorkflowAgentFactory(
                 SerializerOptions = AgentJsonPolicy.ToolOptions
             });
 
-        return new TracingAIFunction(tool, hub, TraceCategories.Workflow, UpdateSlotToolName, "Oturum Parametresi Güncelleme");
+        return new TracingAIFunction(tool, hub, TraceCategories.Slot, UpdateSlotToolName, "Oturum Parametresi Güncelleme");
     }
 
     /// <summary>
@@ -181,14 +181,14 @@ public sealed class WorkflowAgentFactory(
 
                 if (!slotStatus.IsComplete)
                 {
-                    hub.Publish(TraceCategories.Workflow, $"Teklif reddedildi → {slotStatus.DescribeProblems()}");
+                    hub.Publish(TraceCategories.Slot, $"Teklif reddedildi → {slotStatus.DescribeProblems()}");
                     return $"ERROR: Teklif oluşturulamadı ({slotStatus.DescribeProblems()}). Bu alanları kullanıcıdan tekrar iste.";
                 }
 
                 var proposedSlots = slotStatus.ToProposedSlots();
 
                 session.StoreProposedSlots(session.ActiveWorkflowName ?? definition.AgentName, proposedSlots);
-                hub.Publish(TraceCategories.Workflow, $"{definition.AgentName} parametreleri onaya hazır");
+                hub.Publish(TraceCategories.Approval, $"{definition.AgentName} parametreleri onaya hazır");
 
                 return WorkflowAgentSignals.ProposalReady + proposedSlots.ToReadableJson();
             },
@@ -199,7 +199,7 @@ public sealed class WorkflowAgentFactory(
                 SerializerOptions = AgentJsonPolicy.ToolOptions
             });
 
-        return new TracingAIFunction(tool, hub, TraceCategories.Workflow, proposeToolName, "Onaya sunuluyor");
+        return new TracingAIFunction(tool, hub, TraceCategories.Approval, proposeToolName, "Onaya sunuluyor");
     }
 
     private AITool BuildCancelTool(string cancelToolName)

@@ -22,7 +22,7 @@ public sealed class ResponseSanitizer
     private readonly Regex _toolNamePattern;
 
     /// <summary>Temizlik sonrası metin tamamen boşaldığında kullanıcıya döndürülen güvenli varsayılan yanıt.</summary>
-    private const string FallbackMessage = "Talebiniz işleniyor. Lütfen sorunuzu tekrar yazınız.";
+    private const string FallbackMessage = "Sadece bankacılık hakkında sorular sorun lütfen.";
 
     /// <summary>
     /// Bariyeri kurar ve maskelenecek araç adlarını kayıt defterinden okur (Kategori 1).

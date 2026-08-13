@@ -29,7 +29,6 @@ public sealed record WorkflowOutcome
         string workflowName,
         WorkflowOutcomeStatus status,
         string userMessage,
-        string? receiptId,
         IReadOnlyDictionary<string, object?>? details)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workflowName);
@@ -38,7 +37,6 @@ public sealed record WorkflowOutcome
         WorkflowName = workflowName;
         Status = status;
         UserMessage = userMessage;
-        ReceiptId = receiptId;
         Details = details ?? EmptyDetails;
     }
 
@@ -54,7 +52,6 @@ public sealed record WorkflowOutcome
     public string UserMessage { get; }
 
     /// <summary>Banka tarafından üretilen makbuz numarası; para hareketi içermeyen akışlarda <c>null</c>.</summary>
-    public string? ReceiptId { get; }
 
     /// <summary>Bankanın döndürdüğü yapısal alanlar (tutar, kalan bakiye, IBAN vb.); UI kartları içindir.</summary>
     public IReadOnlyDictionary<string, object?> Details { get; }
@@ -68,11 +65,11 @@ public sealed record WorkflowOutcome
         string userMessage,
         string? receiptId = null,
         IReadOnlyDictionary<string, object?>? details = null) =>
-        new(workflowName, WorkflowOutcomeStatus.Succeeded, userMessage, receiptId, details);
+        new(workflowName, WorkflowOutcomeStatus.Succeeded, userMessage, details);
 
     /// <summary>Kullanıcının onay ekranında reddettiğini bildiren sonuç üretir. Hiçbir eylem çalıştırılmamıştır.</summary>
     public static WorkflowOutcome RejectedByUser(string workflowName, string userMessage) =>
-        new(workflowName, WorkflowOutcomeStatus.RejectedByUser, userMessage, receiptId: null, details: null);
+        new(workflowName, WorkflowOutcomeStatus.RejectedByUser, userMessage, details: null);
 
     /// <summary>
     /// Eylemin denendiğini ve başarısız olduğunu bildiren sonuç üretir.
@@ -80,5 +77,5 @@ public sealed record WorkflowOutcome
     /// <param name="workflowName">Sonucu üreten akışın kanonik adı.</param>
     /// <param name="reason">Başarısızlığın gerekçesi; doğrudan kullanıcıya iletilir.</param>
     public static WorkflowOutcome Failure(string workflowName, string reason) =>
-        new(workflowName, WorkflowOutcomeStatus.Failed, reason, receiptId: null, details: null);
+        new(workflowName, WorkflowOutcomeStatus.Failed, reason,  details: null);
 }

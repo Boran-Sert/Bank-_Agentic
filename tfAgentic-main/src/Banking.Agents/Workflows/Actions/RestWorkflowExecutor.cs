@@ -48,7 +48,6 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
             return WorkflowOutcome.Success(
                 action.WorkflowName,
                 userMessage: $"{action.Label} talebiniz alındı ve kaydedildi.",
-                receiptId: null,
                 details: BuildConfirmationView(action, slots).Parameters);
         }
 
@@ -63,8 +62,7 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
         {
             var response = await bank.SendAsync(action.Method, action.Path!, requestBody, idempotencyKey, cancellationToken);
             hub.Publish(TraceCategories.Service, $"{action.Method.Method} {action.Path}", "Banka işlemi tamamladı");
-
-            return BuildReceipt(action, response);
+            return null; // TODO: BUNU KONTROL ET
         }
         catch (BankApiException exception) when (exception.StatusCode == 404)
         {
@@ -86,28 +84,7 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
             return WorkflowOutcome.Failure(action.WorkflowName, "Bankaya şu anda ulaşılamıyor. Lütfen daha sonra tekrar deneyin.");
         }
     }
-
-    /// <summary>
-    /// Bankanın ham yanıtından akıştan bağımsız tek bir makbuz sonucu üretir. Makbuz numarası
-    /// yalnızca bankadan gelir; banka döndürmediyse bu katman numara türetmez.
-    /// </summary>
-    private static WorkflowOutcome BuildReceipt(WorkflowActionDefinition action, JsonElement bankResponse)
-    {
-        var receiptId = ReadString(bankResponse, "receiptId");
-
-        var userMessage = receiptId is null
-            ? $"{action.Label} işleminiz tamamlandı."
-            : $"{action.Label} işleminiz tamamlandı.\nMakbuz No: {receiptId}";
-
-        return WorkflowOutcome.Success(action.WorkflowName, userMessage, receiptId, ReadAllFields(bankResponse));
-    }
-
-    private static string? ReadString(JsonElement response, string propertyName) =>
-        response.ValueKind == JsonValueKind.Object &&
-        response.TryGetProperty(propertyName, out var property) &&
-        property.ValueKind == JsonValueKind.String
-            ? property.GetString()
-            : null;
+    
 
     /// <summary>
     /// Bankanın döndürdüğü tüm alanları sonuç detayına aktarır. İçerik yorumlanmaz; hangi alanların

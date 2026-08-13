@@ -206,7 +206,7 @@ Zamirli takip cümlelerinin ("ikincisini", "bunlardan bana uygun olanı") gönde
 ### 4.6 İzleme — `TraceHub` / `TracingAIFunction` / `TracingChatClient`
 
 - **`TraceHub`** — Tüm katmanlardan gelen iz olaylarının merkezi yayın noktası; hem `ILogger`'a yazar hem SSE abonelerine gönderir. Abone kanalları sınırlı (512) ve `DropOldest`.
-- **`TracingAIFunction`** — Bir aracı saran dekoratör; çağrı öncesi argümanları, sonrası sonucu yayınlar. Aracın davranışını değiştirmez.
+- **`TracingAIFunction`** — Bir aracı saran dekoratör; çağrı öncesi argümanları, sonrası sonucu yayınlar. Aracın davranışını değiştirmez; metin dönen bir sonucu ize yazmadan önce `Unwrap` ile ham metne indirger — aksi hâlde `JsonElement` sarmalı sonuç izde bir kez daha kaçışlanıp okunmaz hale gelir.
 - **`TracingChatClient`** — `DelegatingChatClient`; her model çağrısını ve yanıtı yayınlar. `PrepareTurn` iki çağrı yolunun (senkron/streaming) ortak hazırlığını yapar: varsayılan sıcaklık yalnızca istek kendi değerini belirtmediğinde uygulanır. Her tamamlanan tur ayrıca bir `"{etiket} -> Token Maliyeti"` satırı yayınlar (model adı, girdi/çıktı/toplam token — sağlayıcı döndürdüyse — ve süre); sistemin donanım faturasını belirleyen çarpan mesaj başına model turu olduğundan bu ölçüm her fazın kanıtıdır.
 - **`TraceHubBankApiObserver`** — `IBankApiClient`'ın istek/yanıt/hata izlerini `TraceHub`'a bağlar. Yayın hatası banka çağrısını düşürmez.
 
@@ -298,7 +298,7 @@ Ajanın araç kümesi: uzman köprüleri + dört denetim aracı.
 **`RestWorkflowExecutor`** (`Workflows/Actions/RestWorkflowExecutor.cs`) — **Sistemdeki tek executor.** Durumsuz ve singleton; akışın kimliği ve hedefi her çağrıda parametre olarak gelir. Yeni bir akış eklemek bu sınıfta değişiklik gerektirmez.
 
 - `BuildConfirmationView(action, slots)`: Onay ekranını YAML'da tanımlı slotlardan kurar.
-- `ExecuteAsync(action, slots, approved, ct)`: Onay yoksa bankaya istek atmaz. **Hiçbir koşulda istisna sızdırmaz** — banka reddi ve ağ hatası dâhil tüm başarısızlıklar `WorkflowOutcome.Failure` olarak döner; eylem MAF grafiğinin içinde çalıştığı için oradan fırlayan bir istisna çağırana ulaşmaz, event akışına düşer.
+- `ExecuteAsync(action, slots, approved, ct)`: Onay yoksa bankaya istek atmaz. **Hiçbir koşulda istisna sızdırmaz** — banka reddi ve ağ hatası dâhil tüm başarısızlıklar `WorkflowOutcome.Failure` olarak döner; eylem MAF grafiğinin içinde çalıştığı için oradan fırlayan bir istisna çağırana ulaşmaz, event akışına düşer. Yol bankada bulunamazsa (`404`) genel banka-reddi dalından ayrı yakalanır: YAML'daki `action.path` bankanın güncel yüzeyiyle uyuşmuyor demektir (ör. gerçek bankaya geçişte unutulan bir eşleme) — bu, tanı gerektiren bir yapılandırma hatasıdır, sıradan bir işlem reddi değil, bu yüzden ize ayrı bir uyarı satırı düşer.
 - `BuildReceipt(action, bankResponse)` (private): **Makbuz numarası yalnızca bankadan gelir**; banka numara döndürmediyse makbuz üretilmez, bu katman numara türetmez.
 
 **Bankacılık kuralı içermez.** Tutar karşılaştırması, limit denetimi ve IBAN doğrulaması bankanın kendi uçlarına aittir.
@@ -426,6 +426,10 @@ Dört tüketici ve **bilerek farklı** eşikleri:
 ### 8.3 Sabitler
 
 `ToolNames`, `TraceCategories`, `WorkflowPhases`, `WorkflowStatuses`, `AgentConstants` — araç adları, iz kategorileri, akış evreleri/durumları ve uzman adları tek yerde.
+
+### 8.4 Ortak JSON Biçimi — `Serialization/JsonPolicy`
+
+**`JsonPolicy`** (`Banking.Domain/Serialization/JsonPolicy.cs`) — Sistemin ürettiği tüm JSON'ın tek biçim kaynağı: araç sonuçları, ajanlar arası köprü yanıtları, iz yükleri (`TraceHub.JsonOptions`) ve HTTP gövdeleri hepsi `Readable`'ı paylaşır. `JavaScriptEncoder.UnsafeRelaxedJsonEscaping` ile Türkçe karakterler ve tırnak işareti kaçışsız yazılır; girinti kapalıdır (token tasarrufu). `Banking.Agents/Runtime/AgentJsonPolicy.ToolOptions` aynı kodlayıcıyı C# ile yazılmış (`AIFunctionFactory`) araçların şema/sonuç serileştirmesine taşır — MAF'ın kendi varsayılan kodlayıcısı bu tek yoldan geri sızmasın diye.
 
 ---
 

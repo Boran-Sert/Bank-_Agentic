@@ -31,7 +31,7 @@ public sealed class NavigationTools(
         [
             new TracingAIFunction(
                 AIFunctionFactory.Create(SearchScreenCode, new AIFunctionFactoryOptions { Name = searchDefinition.Name, Description = searchDefinition.Description, SerializerOptions = AgentJsonPolicy.ToolOptions }),
-                hub, TraceCategories.Workflow, "Semantik Ekran Kodu Arama tetiklendi"),
+                hub, TraceCategories.Semantic, "Semantik Ekran Kodu Arama tetiklendi"),
 
             new TracingAIFunction(
                 AIFunctionFactory.Create(OpenScreen, new AIFunctionFactoryOptions { Name = openDefinition.Name, Description = openDefinition.Description, SerializerOptions = AgentJsonPolicy.ToolOptions }),

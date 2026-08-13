@@ -63,7 +63,7 @@ public sealed class SessionContext
 
         State.ActiveWorkflowName = workflowName;
         State.Phase = WorkflowPhases.Idle;
-        _hub.Publish(TraceCategories.System, $"İş akışı ({workflowName}) oturumu başlatıldı: {SessionId}");
+        _hub.Publish(TraceCategories.Session, $"İş akışı ({workflowName}) oturumu başlatıldı: {SessionId}");
     }
 
     /// <summary>Akışı başarıyla sonlandırır ve oturumu bir sonraki iş için temizler.</summary>
@@ -104,14 +104,14 @@ public sealed class SessionContext
         ArgumentException.ThrowIfNullOrWhiteSpace(slotName);
 
         State.SlotValues[slotName] = slotValue;
-        _hub.Publish(TraceCategories.Workflow, $"StateBag Parametre Eklendi → [{slotName} = {slotValue}] (Session: {SessionId})");
+        _hub.Publish(TraceCategories.Slot, $"StateBag Parametre Eklendi → [{slotName} = {slotValue}] (Session: {SessionId})");
     }
 
     /// <summary>Akışın YAML şemasına göre dolu, eksik ve opsiyonel slotları hesaplar.</summary>
     public SlotStatus GetSlotStatus()
     {
         var status = SlotBinder.GetStatus(State.SlotValues, State.ExpectedSlots);
-        _hub.Publish(TraceCategories.Workflow,
+        _hub.Publish(TraceCategories.Slot,
             $"StateBag Durumu Sorgulandı → Dolu: {status.FilledSlots.Count}, Eksik: {status.MissingSlots.Count} | Tamamlandı: {status.IsComplete}");
 
         return status;
@@ -139,7 +139,7 @@ public sealed class SessionContext
             storedValues.Add($"{slotName}={slotValue}");
         }
 
-        _hub.Publish(TraceCategories.Workflow,
+        _hub.Publish(TraceCategories.Slot,
             $"StateBag Kaydedildi → Workflow: '{workflowName}' | Saklanan Değerler: [{string.Join(", ", storedValues)}]");
     }
 

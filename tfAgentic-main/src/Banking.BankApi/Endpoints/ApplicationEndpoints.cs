@@ -37,28 +37,26 @@ internal static class ApplicationEndpoints
             if (string.IsNullOrWhiteSpace(request.EduBackground)) return BankResults.MissingField("eduBackground");
             if (string.IsNullOrWhiteSpace(request.FirstWorkDay)) return BankResults.MissingField("firstWorkDay");
             if (request.NumberOfDependents is null) return BankResults.MissingField("numberOfDependents");
+            if (request.MonthlyNetIncome is null) return BankResults.MissingField("monthlyNetIncome");
+            if (string.IsNullOrWhiteSpace(request.DeliveryChannel)) return BankResults.MissingField("deliveryChannel");
+            if (request.KvkkConsent is null) return BankResults.MissingField("kvkkConsent");
 
             return BankResults.Execute(() => applications.CreateCreditCardApplication(
                 BankResults.ResolveCustomerId(request.CustomerId),
-                request.WorkType,
-                request.Job,
-                request.Rank ?? "Belirtilmedi",
-                request.EduBackground,
-                request.FirstWorkDay,
-                request.NumberOfDependents.Value));
+                request with { Rank = request.Rank ?? "Belirtilmedi" }));
         });
 
         app.MapPost("/api/loan-application", (LoanApplicationRequest request, IApplicationService applications) =>
         {
             if (request.RequestedAmount is null) return BankResults.MissingField("requestedAmount");
             if (request.InstallmentCount is null) return BankResults.MissingField("installmentCount");
+            if (request.MonthlyNetIncome is null) return BankResults.MissingField("monthlyNetIncome");
+            if (string.IsNullOrWhiteSpace(request.DisbursementAccountId)) return BankResults.MissingField("disbursementAccountId");
+            if (request.KvkkConsent is null) return BankResults.MissingField("kvkkConsent");
 
             return BankResults.Execute(() => applications.CreateLoanApplication(
                 BankResults.ResolveCustomerId(request.CustomerId),
-                request.LoanType ?? "Tüketici İhtiyaç Kredisi",
-                request.RequestedAmount.Value,
-                request.InstallmentCount.Value,
-                request.Purpose ?? "Belirtilmedi"));
+                request with { Purpose = request.Purpose ?? "Belirtilmedi" }));
         });
     }
 }

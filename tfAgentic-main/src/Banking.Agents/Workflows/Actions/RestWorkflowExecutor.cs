@@ -37,7 +37,7 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
     {
         if (!approved)
         {
-            hub.Publish(TraceCategories.Workflow, $"{action.WorkflowName} → onay reddedildi, bankaya istek atılmadı");
+            hub.Publish(TraceCategories.Approval, $"{action.WorkflowName} → onay reddedildi, bankaya istek atılmadı");
             return WorkflowOutcome.RejectedByUser(action.WorkflowName, "İşlem iptal edildi.");
         }
 

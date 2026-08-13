@@ -44,7 +44,7 @@ internal static class LoanEndpoints
             if (string.IsNullOrWhiteSpace(request.LoanId)) return BankResults.MissingField("loanId");
             if (string.IsNullOrWhiteSpace(request.SourceAccountId)) return BankResults.MissingField("sourceAccountId");
 
-            return BankResults.Execute(() => loans.PayNextInstallment(request.LoanId, request.SourceAccountId));
+            return BankResults.Execute(() => loans.PayInstallments(request));
         });
     }
 }

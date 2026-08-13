@@ -54,4 +54,55 @@ public static class BankApiPaths
 
     /// <summary>Ekran kodu (mkCode) kataloğu. Gövde yok; liste müşteriye göre değişmez.</summary>
     public const string MkCodes = "/api/mkcodes";
+
+    /// <summary>Müşterinin kredileri. Gövde: <c>customerId</c>.</summary>
+    public const string Loans = "/api/loans";
+
+    /// <summary>Tek kredinin detayı. Gövde: <c>customerId</c>, <c>loanId</c>.</summary>
+    public const string Loan = "/api/loan";
+
+    /// <summary>Kredinin taksit planı. Gövde: <c>customerId</c>, <c>loanId</c>.</summary>
+    public const string LoanInstallments = "/api/loan-installments";
+
+    /// <summary>Müşterinin ürün başvuruları. Gövde: <c>customerId</c>.</summary>
+    public const string Applications = "/api/applications";
+
+    /// <summary>Tek başvurunun durumu. Gövde: <c>customerId</c>, <c>applicationId</c>.</summary>
+    public const string Application = "/api/application";
+
+    /// <summary>Müşterinin faturaları. Gövde: <c>customerId</c>, <c>onlyUnpaid</c> (opsiyonel).</summary>
+    public const string Bills = "/api/bills";
+
+    /// <summary>Tek faturanın detayı. Gövde: <c>customerId</c>, <c>billId</c>.</summary>
+    public const string Bill = "/api/bill";
+
+    /// <summary>Düzenli ödeme talimatları. Gövde: <c>customerId</c>, <c>onlyActive</c> (opsiyonel).</summary>
+    public const string StandingOrders = "/api/standing-orders";
+
+    /// <summary>Kayıtlı alıcılar. Gövde: <c>customerId</c>.</summary>
+    public const string Beneficiaries = "/api/beneficiaries";
+
+    /// <summary>Yatırım pozisyonları. Gövde: <c>customerId</c>.</summary>
+    public const string Investments = "/api/investments";
+
+    /// <summary>Varlık ve borç özeti. Gövde: <c>customerId</c>.</summary>
+    public const string PortfolioSummary = "/api/portfolio-summary";
+
+    /// <summary>Gişe kurları. Gövde: <c>code</c> (opsiyonel; verilmezse tüm kurlar).</summary>
+    public const string ExchangeRates = "/api/exchange-rates";
+
+    /// <summary>Müşteri künyesi. Gövde: <c>customerId</c>.</summary>
+    public const string CustomerProfile = "/api/customer-profile";
+
+    /// <summary>Kanal ve işlem limitleri. Gövde: <c>customerId</c>.</summary>
+    public const string CustomerLimits = "/api/customer-limits";
+
+    /// <summary>Güvenlik ve bildirim tercihleri. Gövde: <c>customerId</c>.</summary>
+    public const string CustomerSecurity = "/api/customer-security";
+
+    /// <summary>Sigorta poliçeleri. Gövde: <c>customerId</c>, <c>onlyActive</c> (opsiyonel).</summary>
+    public const string InsurancePolicies = "/api/insurance-policies";
+
+    /// <summary>Tek poliçenin detayı. Gövde: <c>customerId</c>, <c>policyId</c>.</summary>
+    public const string InsurancePolicy = "/api/insurance-policy";
 }

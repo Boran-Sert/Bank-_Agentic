@@ -123,7 +123,7 @@ public sealed class SpecialistCatalog(
             await BuildAndCacheAsync(card, cancellationToken);
 
         logger.LogInformation("Deklaratif uzman kaydedildi: {Name} (/a2a/{Route}).", card.Name, card.A2ARoute);
-        hub.Publish(Banking.Domain.Constants.TraceCategories.System,
+        hub.Publish(Banking.Domain.Constants.TraceCategories.Agent,
             $"[UZMAN KAYDEDİLDİ] '{card.DisplayName}' → köprü aracı: {card.BridgeToolName} · /a2a/{card.A2ARoute}");
 
         Interlocked.Increment(ref _version);
@@ -233,13 +233,13 @@ public sealed class SpecialistCatalog(
     {
         if (!options.UseA2AForSpecialists)
             return Cards.Select(card => BuildBridgeTool(
-                card, new LazySpecialistAgent(this, card), "In-Process", "Dahili Bağlantı")).ToList();
+                card, new LazySpecialistAgent(this, card), TraceCategories.InProcess, "Dahili Bağlantı")).ToList();
 
         return Cards.Select(card => BuildBridgeTool(
             card,
             new A2AClient(new Uri(options.A2AUrl(card.A2ARoute)))
                 .AsAIAgent(name: card.BridgeToolName, description: card.Description),
-            "A2A",
+            TraceCategories.A2A,
             $"→ {options.A2AUrl(card.A2ARoute)}")).ToList();
     }
 
@@ -309,7 +309,7 @@ public sealed class SpecialistCatalog(
     {
         if (reason is EvictionReason.Replaced or EvictionReason.Removed) return;
 
-        hub.Publish(TraceCategories.System,
+        hub.Publish(TraceCategories.Agent,
             $"Uzman ajan bırakıldı ({reason}) → {state} | sonraki istekte yeniden kurulacak");
     }
 

@@ -1,3 +1,4 @@
+using Banking.BankApi.Contracts;
 using Banking.Domain.Data;
 using Banking.Domain.Models;
 using Banking.Domain.Validation;
@@ -33,7 +34,8 @@ public interface IInvestmentService
     /// Alım-satımı gerçekleştirir; karşılığı TL hesabına yansıtır ve pozisyonu günceller. Geri
     /// alınamaz bir işlemdir; yalnızca kullanıcı onayı alındıktan sonra çağrılır.
     /// </summary>
-    FxTradeReceipt Trade(string side, string code, decimal quantity, string accountId);
+    /// <exception cref="InvalidOperationException">Form kendi içinde tutarsız olduğunda fırlatılır.</exception>
+    FxTradeReceipt Trade(FxTradeRequest form);
 }
 
 /// <inheritdoc cref="IInvestmentService"/>
@@ -156,20 +158,33 @@ public sealed class InvestmentService(InMemoryBankStore store) : IInvestmentServ
         return BankValidationResult.Acceptable();
     }
 
-    public FxTradeReceipt Trade(string rawSide, string code, decimal quantity, string accountId)
+    public FxTradeReceipt Trade(FxTradeRequest form)
     {
+        var accountId = form.AccountId ?? string.Empty;
+        var code = form.Code ?? string.Empty;
+
         // Doğrulama, bakiye hareketi ve pozisyon güncellemesi tek atomik adım.
         lock (store.MoneyGate)
         {
-            var validation = ValidateFxTradeBeforeExecution(rawSide, code, quantity, accountId);
+            var side = NormalizeSide(form.Side) ?? throw new InvalidOperationException($"İşlem yönü '{BuySide}' veya '{SellSide}' olmalıdır.");
+            var rate = GetExchangeRate(code) ?? throw new InvalidOperationException($"'{code}' kodlu bir döviz veya kıymetli maden kuru bulunamadı.");
+            var account = FindAccount(accountId) ?? throw new InvalidOperationException($"Hesap bulunamadı: {accountId}");
+
+            RequireRateRiskAcknowledgement(form.AcceptRateRisk);
+            RequireNotificationChannel(form.NotifyOnExecution, form.NotificationChannel);
+
+            var orderType = NormalizeOrderType(form.OrderType);
+            var valueDate = ResolveValueDate(form.ValueDate);
+            var unitRate = side == BuySide ? rate.SellRate : rate.BuyRate;
+
+            RequireLimitRateIsMet(orderType, side, form.LimitRate, unitRate, rate.Name);
+
+            var quantity = ResolveQuantity(form.Quantity, form.AmountInTry, unitRate);
+
+            var validation = ValidateFxTradeBeforeExecution(form.Side, code, quantity, accountId);
             if (!validation.IsAcceptable)
                 throw new InvalidOperationException(validation.UserFacingMessage);
 
-            var side = NormalizeSide(rawSide) ?? throw new InvalidOperationException($"İşlem yönü '{BuySide}' veya '{SellSide}' olmalıdır.");
-            var rate = GetExchangeRate(code) ?? throw new InvalidOperationException($"Kur bulunamadı: {code}");
-            var account = FindAccount(accountId) ?? throw new InvalidOperationException($"Hesap bulunamadı: {accountId}");
-
-            var unitRate = side == BuySide ? rate.SellRate : rate.BuyRate;
             var totalAmount = Math.Round(quantity * unitRate, 2);
             var signedAmount = side == BuySide ? -totalAmount : totalAmount;
 
@@ -178,19 +193,96 @@ public sealed class InvestmentService(InMemoryBankStore store) : IInvestmentServ
 
             ApplyPositionChange(account.CustomerId, rate, side, quantity, unitRate);
 
-            var date = BankClock.Today;
-
             store.Transactions.Add(new Transaction(
-                $"TXN-FX-{Guid.NewGuid():N}"[..16], accountId, date,
+                $"TXN-FX-{Guid.NewGuid():N}"[..16], accountId, valueDate,
                 $"{rate.Name} {side.ToLowerInvariant()}ı ({quantity:N4})", signedAmount, side == BuySide ? "Giden" : "Gelen",
                 "Döviz", "Mobil"));
 
-            var receiptId = $"FXR-{date:yyyyMMdd}-{Guid.NewGuid():N}"[..21];
+            var receiptId = $"FXR-{BankClock.Today:yyyyMMdd}-{Guid.NewGuid():N}"[..21];
 
             return new FxTradeReceipt(
                 receiptId, side, rate.Code, quantity, unitRate, totalAmount,
-                accountId, date, updatedAccount.Balance, "Başarılı");
+                accountId, valueDate, updatedAccount.Balance, "Başarılı",
+                OrderType: orderType, Purpose: form.Purpose);
         }
+    }
+
+    /// <summary>Emir türünü kanonik değere çevirir; belirtilmeyen emir piyasa emri sayılır.</summary>
+    /// <exception cref="InvalidOperationException">Emir türü tanınmadığında fırlatılır.</exception>
+    private static string NormalizeOrderType(string? orderType) => orderType?.Trim().ToLowerInvariant() switch
+    {
+        null or "" or "piyasa" or "market" => "Piyasa",
+        "limit" => "Limit",
+        _ => throw new InvalidOperationException("Emir türü 'Piyasa' veya 'Limit' olmalıdır.")
+    };
+
+    /// <summary>
+    /// İşlem miktarını çözer: adet doğrudan verilebilir ya da TL karşılığından hesaplanır. İkisinin
+    /// birden verilmesi hangisinin bağlayıcı olduğunu belirsiz bırakacağından kabul edilmez.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">İkisi birden veya hiçbiri verilmediğinde fırlatılır.</exception>
+    private static decimal ResolveQuantity(decimal? quantity, decimal? amountInTry, decimal unitRate)
+    {
+        if (quantity is not null && amountInTry is not null)
+            throw new InvalidOperationException("İşlem miktarını ya adet olarak ya da TL karşılığı olarak verin; ikisi birden olmaz.");
+
+        if (quantity is { } explicitQuantity)
+            return explicitQuantity > 0m
+                ? explicitQuantity
+                : throw new InvalidOperationException("İşlem adedi sıfırdan büyük olmalıdır.");
+
+        if (amountInTry is not { } amount || amount <= 0m)
+            throw new InvalidOperationException("İşlem miktarı adet ya da TL karşılığı olarak verilmelidir.");
+
+        return Math.Round(amount / unitRate, 4);
+    }
+
+    /// <summary>
+    /// Limit emrinin gişe kuruyla karşılanabildiğini denetler. Karşılanamayan emir bekletilmez; banka
+    /// emri reddeder ve gerekçesini bildirir.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Limit kuru verilmediğinde veya karşılanmadığında fırlatılır.</exception>
+    private static void RequireLimitRateIsMet(
+        string orderType, string side, decimal? limitRate, decimal unitRate, string instrumentName)
+    {
+        if (orderType != "Limit") return;
+
+        if (limitRate is not { } limit || limit <= 0m)
+            throw new InvalidOperationException("Limit emrinde geçerli bir limit kuru verilmelidir.");
+
+        var isMet = side == BuySide ? unitRate <= limit : unitRate >= limit;
+
+        if (!isMet)
+            throw new InvalidOperationException(
+                $"{instrumentName} güncel gişe kuru {unitRate:N4} ₺; verdiğiniz {limit:N4} ₺ limitiyle işlem karşılanamıyor.");
+    }
+
+    /// <summary>Valör tarihini çözer. İleri valörlü işlem bu kanaldan yapılmadığından tarih bugünü aşamaz.</summary>
+    /// <exception cref="InvalidOperationException">Tarih bugünden farklı olduğunda fırlatılır.</exception>
+    private static DateOnly ResolveValueDate(DateOnly? valueDate)
+    {
+        var today = BankClock.Today;
+
+        if (valueDate is null || valueDate == today) return today;
+
+        throw new InvalidOperationException(
+            "Bu kanaldan yalnızca aynı gün valörlü işlem yapılabilir; ileri valörlü işlemler için şubenize başvurun.");
+    }
+
+    /// <summary>Kur riskinin kabul edildiğini denetler.</summary>
+    /// <exception cref="InvalidOperationException">Kur riski kabul edilmediğinde fırlatılır.</exception>
+    private static void RequireRateRiskAcknowledgement(bool? acceptRateRisk)
+    {
+        if (acceptRateRisk != true)
+            throw new InvalidOperationException("İşlemin gerçekleşmesi için kur riskinin kabul edildiğinin onaylanması gerekir.");
+    }
+
+    /// <summary>Bildirim istendiğinde kanalın da verildiğini denetler.</summary>
+    /// <exception cref="InvalidOperationException">Bildirim istenip kanal verilmediğinde fırlatılır.</exception>
+    private static void RequireNotificationChannel(bool? notifyOnExecution, string? notificationChannel)
+    {
+        if (notifyOnExecution == true && string.IsNullOrWhiteSpace(notificationChannel))
+            throw new InvalidOperationException("İşlem bildirimi istendiğinde bildirim kanalı zorunludur.");
     }
 
     /// <summary>

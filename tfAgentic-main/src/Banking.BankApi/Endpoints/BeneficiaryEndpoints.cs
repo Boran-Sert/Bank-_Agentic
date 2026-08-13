@@ -22,12 +22,12 @@ internal static class BeneficiaryEndpoints
 
             return BankResults.Execute(() => beneficiaries.AddBeneficiary(
                 BankResults.ResolveCustomerId(request.CustomerId),
-                request.Title ?? request.FullName,
-                request.FullName,
-                request.Iban,
-                request.BankName ?? "Diğer Banka",
-                request.TransferType ?? "FAST",
-                request.IsFavorite ?? false));
+                request with
+                {
+                    Title = request.Title ?? request.FullName,
+                    BankName = request.BankName ?? "Diğer Banka",
+                    TransferType = request.TransferType ?? "FAST"
+                }));
         });
 
         app.MapPut("/api/beneficiary-remove", (BeneficiaryRemoveRequest request, IBeneficiaryService beneficiaries) =>

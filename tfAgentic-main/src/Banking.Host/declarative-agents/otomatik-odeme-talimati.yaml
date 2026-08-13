@@ -1,29 +1,109 @@
-kind: Prompt
+kind: Workflow
 name: otomatik-odeme-talimati
-displayName: Otomatik Ödeme Talimatı Akışı
-description: Fatura veya kredi kartı ödemeleri için düzenli belirli periyodlarla gerçekleşen otomatik ödeme talimatları 
-  oluştutur.
+displayName: Otomatik Ödeme Talimatı
+description: >-
+  Fatura, kredi kartı borcu veya düzenli transfer için belirli periyotlarla çalışan otomatik ödeme
+  talimatı oluşturur.
+mkCode: AutomaticPaymentInstruction
 instructions: |
-  Bu akış sadece kullanıcının otomatik olarak ödeme talimatları vermesi için kullanılır .
-  Kullanıcının hangi kartını hangi hesaba bağlamak istediğini netleştir.
-  Kart ve hesap kimliklerini kullanıcıya sorma; kartı kart uzmanına, hesabı hesap uzmanına
-  danışarak bul, kullanıcı tarif ettiyse doğrudan eşle, tarif etmediyse seçenekleri sun.
+  Bu akış sadece yeni bir düzenli ödeme talimatı kurmak için kullanılır. Tek seferlik fatura veya
+  kart borcu ödemesi ile talimat iptali bu akışın konusu değildir.
+
+  Önce talimatın türünü netleştir, çünkü sorulacak hedef alan türe göre değişir:
+  - Kart Borcu ise ödenecek kartı sor, targetCardId doldur; IBAN ve fatura alanlarını hiç sorma.
+  - Fatura ise hangi kuruma ait faturanın ödeneceğini sor, billId doldur; kart ve IBAN alanlarını
+    hiç sorma.
+  - Düzenli Transfer ise hedef IBAN'ı sor, targetIban doldur; kart ve fatura alanlarını hiç sorma.
+
+  Kart, fatura ve hesap kimliklerini kullanıcıya sorma; kartı kart uzmanına, faturayı ödeme
+  uzmanına, hesabı hesap uzmanına danışarak bul. Kullanıcı tarif ettiyse doğrudan eşle, tarif
+  etmediyse seçenekleri okunabilir biçimde sunup seçmesini iste.
+
+  Ödeme şekli "Sabit Tutar" ise ödenecek tutarı sor; "Asgari Tutar" veya "Tamamı" ise tutarı hiç
+  sorma. Kart borcu talimatı sabit tutarlıysa aylık üst limit de zorunludur.
+  Yetersiz bakiyede tekrar denenmesi isteniyorsa kaç gün denenmesi gerektiğini sor; istenmiyorsa
+  gün sayısını hiç sorma.
 model:
   options:
     temperature: 0.1
-inputSchema:
+outputSchema:
   type: object
   properties:
-    cardId:
+    kind:
       type: string
-      description: >-
-        Otomatik ödemeye bağlanacak kartın kimliği. Kart uzmanından gelir; kart numarası
-        veya son haneler bu alana yazılmaz.
+      required: true
+      description: Talimatın türü. Geçerli değerler Kart Borcu, Fatura, Düzenli Transfer.
+    title:
+      type: string
+      required: false
+      description: Talimata verilecek kısa ad. Verilmezse banka hedeften bir ad üretir.
     sourceAccountId:
       type: string
+      required: true
       description: >-
-        Ödemenin çekileceği hesabın kimliği. Hesap uzmanından gelir; IBAN veya hesap adı
-        bu alana yazılmaz.
-  required:
-    - cardId
-    - sourceAccountId
+        Ödemenin çekileceği hesabın kimliği. Hesap uzmanından gelir; IBAN veya hesap adı bu alana
+        yazılmaz.
+    targetCardId:
+      type: string
+      required: false
+      description: >-
+        Borcu ödenecek kartın kimliği. Yalnızca talimat türü Kart Borcu ise doldurulur; kart
+        uzmanından gelir.
+    targetIban:
+      type: string
+      required: false
+      description: >-
+        Paranın gönderileceği IBAN. Yalnızca talimat türü Düzenli Transfer ise doldurulur;
+        kullanıcının verdiği değer olduğu gibi yazılır.
+    billId:
+      type: string
+      required: false
+      description: >-
+        Otomatik ödenecek faturanın kimliği. Yalnızca talimat türü Fatura ise doldurulur; ödeme
+        uzmanından gelir.
+    paymentType:
+      type: string
+      required: true
+      description: Her dönem ne kadar ödeneceği. Geçerli değerler Asgari Tutar, Tamamı, Sabit Tutar.
+    fixedAmount:
+      type: number
+      required: false
+      description: Her dönem ödenecek sabit tutar. Yalnızca ödeme şekli Sabit Tutar ise doldurulur.
+    upperLimit:
+      type: number
+      required: false
+      description: >-
+        Talimatın bir dönemde ödeyebileceği en yüksek tutar. Bu tutarı aşan borçta talimat çalışmaz.
+    dayOfMonth:
+      type: number
+      required: true
+      description: Talimatın çalışacağı gün. Ayın 1 ile 28'i arasında bir gün olmalıdır.
+    startDate:
+      type: string
+      required: false
+      description: Talimatın yürürlüğe gireceği tarih, yyyy-MM-dd biçiminde. Verilmezse bugünden başlar.
+    endDate:
+      type: string
+      required: false
+      description: Talimatın sona ereceği tarih, yyyy-MM-dd biçiminde. Süresiz talimatta boş bırakılır.
+    notifyBeforeDays:
+      type: number
+      required: false
+      description: Ödemeden kaç gün önce bilgilendirme yapılacağı. 0 ile 10 gün arasında olmalıdır.
+    retryOnInsufficientFunds:
+      type: boolean
+      required: true
+      description: Ödeme günü bakiye yetmezse talimatın tekrar denenmesi isteniyorsa true.
+    retryDayCount:
+      type: number
+      required: false
+      description: >-
+        Kaç gün boyunca tekrar deneneceği; 1 ile 5 gün arasında olmalıdır. Yalnızca tekrar deneme
+        isteniyorsa doldurulur.
+    description:
+      type: string
+      required: false
+      description: Talimata iliştirilecek açıklama. Kullanıcı vermek istemezse boş bırakılır.
+action:
+  method: PUT
+  path: /api/standing-order

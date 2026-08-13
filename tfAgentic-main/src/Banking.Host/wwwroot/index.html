@@ -3,60 +3,87 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>TKFB Agentic · Microsoft Agent Framework & Declarative Studio</title>
+<title>ARI · Microsoft Agent Framework & Declarative Studio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
   /* ==================================================================
-     Sıcak koyu tema — tek tema, bilinçli tercih. Zemin sıcak siyah,
-     metin kemik, tek vurgu kil rengi. Her renk token üzerinden okunur.
+     Açık tema — tek tema, bilinçli tercih. Renkler mobil uygulamadan
+     alınır: beyaz zemin, turkuaz birincil vurgu, fıstık yeşili ikincil,
+     koyu metin. Her renk token üzerinden okunur.
      ================================================================== */
   :root {
-    color-scheme: dark;
+    color-scheme: light;
 
-    --ground:          #191817;
-    --surface:         #232220;
-    --surface-raised:  #2C2B28;
-    --surface-sunken:  #131211;
+    --ground:          #FFFFFF;
+    --surface:         #FFFFFF;
+    --surface-raised:  #FFFFFF;
+    --surface-sunken:  #F4F6F7;
+    --bubble:          #F1F3F5;
 
-    --line:            rgba(240, 238, 230, 0.10);
-    --line-strong:     rgba(240, 238, 230, 0.20);
+    --line:            rgba(0, 0, 0, 0.10);
+    --line-strong:     rgba(0, 0, 0, 0.17);
 
-    --bone:            #F0EEE6;
-    --bone-dim:        #BFBBAE;
-    --bone-faint:      #948F82;
+    --ink:             #1A1D1F;
+    --ink-dim:         #5F6672;
+    --ink-faint:       #7D848E;
 
-    --clay:            #D97757;
-    --clay-bright:     #E5906F;
-    --clay-soft:       rgba(217, 119, 87, 0.13);
-    --clay-line:       rgba(217, 119, 87, 0.38);
-    --on-clay:         #241C18;
+    /* Turkuaz: dolgu için parlak ton, metin için koyu ton — beyaz üzerinde
+       parlak turkuaz metin okunmaz, ikisi ayrı token olmak zorunda. */
+    --teal:            #0FC9B8;
+    --teal-hover:      #05B0A0;
+    --teal-strong:     #00867A;
+    --teal-soft:       rgba(15, 201, 184, 0.12);
+    --teal-line:       rgba(15, 201, 184, 0.45);
+    --on-teal:         #FFFFFF;
 
-    --ok:              #7FB08A;
-    --warn:            #D9A441;
-    --danger:          #E0736A;
-    --info:            #7BA3C4;
+    --lime:            #A4CE3B;
+
+    --ok:              #5E8C12;
+    --warn:            #A87409;
+    --danger:          #C0392B;
+    --info:            #1F6FA8;
 
     --radius-sm: 8px;
     --radius:    12px;
     --radius-lg: 16px;
 
-    /* İzleme katmanı renkleri — sıcak zeminde okunacak şekilde doygunluğu düşük */
-    --l-llm:          #A78BC4;
-    --l-a2a:          #7BA3C4;
-    --l-mcp:          #6FB0A6;
-    --l-service:      #7FB08A;
-    --l-workflow:     #D9A441;
-    --l-system:       #93A4B5;
-    --l-context:      #9B93D1;
-    --l-gateway:      #D18BAE;
-    --l-flowrouter:   #8E96D6;
-    --l-security:     #E0736A;
-    --l-api-request:  #6BA9B8;
-    --l-api-response: #6FB08F;
-    --l-api-error:    #E0736A;
+    /* İzleme katmanı renkleri. Beyaz zeminde okunacak koyulukta seçilir ve
+       akraba katmanlar komşu tonlardan verilir: bir izi okurken tonun ailesi
+       olayın hangi katmandan geldiğini etiketi okumadan söyler. */
+
+    /* Model ve bağlam — mor ailesi */
+    --l-llm:          #6D3FB0;
+    --l-context:      #5B4FC0;
+    --l-agent:        #9B3BA8;
+
+    /* Yönlendirme ve taşıma — mavi ailesi */
+    --l-flowrouter:   #4650A8;
+    --l-a2a:          #1F6FA8;
+    --l-in-process:   #46748F;
+
+    /* Araç ve banka çağrıları — camgöbeği–yeşil ailesi */
+    --l-api-request:  #17798C;
+    --l-mcp:          #0E8375;
+    --l-api-response: #1E8558;
+    --l-service:      #3F8B4F;
+
+    /* İş akışı — zeytin–turuncu ailesi */
+    --l-slot:         #5A7409;
+    --l-workflow:     #9A6B0F;
+    --l-approval:     #B04E14;
+
+    /* Giriş, arama ve oturum */
+    --l-gateway:      #A63C7A;
+    --l-semantic:     #B03A6B;
+    --l-session:      #8A5A3B;
+    --l-system:       #5A6875;
+
+    /* Hata — kırmızı ailesi */
+    --l-security:     #C0392B;
+    --l-api-error:    #C0392B;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,7 +91,7 @@
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
     background: var(--ground);
-    color: var(--bone);
+    color: var(--ink);
     height: 100vh;
     display: flex;
     flex-direction: column;
@@ -73,7 +100,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--clay);
+    outline: 2px solid var(--teal);
     outline-offset: 2px;
     border-radius: 4px;
   }
@@ -81,19 +108,18 @@
   ::-webkit-scrollbar { width: 10px; height: 10px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    background: rgba(240, 238, 230, 0.12);
+    background: rgba(0, 0, 0, 0.12);
     border-radius: 99px;
     border: 3px solid transparent;
     background-clip: content-box;
   }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(240, 238, 230, 0.22); background-clip: content-box; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.22); background-clip: content-box; }
 
-  /* ---------------------------- Üst bar ---------------------------- */
+  /* --------- Üst bar — mobil uygulamanın turkuaz başlık bandı --------- */
   header {
     height: 62px;
     padding: 0 20px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--line);
+    background: linear-gradient(100deg, #00B6A6 0%, #14D2C0 100%);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -106,8 +132,8 @@
   .brand-logo {
     width: 34px; height: 34px;
     border-radius: 10px;
-    background: var(--clay);
-    color: var(--on-clay);
+    background: #FFFFFF;
+    color: var(--teal-strong);
     display: flex; align-items: center; justify-content: center;
     font-size: 15px;
     flex-shrink: 0;
@@ -118,23 +144,23 @@
     font-size: 18px;
     font-weight: 500;
     letter-spacing: -0.01em;
-    color: var(--bone);
+    color: #FFFFFF;
     line-height: 1.15;
   }
 
   .brand-title span {
     font-size: 11px;
-    color: var(--bone-faint);
+    color: rgba(255, 255, 255, 0.78);
     display: block;
     letter-spacing: 0.01em;
   }
 
   .nav-tabs {
     display: flex;
-    background: var(--surface-sunken);
+    background: rgba(255, 255, 255, 0.16);
     padding: 4px;
     border-radius: 11px;
-    border: 1px solid var(--line);
+    border: 1px solid rgba(255, 255, 255, 0.24);
     gap: 2px;
   }
 
@@ -142,7 +168,7 @@
     padding: 8px 15px;
     border: none;
     background: transparent;
-    color: var(--bone-dim);
+    color: rgba(255, 255, 255, 0.88);
     font-family: inherit;
     font-size: 13px;
     font-weight: 500;
@@ -156,33 +182,33 @@
   }
 
   .tab-btn i { font-size: 12px; opacity: 0.8; }
-  .tab-btn:hover { color: var(--bone); background: rgba(240, 238, 230, 0.05); }
+  .tab-btn:hover { color: #FFFFFF; background: rgba(255, 255, 255, 0.14); }
 
   .tab-btn.active {
-    background: var(--surface-raised);
-    color: var(--bone);
-    box-shadow: inset 0 0 0 1px var(--line-strong);
+    background: #FFFFFF;
+    color: var(--teal-strong);
+    font-weight: 600;
   }
-  .tab-btn.active i { color: var(--clay); opacity: 1; }
+  .tab-btn.active i { color: var(--teal-strong); opacity: 1; }
 
   .user-badge {
     display: flex;
     align-items: center;
     gap: 9px;
     padding: 5px 13px 5px 5px;
-    background: var(--surface-sunken);
-    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.24);
     border-radius: 99px;
     font-size: 12.5px;
-    color: var(--bone-dim);
+    color: #FFFFFF;
     white-space: nowrap;
   }
 
   .user-avatar {
     width: 24px; height: 24px;
     border-radius: 50%;
-    background: var(--clay);
-    color: var(--on-clay);
+    background: #FFFFFF;
+    color: var(--teal-strong);
     display: flex; align-items: center; justify-content: center;
     font-size: 10px;
     font-weight: 600;
@@ -245,17 +271,17 @@
 
   .msg.user {
     align-self: flex-end;
-    background: var(--clay);
-    color: var(--on-clay);
+    background: var(--teal);
+    color: var(--on-teal);
     font-weight: 500;
     border-bottom-right-radius: 5px;
   }
 
   .msg.bot {
     align-self: flex-start;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    color: var(--bone);
+    background: var(--bubble);
+    border: 1px solid transparent;
+    color: var(--ink);
     border-bottom-left-radius: 5px;
   }
 
@@ -263,7 +289,7 @@
   .msg.bot p:last-child { margin-bottom: 0; }
   .msg.bot ul, .msg.bot ol { padding-left: 20px; margin-bottom: 9px; }
   .msg.bot li { margin-bottom: 3px; }
-  .msg.bot strong { color: var(--bone); font-weight: 600; }
+  .msg.bot strong { color: var(--ink); font-weight: 600; }
   .msg.bot code {
     font-family: 'JetBrains Mono', monospace;
     font-size: 12.5px;
@@ -271,18 +297,18 @@
     border: 1px solid var(--line);
     padding: 1px 5px;
     border-radius: 5px;
-    color: var(--clay-bright);
+    color: var(--teal-strong);
   }
   .msg.bot table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 9px; }
   .msg.bot th, .msg.bot td { text-align: left; padding: 6px 9px; border-bottom: 1px solid var(--line); }
-  .msg.bot th { color: var(--bone-dim); font-weight: 600; }
+  .msg.bot th { color: var(--ink-dim); font-weight: 600; }
   .msg.bot td { font-variant-numeric: tabular-nums; }
 
   .msg.sys {
     align-self: center;
-    background: rgba(224, 115, 106, 0.10);
-    border: 1px solid rgba(224, 115, 106, 0.28);
-    color: #EFA49D;
+    background: rgba(192, 57, 43, 0.08);
+    border: 1px solid rgba(192, 57, 43, 0.26);
+    color: #B3261E;
     font-size: 12.5px;
     padding: 7px 15px;
     border-radius: 99px;
@@ -294,8 +320,8 @@
     align-items: center;
     gap: 6px;
     padding: 14px 18px;
-    background: var(--surface);
-    border: 1px solid var(--line);
+    background: var(--bubble);
+    border: 1px solid transparent;
     border-radius: var(--radius-lg);
     border-bottom-left-radius: 5px;
   }
@@ -303,7 +329,7 @@
   .dot-flashing {
     width: 6px; height: 6px;
     border-radius: 50%;
-    background-color: var(--bone-faint);
+    background-color: var(--ink-faint);
     animation: dotPulse 1.4s infinite ease-in-out;
   }
   .dot-flashing:nth-child(2) { animation-delay: 0.2s; }
@@ -320,10 +346,10 @@
     width: 100%;
     max-width: 430px;
     background: var(--surface);
-    border: 1px solid var(--clay-line);
+    border: 1px solid var(--teal-line);
     border-radius: var(--radius-lg);
     padding: 20px;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
     animation: fadeIn 0.25s ease-out;
   }
 
@@ -340,7 +366,7 @@
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--clay-bright);
+    color: var(--teal-strong);
     display: flex;
     align-items: center;
     gap: 9px;
@@ -355,12 +381,12 @@
     gap: 20px;
     font-size: 13.5px;
     padding: 8px 0;
-    border-bottom: 1px solid rgba(240, 238, 230, 0.05);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   }
   .confirm-row:last-child { border-bottom: none; }
-  .confirm-row .label { color: var(--bone-dim); flex-shrink: 0; }
-  .confirm-row .value { font-weight: 500; color: var(--bone); text-align: right; font-variant-numeric: tabular-nums; }
-  .confirm-row.total .value { font-size: 17px; font-weight: 600; color: var(--clay-bright); }
+  .confirm-row .label { color: var(--ink-dim); flex-shrink: 0; }
+  .confirm-row .value { font-weight: 500; color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+  .confirm-row.total .value { font-size: 17px; font-weight: 600; color: var(--teal-strong); }
 
   .confirm-actions { display: flex; gap: 10px; }
 
@@ -381,15 +407,15 @@
   }
   .btn-confirm:disabled { opacity: 0.45; cursor: not-allowed; }
 
-  .btn-approve { background: var(--clay); color: var(--on-clay); }
-  .btn-approve:hover:not(:disabled) { background: var(--clay-bright); }
+  .btn-approve { background: var(--teal); color: var(--on-teal); }
+  .btn-approve:hover:not(:disabled) { background: var(--teal-hover); }
 
   .btn-cancel {
     background: transparent;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     border: 1px solid var(--line-strong);
   }
-  .btn-cancel:hover:not(:disabled) { background: rgba(240, 238, 230, 0.06); color: var(--bone); }
+  .btn-cancel:hover:not(:disabled) { background: rgba(0, 0, 0, 0.06); color: var(--ink); }
 
   /* Makbuz kartı */
   .receipt-card {
@@ -397,7 +423,7 @@
     width: 100%;
     max-width: 410px;
     background: var(--surface);
-    border: 1px solid rgba(127, 176, 138, 0.35);
+    border: 1px solid rgba(164, 206, 59, 0.55);
     border-radius: var(--radius-lg);
     padding: 20px;
     animation: fadeIn 0.25s ease-out;
@@ -434,7 +460,7 @@
     border-radius: 99px;
     background: var(--surface);
     border: 1px solid var(--line);
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     font-family: inherit;
     font-size: 12.5px;
     cursor: pointer;
@@ -445,15 +471,15 @@
     gap: 7px;
   }
   .chip i { font-size: 11px; opacity: 0.7; }
-  .chip:hover { border-color: var(--line-strong); color: var(--bone); background: var(--surface-raised); }
+  .chip:hover { border-color: var(--line-strong); color: var(--ink); background: var(--surface-raised); }
 
   .chip.highlight {
-    background: var(--clay-soft);
-    border-color: var(--clay-line);
-    color: var(--clay-bright);
+    background: var(--teal-soft);
+    border-color: var(--teal-line);
+    color: var(--teal-strong);
   }
   .chip.highlight i { opacity: 1; }
-  .chip.highlight:hover { background: rgba(217, 119, 87, 0.2); color: var(--clay-bright); }
+  .chip.highlight:hover { background: rgba(15, 201, 184, 0.22); color: var(--teal-strong); }
 
   .input-box {
     display: flex;
@@ -465,25 +491,25 @@
     padding: 6px 6px 6px 16px;
     transition: border-color 0.15s;
   }
-  .input-box:focus-within { border-color: var(--clay-line); }
+  .input-box:focus-within { border-color: var(--teal-line); }
 
   .input-box input {
     flex: 1;
     background: transparent;
     border: none;
-    color: var(--bone);
+    color: var(--ink);
     font-family: inherit;
     font-size: 14.5px;
     outline: none;
     padding: 8px 0;
   }
-  .input-box input::placeholder { color: var(--bone-faint); }
+  .input-box input::placeholder { color: var(--ink-faint); }
 
   .btn-send {
     width: 36px; height: 36px;
     border-radius: 10px;
-    background: var(--clay);
-    color: var(--on-clay);
+    background: var(--teal);
+    color: var(--on-teal);
     border: none;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
@@ -491,7 +517,7 @@
     flex-shrink: 0;
     transition: background 0.15s, opacity 0.15s;
   }
-  .btn-send:hover:not(:disabled) { background: var(--clay-bright); }
+  .btn-send:hover:not(:disabled) { background: var(--teal-hover); }
   .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
   /* TraceHub */
@@ -511,22 +537,22 @@
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
   }
 
   .status-dot {
     width: 7px; height: 7px;
     border-radius: 50%;
-    background: var(--bone-faint);
+    background: var(--ink-faint);
     flex-shrink: 0;
   }
-  .status-dot.active { background: var(--ok); box-shadow: 0 0 0 3px rgba(127, 176, 138, 0.18); }
+  .status-dot.active { background: var(--lime); box-shadow: 0 0 0 3px rgba(164, 206, 59, 0.30); }
 
   .btn-icon {
     padding: 6px 11px;
     background: transparent;
     border: 1px solid var(--line);
-    color: var(--bone-faint);
+    color: var(--ink-faint);
     border-radius: var(--radius-sm);
     font-family: inherit;
     font-size: 11.5px;
@@ -536,7 +562,7 @@
     gap: 6px;
     transition: color 0.15s, border-color 0.15s;
   }
-  .btn-icon:hover { color: var(--bone); border-color: var(--line-strong); }
+  .btn-icon:hover { color: var(--ink); border-color: var(--line-strong); }
 
   #trace-log {
     flex: 1;
@@ -569,9 +595,9 @@
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: var(--tag, var(--bone-dim));
-    background: color-mix(in srgb, var(--tag, var(--bone-faint)) 15%, transparent);
-    border: 1px solid color-mix(in srgb, var(--tag, var(--bone-faint)) 32%, transparent);
+    color: var(--tag, var(--ink-dim));
+    background: color-mix(in srgb, var(--tag, var(--ink-faint)) 15%, transparent);
+    border: 1px solid color-mix(in srgb, var(--tag, var(--ink-faint)) 32%, transparent);
     line-height: 1.5;
   }
 
@@ -590,9 +616,9 @@
   .l-API-ERROR    { --tag: var(--l-api-error); }
 
   .trace-content { flex: 1; word-break: break-word; line-height: 1.5; min-width: 0; }
-  .trace-text   { color: var(--bone); }
-  .trace-detail { color: var(--bone-faint); font-size: 10.5px; margin-top: 3px; }
-  .trace-time   { color: var(--bone-faint); font-size: 10px; flex-shrink: 0; opacity: 0.7; }
+  .trace-text   { color: var(--ink); }
+  .trace-detail { color: var(--ink-faint); font-size: 10.5px; margin-top: 3px; }
+  .trace-time   { color: var(--ink-faint); font-size: 10px; flex-shrink: 0; opacity: 0.7; }
 
   /* ------------------ Ortak sayfa / form iskeleti ------------------- */
   .page {
@@ -623,7 +649,7 @@
   .page-head p {
     font-size: 13.5px;
     line-height: 1.6;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     max-width: 68ch;
   }
 
@@ -642,7 +668,7 @@
     gap: 16px;
     padding: 14px 20px;
     border-bottom: 1px solid var(--line);
-    background: rgba(240, 238, 230, 0.02);
+    background: rgba(0, 0, 0, 0.02);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
 
@@ -651,13 +677,13 @@
     font-weight: 600;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     display: flex;
     align-items: center;
     gap: 9px;
   }
-  .section-head h3 i { color: var(--clay); font-size: 11px; }
-  .section-head .section-note { font-size: 12px; color: var(--bone-faint); }
+  .section-head h3 i { color: var(--teal); font-size: 11px; }
+  .section-head .section-note { font-size: 12px; color: var(--ink-faint); }
 
   .section-body { padding: 20px; display: flex; flex-direction: column; gap: 18px; }
 
@@ -677,7 +703,7 @@
   .form-group label {
     font-size: 13px;
     font-weight: 600;
-    color: var(--bone);
+    color: var(--ink);
     display: flex;
     align-items: center;
     gap: 7px;
@@ -687,13 +713,13 @@
   .field-hint {
     font-size: 11.5px;
     line-height: 1.5;
-    color: var(--bone-faint);
+    color: var(--ink-faint);
     order: 3;
   }
   .field-hint code {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10.5px;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     background: var(--surface-sunken);
     padding: 1px 4px;
     border-radius: 4px;
@@ -704,21 +730,21 @@
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 10px 13px;
-    color: var(--bone);
+    color: var(--ink);
     font-family: inherit;
     font-size: 13.5px;
     outline: none;
     width: 100%;
     transition: border-color 0.15s, background 0.15s;
   }
-  .form-control::placeholder { color: var(--bone-faint); }
+  .form-control::placeholder { color: var(--ink-faint); }
   .form-control:hover { border-color: var(--line-strong); }
-  .form-control:focus { border-color: var(--clay-line); background: var(--ground); }
+  .form-control:focus { border-color: var(--teal-line); background: var(--ground); }
 
   select.form-control {
     cursor: pointer;
     appearance: none;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%23948F82' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%23949BA5' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
     background-repeat: no-repeat;
     background-position: right 12px center;
     padding-right: 32px;
@@ -731,14 +757,14 @@
     font-size: 12.5px;
   }
 
-  .form-control.invalid { border-color: rgba(224, 115, 106, 0.6); }
+  .form-control.invalid { border-color: rgba(192, 57, 43, 0.65); }
 
   /* Butonlar */
   .btn-primary {
     padding: 10px 18px;
     border-radius: 10px;
-    background: var(--clay);
-    color: var(--on-clay);
+    background: var(--teal);
+    color: var(--on-teal);
     border: none;
     font-family: inherit;
     font-size: 13px;
@@ -750,13 +776,13 @@
     white-space: nowrap;
     transition: background 0.15s;
   }
-  .btn-primary:hover { background: var(--clay-bright); }
+  .btn-primary:hover { background: var(--teal-hover); }
 
   .btn-ghost {
     padding: 9px 15px;
     border-radius: 10px;
     background: transparent;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     border: 1px solid var(--line-strong);
     font-family: inherit;
     font-size: 12.5px;
@@ -768,7 +794,7 @@
     white-space: nowrap;
     transition: color 0.15s, border-color 0.15s, background 0.15s;
   }
-  .btn-ghost:hover { color: var(--bone); border-color: var(--bone-faint); background: rgba(240, 238, 230, 0.04); }
+  .btn-ghost:hover { color: var(--ink); border-color: var(--ink-faint); background: rgba(0, 0, 0, 0.04); }
 
   /* Kaydetme çubuğu — sayfa kaydırılırken üstte kalır */
   .action-bar {
@@ -800,7 +826,7 @@
     font-weight: 500;
     border: none;
     background: transparent;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     border-radius: 7px;
     cursor: pointer;
     display: flex;
@@ -808,11 +834,11 @@
     gap: 7px;
     transition: background 0.15s, color 0.15s;
   }
-  .mode-btn:hover { color: var(--bone); }
-  .mode-btn.active { background: var(--surface-raised); color: var(--bone); box-shadow: inset 0 0 0 1px var(--line-strong); }
+  .mode-btn:hover { color: var(--ink); }
+  .mode-btn.active { background: var(--surface-raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); }
 
   .action-bar-right { display: flex; align-items: center; gap: 12px; }
-  .action-bar-hint { font-size: 11.5px; color: var(--bone-faint); text-align: right; max-width: 30ch; line-height: 1.4; }
+  .action-bar-hint { font-size: 11.5px; color: var(--ink-faint); text-align: right; max-width: 30ch; line-height: 1.4; }
 
   /* Durum bildirimi */
   .status-toast {
@@ -825,8 +851,8 @@
     gap: 10px;
   }
   .status-toast.show { display: flex; }
-  .status-toast.success { background: rgba(127, 176, 138, 0.12); border: 1px solid rgba(127, 176, 138, 0.32); color: #9AC4A3; }
-  .status-toast.error   { background: rgba(224, 115, 106, 0.12); border: 1px solid rgba(224, 115, 106, 0.32); color: #EFA49D; }
+  .status-toast.success { background: rgba(164, 206, 59, 0.16); border: 1px solid rgba(164, 206, 59, 0.50); color: #4C7A0F; }
+  .status-toast.error   { background: rgba(192, 57, 43, 0.09); border: 1px solid rgba(192, 57, 43, 0.30); color: #B3261E; }
 
   /* ------------------ SEKME 2: Deklaratif Studio -------------------- */
   .studio-container { display: flex; width: 100%; height: 100%; min-width: 0; }
@@ -835,7 +861,7 @@
     width: 268px;
     flex-shrink: 0;
     border-right: 1px solid var(--line);
-    background: var(--surface);
+    background: var(--surface-sunken);
     padding: 20px 16px;
     display: flex;
     flex-direction: column;
@@ -848,7 +874,7 @@
     font-weight: 600;
     letter-spacing: 0.09em;
     text-transform: uppercase;
-    color: var(--bone-faint);
+    color: var(--ink-faint);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -869,11 +895,11 @@
     width: 100%;
     transition: border-color 0.15s, background 0.15s;
   }
-  .template-card:hover { border-color: var(--clay-line); background: var(--clay-soft); }
-  .template-card.active { border-color: var(--clay-line); background: var(--clay-soft); }
+  .template-card:hover { border-color: var(--teal-line); background: var(--teal-soft); }
+  .template-card.active { border-color: var(--teal-line); background: var(--teal-soft); }
 
-  .template-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--bone); }
-  .template-card p  { font-size: 11.5px; color: var(--bone-faint); line-height: 1.5; }
+  .template-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--ink); }
+  .template-card p  { font-size: 11.5px; color: var(--ink-faint); line-height: 1.5; }
 
   .studio-main { flex: 1; overflow-y: auto; min-width: 0; }
   .studio-main .page-inner { max-width: 940px; padding-top: 0; }
@@ -890,7 +916,7 @@
     font-weight: 600;
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    color: var(--bone-faint);
+    color: var(--ink-faint);
   }
   .params-legend span:nth-child(4) { text-align: center; }
 
@@ -924,13 +950,13 @@
     border-radius: 9px;
     background: transparent;
     border: 1px solid var(--line);
-    color: var(--bone-faint);
+    color: var(--ink-faint);
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     font-size: 12px;
     transition: color 0.15s, border-color 0.15s, background 0.15s;
   }
-  .btn-del-param:hover { color: var(--danger); border-color: rgba(224, 115, 106, 0.4); background: rgba(224, 115, 106, 0.1); }
+  .btn-del-param:hover { color: var(--danger); border-color: rgba(192, 57, 43, 0.40); background: rgba(192, 57, 43, 0.09); }
 
   .checkbox-group {
     display: flex;
@@ -938,17 +964,17 @@
     justify-content: center;
     gap: 7px;
     font-size: 12.5px;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     cursor: pointer;
     user-select: none;
   }
-  .checkbox-group input { cursor: pointer; accent-color: var(--clay); width: 15px; height: 15px; }
+  .checkbox-group input { cursor: pointer; accent-color: var(--teal); width: 15px; height: 15px; }
 
   .empty-state {
     padding: 26px 20px;
     text-align: center;
     font-size: 13px;
-    color: var(--bone-faint);
+    color: var(--ink-faint);
     line-height: 1.6;
     border: 1px dashed var(--line-strong);
     border-radius: var(--radius);
@@ -964,14 +990,14 @@
     padding: 16px;
     font-family: 'JetBrains Mono', monospace;
     font-size: 12.5px;
-    color: var(--bone);
+    color: var(--ink);
     line-height: 1.7;
     outline: none;
     resize: vertical;
     tab-size: 2;
   }
-  .yaml-editor:focus { border-color: var(--clay-line); }
-  .yaml-editor[readonly] { color: var(--bone-dim); }
+  .yaml-editor:focus { border-color: var(--teal-line); }
+  .yaml-editor[readonly] { color: var(--ink-dim); }
 
   #pane-yaml { display: none; flex-direction: column; gap: 10px; }
   #pane-yaml.active { display: flex; }
@@ -985,14 +1011,14 @@
     font-weight: 600;
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     list-style: none;
     display: flex;
     align-items: center;
     gap: 9px;
   }
   details.yaml-preview > summary::-webkit-details-marker { display: none; }
-  details.yaml-preview > summary::before { content: '\f105'; font-family: 'Font Awesome 6 Free'; font-weight: 900; color: var(--clay); transition: transform 0.15s; }
+  details.yaml-preview > summary::before { content: '\f105'; font-family: 'Font Awesome 6 Free'; font-weight: 900; color: var(--teal); transition: transform 0.15s; }
   details.yaml-preview[open] > summary::before { transform: rotate(90deg); }
   details.yaml-preview .yaml-editor { border: none; border-top: 1px solid var(--line); border-radius: 0 0 var(--radius) var(--radius); min-height: 220px; }
 
@@ -1009,7 +1035,7 @@
     background: var(--surface-sunken);
     border: 1px solid var(--line);
     border-radius: 10px;
-    color: var(--bone);
+    color: var(--ink);
     font-family: inherit;
     font-size: 13.5px;
     text-align: left;
@@ -1017,9 +1043,9 @@
     transition: border-color 0.15s;
   }
   .tool-picker-trigger:hover { border-color: var(--line-strong); }
-  .tool-picker-trigger[aria-expanded="true"] { border-color: var(--clay-line); }
-  .tool-picker-trigger .placeholder { color: var(--bone-faint); }
-  .tool-picker-trigger .chevron { color: var(--bone-faint); font-size: 11px; transition: transform 0.15s; }
+  .tool-picker-trigger[aria-expanded="true"] { border-color: var(--teal-line); }
+  .tool-picker-trigger .placeholder { color: var(--ink-faint); }
+  .tool-picker-trigger .chevron { color: var(--ink-faint); font-size: 11px; transition: transform 0.15s; }
   .tool-picker-trigger[aria-expanded="true"] .chevron { transform: rotate(180deg); }
 
   .tool-picker-panel {
@@ -1031,7 +1057,7 @@
     background: var(--surface-raised);
     border: 1px solid var(--line-strong);
     border-radius: var(--radius);
-    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.12);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1046,17 +1072,17 @@
     padding: 12px 14px;
     border-bottom: 1px solid var(--line);
   }
-  .tool-picker-search i { color: var(--bone-faint); font-size: 12px; }
+  .tool-picker-search i { color: var(--ink-faint); font-size: 12px; }
   .tool-picker-search input {
     flex: 1;
     background: transparent;
     border: none;
     outline: none;
-    color: var(--bone);
+    color: var(--ink);
     font-family: inherit;
     font-size: 13.5px;
   }
-  .tool-picker-search input::placeholder { color: var(--bone-faint); }
+  .tool-picker-search input::placeholder { color: var(--ink-faint); }
 
   /* Kategori filtresi — değerler sunucudan gelen gruplardan üretilir */
   .tool-picker-cats {
@@ -1072,7 +1098,7 @@
     border-radius: 99px;
     border: 1px solid var(--line);
     background: transparent;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     font-family: inherit;
     font-size: 12px;
     font-weight: 500;
@@ -1083,14 +1109,14 @@
     gap: 7px;
     transition: border-color 0.15s, color 0.15s, background 0.15s;
   }
-  .cat-pill:hover { color: var(--bone); border-color: var(--line-strong); }
-  .cat-pill.active { background: var(--clay-soft); border-color: var(--clay-line); color: var(--clay-bright); }
+  .cat-pill:hover { color: var(--ink); border-color: var(--line-strong); }
+  .cat-pill.active { background: var(--teal-soft); border-color: var(--teal-line); color: var(--teal-strong); }
   .cat-pill .cat-count {
     font-size: 10.5px;
-    color: var(--bone-faint);
+    color: var(--ink-faint);
     font-variant-numeric: tabular-nums;
   }
-  .cat-pill.active .cat-count { color: var(--clay-bright); opacity: 0.75; }
+  .cat-pill.active .cat-count { color: var(--teal-strong); opacity: 0.75; }
 
   .tool-picker-list {
     max-height: 320px;
@@ -1107,7 +1133,7 @@
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--bone-faint);
+    color: var(--ink-faint);
   }
 
   .tool-option {
@@ -1119,18 +1145,18 @@
     cursor: pointer;
     transition: background 0.12s;
   }
-  .tool-option:hover { background: rgba(240, 238, 230, 0.05); }
-  .tool-option input { margin-top: 2px; accent-color: var(--clay); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
+  .tool-option:hover { background: rgba(0, 0, 0, 0.05); }
+  .tool-option input { margin-top: 2px; accent-color: var(--teal); width: 15px; height: 15px; cursor: pointer; flex-shrink: 0; }
   .tool-option .tool-name {
     font-family: 'JetBrains Mono', monospace;
     font-size: 12.5px;
-    color: var(--bone);
+    color: var(--ink);
     display: block;
     margin-bottom: 2px;
     word-break: break-all;
   }
-  .tool-option .tool-desc { font-size: 11.5px; color: var(--bone-faint); line-height: 1.45; display: block; }
-  .tool-option mark { background: rgba(217, 119, 87, 0.28); color: var(--clay-bright); border-radius: 2px; padding: 0 1px; }
+  .tool-option .tool-desc { font-size: 11.5px; color: var(--ink-faint); line-height: 1.45; display: block; }
+  .tool-option mark { background: rgba(15, 201, 184, 0.30); color: var(--teal-strong); border-radius: 2px; padding: 0 1px; }
 
   .tool-picker-foot {
     display: flex;
@@ -1139,15 +1165,15 @@
     gap: 12px;
     padding: 10px 14px;
     border-top: 1px solid var(--line);
-    background: rgba(240, 238, 230, 0.02);
+    background: rgba(0, 0, 0, 0.02);
   }
-  .tool-picker-foot .count { font-size: 12px; color: var(--bone-dim); font-variant-numeric: tabular-nums; }
+  .tool-picker-foot .count { font-size: 12px; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
   .tool-picker-foot .foot-actions { display: flex; gap: 8px; }
 
   .btn-link {
     background: none;
     border: none;
-    color: var(--bone-dim);
+    color: var(--ink-dim);
     font-family: inherit;
     font-size: 12px;
     font-weight: 500;
@@ -1156,7 +1182,7 @@
     border-radius: 6px;
     transition: color 0.15s, background 0.15s;
   }
-  .btn-link:hover { color: var(--clay-bright); background: var(--clay-soft); }
+  .btn-link:hover { color: var(--teal-strong); background: var(--teal-soft); }
 
   /* Seçilen araçların rozetleri */
   .tool-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1167,9 +1193,9 @@
     gap: 8px;
     padding: 5px 7px 5px 11px;
     border-radius: 99px;
-    background: var(--clay-soft);
-    border: 1px solid var(--clay-line);
-    color: var(--clay-bright);
+    background: var(--teal-soft);
+    border: 1px solid var(--teal-line);
+    color: var(--teal-strong);
     font-family: 'JetBrains Mono', monospace;
     font-size: 11.5px;
   }
@@ -1209,14 +1235,14 @@
     align-items: center;
     gap: 8px;
   }
-  .info-card h4 i { color: var(--clay); font-size: 12px; }
-  .info-card .card-desc { font-size: 12px; color: var(--bone-dim); line-height: 1.5; margin-bottom: 12px; }
+  .info-card h4 i { color: var(--teal); font-size: 12px; }
+  .info-card .card-desc { font-size: 12px; color: var(--ink-dim); line-height: 1.5; margin-bottom: 12px; }
 
   .card-meta { display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; }
   .card-meta-row { display: flex; gap: 8px; align-items: baseline; }
-  .card-meta-row .k { color: var(--bone-faint); flex-shrink: 0; min-width: 52px; }
-  .card-meta-row .v { color: var(--bone-dim); word-break: break-all; }
-  .card-meta-row code { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--bone); }
+  .card-meta-row .k { color: var(--ink-faint); flex-shrink: 0; min-width: 52px; }
+  .card-meta-row .v { color: var(--ink-dim); word-break: break-all; }
+  .card-meta-row code { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink); }
 
   /* Tanılama metrik kartı */
   .metric-card {
@@ -1234,7 +1260,7 @@
     font-weight: 600;
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    color: var(--bone-faint);
+    color: var(--ink-faint);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1243,23 +1269,23 @@
   .metric-card .val {
     font-size: 22px;
     font-weight: 600;
-    color: var(--bone);
+    color: var(--ink);
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
     word-break: break-word;
   }
   .metric-card .val.sm { font-size: 15px; font-weight: 500; }
   .metric-card .val.ok { color: var(--ok); }
-  .metric-card .val.accent { color: var(--clay-bright); }
+  .metric-card .val.accent { color: var(--teal-strong); }
 </style>
 </head>
 <body>
 
   <header>
     <div class="brand">
-      <div class="brand-logo"><i class="fa-solid fa-diagram-project"></i></div>
+      <div class="brand-logo"><i class="fa-solid fa-robot"></i></div>
       <div class="brand-title">
-        <h1>TKFB Agentic</h1>
+        <h1>ARI</h1>
         <span>Agent Framework · MCP · A2A</span>
       </div>
     </div>
@@ -1292,7 +1318,7 @@
       <div class="chat-pane">
         <div id="chat-messages">
           <div class="msg bot">
-            <p>Merhaba 👋 Ben <strong>TKFB Bankacılık Asistanınızım</strong>.</p>
+            <p>Merhaba 👋 Ben <strong>ARI</strong>. Size nasıl yardımcı olabilirim?</p>
             <p>Kredi kartı borcu ödeme, transfer veya hesap sorgularınızı iletebilirsiniz. Sağ panelde <strong>TraceHub</strong> katman çağrılarını canlı izleyebilirsiniz.</p>
           </div>
         </div>
@@ -1485,6 +1511,15 @@
                       <input id="form-action-path" class="form-control mono" placeholder="/api/newCreditCardRequest" oninput="updateYamlFromForm()" />
                       <span class="field-hint">Bankadaki uç; parametreler bu gövdeye yazılır. <strong>Boş bırakılırsa</strong> akış bankaya hiç istek atmaz ve onay ekranı kurulmaz — talep yalnızca kaydedilmiş sayılır.</span>
                     </div>
+
+                    <div class="form-group full-width">
+                      <label for="form-mkcode">Onay ekranı kodu (mkCode)</label>
+                      <select id="form-mkcode" class="form-control" onchange="updateYamlFromForm()">
+                        <option value="">— Seçilmedi —</option>
+                      </select>
+                      <input id="form-mkcode-manual" class="form-control mono" style="display: none;" placeholder="NewCreditCardApplication" oninput="updateYamlFromForm()" />
+                      <span id="mkcode-hint" class="field-hint">Onay ekranını hangi banka ekranının üreteceğini belirler. Seçilmezse onay ekranı akışın kendi adıyla açılır.</span>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -1497,7 +1532,7 @@
 
             <!-- YAML modu -->
             <div id="pane-yaml">
-              <div class="status-toast show" style="background: rgba(240,238,230,0.04); border: 1px solid var(--line); color: var(--bone-dim);">
+              <div class="status-toast show" style="background: rgba(0,0,0,0.04); border: 1px solid var(--line); color: var(--ink-dim);">
                 <i class="fa-solid fa-circle-info" style="margin-top: 2px;"></i>
                 <span>Bu alanı elle düzenleyebilirsiniz; kayıt buradaki içerikle yapılır. Form moduna dönüp bir alanı değiştirirseniz içerik formdan yeniden üretilir.</span>
               </div>
@@ -1682,13 +1717,13 @@
               <h3><i class="fa-solid fa-rotate"></i> Kampanya Senkronizasyonu</h3>
             </div>
             <div class="section-body">
-              <p style="font-size: 13px; color: var(--bone-dim); line-height: 1.6; max-width: 68ch;">
+              <p style="font-size: 13px; color: var(--ink-dim); line-height: 1.6; max-width: 68ch;">
                 Bankadaki yeni ve güncellenmiş kampanyaları çeker, kataloğa yazar ve arama kesintiye
                 uğramadan semantik indekse ekler.
               </p>
               <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
                 <button class="btn-primary" onclick="syncCampaigns()"><i class="fa-solid fa-rotate"></i> Senkronize Et</button>
-                <span id="campaign-sync-result" style="font-size: 13px; color: var(--bone-dim);"></span>
+                <span id="campaign-sync-result" style="font-size: 13px; color: var(--ink-dim);"></span>
               </div>
             </div>
           </section>
@@ -2233,12 +2268,12 @@ function updateYamlFromForm() {
   const inst = document.getElementById('form-instructions').value.trim() || 'Gerekli bilgileri sırayla kullanıcıdan iste.';
   const actionMethod = document.getElementById('form-action-method').value || 'PUT';
   const actionPath = document.getElementById('form-action-path').value.trim();
+  const mkCode = currentMkCode();
 
   const paramRows = document.querySelectorAll('.param-row');
   document.getElementById('params-empty').style.display = paramRows.length ? 'none' : 'block';
 
   let propsYaml = '';
-  let reqYaml = '';
 
   paramRows.forEach(row => {
     const pKey = row.querySelector('.p-key').value.trim();
@@ -2247,8 +2282,7 @@ function updateYamlFromForm() {
     const pReq = row.querySelector('.p-req').checked;
 
     if (pKey) {
-      propsYaml += `    ${pKey}:\n      type: ${pType}\n      description: ${pDesc || pKey}\n`;
-      if (pReq) reqYaml += `    - ${pKey}\n`;
+      propsYaml += `    ${pKey}:\n      type: ${pType}\n      required: ${pReq}\n      description: ${pDesc || pKey}\n`;
     }
   });
 
@@ -2256,7 +2290,11 @@ function updateYamlFromForm() {
 name: ${name}
 displayName: ${displayName}
 description: ${desc}
-instructions: |
+`;
+
+  if (mkCode) yaml += `mkCode: ${mkCode}\n`;
+
+  yaml += `instructions: |
   ${inst.replace(/\n/g, '\n  ')}
 model:
   options:
@@ -2264,14 +2302,10 @@ model:
 `;
 
   if (propsYaml) {
-    yaml += `inputSchema:
+    yaml += `outputSchema:
   type: object
   properties:
 ${propsYaml}`;
-    if (reqYaml) {
-      yaml += `  required:
-${reqYaml}`;
-    }
   }
 
   if (actionPath) {
@@ -2290,6 +2324,7 @@ const defaultTemplates = {
     kind: 'Prompt',
     name: 'limit-artirim',
     displayName: 'Kredi Kartı Limit Artırım Akışı',
+    mkCode: 'CashAndPaymentSolutionsLimitUpdate',
     temp: '0.1',
     desc: 'Kullanıcının kredi kartı limitini artırma taleplerini ve gerekli tutar bilgilerini toplar.',
     inst: 'Kullanıcıdan limit artırımı istediği kartı ve talep ettiği yeni limiti sırayla iste. Bilgiler tamamlandığında propose_limit_artirim çağır.',
@@ -2302,6 +2337,7 @@ const defaultTemplates = {
     kind: 'Prompt',
     name: 'otomatik-odeme-talimati',
     displayName: 'Otomatik Ödeme Talimatı Akışı',
+    mkCode: 'AutomaticPaymentInstruction',
     temp: '0.2',
     desc: 'Fatura veya kredi kartı ödemeleri için otomatik ödeme talimatı oluşturur.',
     inst: 'Kullanıcıdan otomatik ödemeye bağlanacak kart ve hesap bilgilerini topla.',
@@ -2314,6 +2350,7 @@ const defaultTemplates = {
     kind: 'Prompt',
     name: 'kayip-kart-bildirimi',
     displayName: 'Kayıp / Çalıntı Kart İptal Akışı',
+    mkCode: 'CreditCards',
     temp: '0.0',
     desc: 'Müşterinin kaybolan kartını güvenlik kilidiyle dondurur.',
     inst: 'Kullanıcıdan kaybolan kart numarasını veya kart seçimini alıp anında dondurma teklifi sun.',
@@ -2337,6 +2374,7 @@ function loadTemplate(key) {
   document.getElementById('form-instructions').value = t.inst;
   document.getElementById('form-action-method').value = t.actionMethod || 'PUT';
   document.getElementById('form-action-path').value = t.actionPath || '';
+  setMkCode(t.mkCode || '');
 
   document.getElementById('params-container').innerHTML = '';
   t.params.forEach(p => addParamRow(p.key, p.type, p.desc, p.req));
@@ -2347,6 +2385,7 @@ function loadTemplate(key) {
 function resetWorkflowForm() {
   document.querySelectorAll('.template-card').forEach(c => c.classList.remove('active'));
   ['form-name', 'form-displayname', 'form-desc', 'form-instructions', 'form-action-path'].forEach(id => document.getElementById(id).value = '');
+  setMkCode('');
   document.getElementById('form-kind').value = 'Prompt';
   document.getElementById('form-temp').value = '0.1';
   document.getElementById('form-action-method').value = 'PUT';
@@ -2356,7 +2395,59 @@ function resetWorkflowForm() {
   document.getElementById('form-name').focus();
 }
 
+// Banka ekran adlarını HTML varlıklarıyla ("-&gt;") döndürür; menüde düz metin gösterilir
+function decodeEntities(s) {
+  return (s ?? '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&');
+}
+
+// Ekran kodu, katalog okunduysa listeden seçilir; okunamadığında aynı alan serbest metne düşer
+function currentMkCode() {
+  const manual = document.getElementById('form-mkcode-manual');
+  const control = manual.style.display === 'none' ? document.getElementById('form-mkcode') : manual;
+  return control.value.trim();
+}
+
+function setMkCode(value) {
+  const code = (value || '').trim();
+  const select = document.getElementById('form-mkcode');
+
+  // Şablondan gelen kod katalog yüklenmeden önce de seçili görünür
+  if (code && ![...select.options].some(option => option.value === code))
+    select.add(new Option(code, code));
+
+  select.value = code;
+  document.getElementById('form-mkcode-manual').value = code;
+  updateYamlFromForm();
+}
+
+async function loadMkCodes() {
+  const select = document.getElementById('form-mkcode');
+  const hint = document.getElementById('mkcode-hint');
+
+  try {
+    const res = await fetch('/api/mkcodes');
+    const codes = await res.json();
+    if (!Array.isArray(codes) || !codes.length) throw new Error('boş katalog');
+
+    const selected = currentMkCode();
+    select.innerHTML = '<option value="">— Seçilmedi —</option>' + codes
+      .map(c => `<option value="${escapeHtml(c.value)}">${escapeHtml(decodeEntities(c.label))} — ${escapeHtml(c.value)}</option>`)
+      .join('');
+    setMkCode(selected);
+
+    hint.textContent = `Onay ekranını hangi banka ekranının üreteceğini belirler. Bankadan ${codes.length} ekran kodu yüklendi.`;
+  } catch {
+    select.style.display = 'none';
+    document.getElementById('form-mkcode-manual').style.display = '';
+    hint.textContent = 'Ekran kodu kataloğu bankadan okunamadı — kodu elle yazabilirsiniz, kayıt engellenmez.';
+  }
+}
+
 loadTemplate('limit');
+loadMkCodes();
 
 async function registerDeclarative() {
   const content = document.getElementById('yaml-input').value;

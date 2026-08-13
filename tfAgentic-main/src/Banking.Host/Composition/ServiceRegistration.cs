@@ -108,7 +108,11 @@ public static class ServiceRegistration
             .WithHttpTransport()
             .WithTools<AccountsTools>()
             .WithTools<CardsTools>()
-            .WithTools<AnalyzeTools>();
+            .WithTools<AnalyzeTools>()
+            .WithTools<LoansTools>()
+            .WithTools<PaymentsTools>()
+            .WithTools<InvestmentsTools>()
+            .WithTools<CustomerTools>();
 
         // --- A2A host: yol parametreli tek endpoint ---
         // Uzman başına endpoint açılmaz; hedefi SpecialistRoutingAgent isteğin yolundan çözer

@@ -1,0 +1,72 @@
+kind: Workflow
+name: kayitli-alici-ekleme
+displayName: Kayıtlı Alıcı Ekleme
+description: >-
+  Transferlerde tekrar kullanılmak üzere yeni bir alıcının IBAN'ıyla birlikte kaydedilmesi; alıcı
+  rehberine kişi ekleme.
+mkCode: NewMoneyTransfer
+instructions: |
+  Bu akış sadece yeni bir kayıtlı alıcı tanımlamak için kullanılır. Para göndermek, kayıtlı alıcıyı
+  silmek ve düzenli transfer talimatı kurmak bu akışın konusu değildir. Bu akış para hareketi
+  yaratmaz; yalnızca alıcıyı rehbere kaydeder.
+
+  Kullanıcının verdiği IBAN'ı olduğu gibi yaz; biçimini düzeltme, boşluklarını değiştirme ve
+  geçerliliğini sen denetleme — IBAN'ı banka doğrular. Alıcının bankasını kullanıcı söylemediyse
+  sor, IBAN'dan çıkarmaya çalışma.
+
+  Kısa ad, kullanıcının alıcıyı listede tanıyacağı etikettir (Ev Sahibi, Kardeşim gibi); ad soyaddan
+  farklı olabilir. Kullanıcı ayrı bir kısa ad vermediyse ad soyadı kısa ad olarak yaz.
+  Varsayılan transfer tutarı isteniyorsa açıklamasını da sorabilirsin; istenmiyorsa ikisini de boş
+  bırak. Mevcut kayıtlı alıcıları ödeme uzmanından öğrenip aynı IBAN'ın zaten kayıtlı olup
+  olmadığını kullanıcıya söyleyebilirsin.
+model:
+  options:
+    temperature: 0.1
+outputSchema:
+  type: object
+  properties:
+    title:
+      type: string
+      required: true
+      description: Alıcının listede görünecek kısa adı (Ev Sahibi, Kardeşim, Muhasebeci gibi).
+    fullName:
+      type: string
+      required: true
+      description: Alıcının ad soyadı veya ticari unvanı.
+    iban:
+      type: string
+      required: true
+      description: >-
+        Alıcının IBAN'ı. Kullanıcının verdiği değer olduğu gibi yazılır; biçimi ve geçerliliği
+        bankanın kararıdır.
+    bankName:
+      type: string
+      required: true
+      description: Alıcının bankasının adı.
+    transferType:
+      type: string
+      required: true
+      description: Bu alıcıya yapılacak transferin varsayılan türü. Geçerli değerler Havale, EFT, FAST.
+    isFavorite:
+      type: boolean
+      required: true
+      description: Alıcının favorilere eklenip listenin başında görünmesi isteniyorsa true.
+    description:
+      type: string
+      required: false
+      description: Alıcıya iliştirilecek not (kira ödemesi, muhasebe ücreti gibi). İstenmiyorsa boş bırakılır.
+    defaultAmount:
+      type: number
+      required: false
+      description: Bu alıcıya yapılacak transferlerde öne çıkarılacak varsayılan tutar. İstenmiyorsa boş bırakılır.
+    defaultTransferDescription:
+      type: string
+      required: false
+      description: Transferlerde varsayılan olarak kullanılacak açıklama. İstenmiyorsa boş bırakılır.
+    notifyOnTransfer:
+      type: boolean
+      required: true
+      description: Bu alıcıya her transfer yapıldığında bildirim gönderilmesi isteniyorsa true.
+action:
+  method: PUT
+  path: /api/beneficiary

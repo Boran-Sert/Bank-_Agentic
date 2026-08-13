@@ -37,9 +37,6 @@ internal static class CustomerEndpoints
 
         app.MapPut("/api/customer-contact", (CustomerContactUpdateRequest request, ICustomerService customers) =>
             BankResults.Execute(() => customers.UpdateContactInformation(
-                BankResults.ResolveCustomerId(request.CustomerId),
-                request.Phone,
-                request.Email,
-                request.AddressLine)));
+                BankResults.ResolveCustomerId(request.CustomerId), request)));
     }
 }

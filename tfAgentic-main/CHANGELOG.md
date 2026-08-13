@@ -1,5 +1,72 @@
 # Mimari Değişiklik Günlüğü (Changelog)
 
+## Sürüm: [Cok-Alanli-Is-Akislari-ve-Dort-Yeni-Uzman] - 2026-08-13
+
+> Kapsam: bankaya eklenen eylem uçlarının tamamı artık bir iş akışıyla karşılanıyor. Yeni C# iş
+> akışı kodu yok — on bir akış YAML dosyasından, dört uzman YAML dosyasından ibaret.
+
+### Sorun: uçlar vardı, onları çağıran akış yoktu
+
+Son eklenen uçların (kredi başvurusu, limit artırımı, ödeme talimatı, fatura ödeme, döviz alım
+satım, kart blokaj, kayıtlı alıcı, kredi taksit ödeme) hiçbirine giden bir akış yoktu. `limit-artirim`
+ve `kredi-karti-basvuru` tanımları `action.path` taşımadığı için HITL onay kapısı hiç kurulmuyor,
+akış "talebiniz alındı ve kaydedildi" deyip bankaya hiçbir istek atmıyordu. İkisi de artık kendi
+ucuna bağlı.
+
+### İstek sözleşmeleri gerçek bir formun alan sayısına çıkarıldı
+
+Üç alanlık `LoanApplicationRequest` 22 alana, yedi alanlık `CreditCardApplicationRequest` 21 alana
+çıktı; talimat, blokaj ve döviz formları da benzer şekilde genişledi. Alanlar dekoratif değil,
+bankanın kararına giriyor:
+
+- Kredi başvurusunda taksit tutarı anüite formülüyle hesaplanıyor, konut gideri ve mevcut borç
+  ödemesiyle birlikte **borç/gelir oranı** çıkarılıyor: oran %65'i aşarsa ret, %50'yi aşarsa uzman
+  incelemesi. Teminatın nakde çevrilebilir kısmı (%70) azami tutarı yükseltiyor.
+- Her başvuruda beyan edilen gelir müşteri künyesiyle karşılaştırılıyor; sapma %25'i aşarsa başvuru
+  otomatik onaydan gelir belgesi incelemesine düşüyor.
+- Döviz işleminde miktar adet olarak ya da TL karşılığı olarak veriliyor (ikisi birden verilemez);
+  limit emri ancak gişe kuru limiti karşılıyorsa gerçekleşiyor, karşılamıyorsa banka gerekçesiyle
+  reddediyor.
+- Kredi taksit ödemesinde erken kapama, kalan **anaparayı** tahsil edip ödenmemiş faizi siliyor ve
+  silinen faizi makbuza yazıyor.
+
+Çok alanlı formlarda servis metotları alanları tek tek değil istek kaydını alıyor. Yirmi parametrelik
+bir imza her yeni alanda hem uç noktayı hem servisi değiştirmeye zorlardı; alan listesinin tek sahibi
+`ApiRequests.cs` olarak kaldı.
+
+### Koşullu zorunluluk şemada değil talimatta
+
+Şemadaki `required` statiktir; "teslimat kanalı Adres ise adres zorunlu" gibi kurallar oraya
+yazılamaz. Bu alanlar `required: false` bırakıldı ve koşul akışın `instructions` bloğunda **olgusal**
+biçimde yazıldı — koşul her zaman daha önce doldurulmuş bir slotun değerine bağlanıyor, modelin
+yorumuna değil. Bankadaki karşılığı korundu: koşul ihlal edilirse uç nokta kendi Türkçe gerekçesiyle
+reddediyor.
+
+### Dört yeni uzman, dört yeni araç grubu
+
+Akış ajanı banka verisine doğrudan erişmediğinden, `billId`/`loanId`/`policyId` gibi kimlikleri
+çözecek uzman yoktu. Eklenen MCP araç setleri ve uzmanları: `LoansTools` → Kredi Uzmanı,
+`PaymentsTools` → Ödeme Uzmanı, `InvestmentsTools` → Yatırım Uzmanı, `CustomerTools` → Müşteri
+Uzmanı. Her set kendi `ToolGroup` değerini taşıyor; `[ToolGroup]` yazılmasaydı `InferGroupFromTypeName`
+hepsini `Account` grubuna düşürür ve Hesap Uzmanı'nın erişim kapsamı sessizce genişlerdi.
+
+Uzmanlar YAML tanımı olduğundan köprü araçları hem orkestratöre hem de **her akış ajanına**
+otomatik açılıyor; akış ajanına ayrıca bir kayıt yapılmadı.
+
+### Yan bulgu: talimat iptalinde sahiplik denetimi yoktu
+
+`CancelStandingOrder` yalnızca talimat kimliğine bakıyor, talimatın çağıran müşteriye ait olup
+olmadığını denetlemiyordu; başka bir müşterinin talimatının kimliği iptal ediyordu. Metot artık
+müşteri kimliğini alıyor ve eşleşmeyen kaydı "bulunamadı" olarak döndürüyor. Ayrıca yaklaşan dönemde
+çalışacak bir talimat, o dönemin ödemesinin yapılmayacağı açıkça onaylanmadan iptal edilmiyor.
+
+### Sıfır zorunlu slotlu akış kabul edilmez
+
+`iletisim-bilgisi-guncelleme` doğası gereği "ne değişiyorsa o doldurulur" biçiminde, yani tüm alanları
+isteğe bağlı. Böyle bir şemada `propose_*` boş gövdeyle başarılı olur ve kullanıcı onay ekranında
+hiçbir şey görmeden onaylar. Akış, bankanın da doğruladığı `updateScope` alanıyla bağlandı: kapsam
+zorunlu, ve kapsamın karşılığı olan alanlardan en az biri dolu gelmezse uç nokta reddediyor.
+
 ## Sürüm: [Dokumantasyon-Standardi-K1-K10] - 2026-08-12
 
 > Kapsam: yalnızca yorum metni. Hiçbir kod satırı, prompt metni, trace mesajı veya YAML tanımı

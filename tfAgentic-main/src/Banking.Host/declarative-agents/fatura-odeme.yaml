@@ -1,0 +1,67 @@
+kind: Workflow
+name: fatura-odeme
+displayName: Fatura Ödeme
+description: >-
+  Elektrik, su, doğalgaz, internet, telefon ve aidat faturalarının tek seferlik olarak ödenmesi
+  işlemi.
+mkCode: InvoicePayment
+instructions: |
+  Bu akış sadece mevcut bir faturanın tek seferlik ödenmesi için kullanılır. Düzenli otomatik ödeme
+  talimatı kurmak, kart borcu ödemek ve kredi taksidi ödemek bu akışın konusu değildir.
+
+  Kullanıcının hangi faturayı hangi hesaptan ödeyeceğini netleştir. Fatura ve hesap kimliklerini
+  kullanıcıya sorma; faturayı ödeme uzmanına, hesabı hesap uzmanına danışarak bul. Kullanıcı tarif
+  ettiyse doğrudan eşle, tarif etmediyse ödenmemiş faturaları kurum, dönem ve tutarıyla sunup
+  seçmesini iste.
+
+  Kurum faturaları kısmi ödenmez; kullanıcı bir tutar söylediyse onu olduğu gibi yaz, söylemediyse
+  tutar alanını boş bırak ve faturanın tutarını kendin yazma.
+  Bildirim kanalı "E-posta" ise e-posta adresini sor; diğer kanallarda adresi hiç sorma.
+  Sonraki dönemler için otomatik ödeme isteniyorsa aylık üst limit sor; istenmiyorsa hiç sorma.
+model:
+  options:
+    temperature: 0.1
+outputSchema:
+  type: object
+  properties:
+    billId:
+      type: string
+      required: true
+      description: Ödenecek faturanın kimliği. Ödeme uzmanından gelir; abone numarası bu alana yazılmaz.
+    sourceAccountId:
+      type: string
+      required: true
+      description: >-
+        Ödemenin çekileceği hesabın kimliği. Hesap uzmanından gelir; IBAN veya hesap adı bu alana
+        yazılmaz.
+    amount:
+      type: number
+      required: false
+      description: >-
+        Kullanıcının söylediği ödeme tutarı. Faturanın tutarıyla eşleşmesi gerekir; kullanıcı bir
+        tutar söylemediyse boş bırakılır.
+    enableAutoPaymentForNextPeriods:
+      type: boolean
+      required: true
+      description: Bu kurumun sonraki dönem faturalarının otomatik ödenmesi isteniyorsa true.
+    autoPaymentUpperLimit:
+      type: number
+      required: false
+      description: >-
+        Otomatik ödemenin bir dönemde ödeyebileceği en yüksek tutar. Yalnızca otomatik ödeme
+        isteniyorsa doldurulur.
+    notifyChannel:
+      type: string
+      required: true
+      description: Makbuzun gönderileceği kanal. Geçerli değerler SMS, E-posta, Yok.
+    receiptEmail:
+      type: string
+      required: false
+      description: Makbuzun gönderileceği e-posta adresi. Yalnızca bildirim kanalı E-posta ise doldurulur.
+    note:
+      type: string
+      required: false
+      description: İşleme iliştirilecek açıklama. Kullanıcı vermek istemezse boş bırakılır.
+action:
+  method: PUT
+  path: /api/bill-payment

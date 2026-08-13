@@ -14,6 +14,18 @@ public enum ToolGroup
     /// <summary>Harcama analizi, kampanya ve finansman araçları.</summary>
     Analyze,
 
+    /// <summary>Kredi, taksit planı ve ürün başvurusu araçları.</summary>
+    Loan,
+
+    /// <summary>Fatura, düzenli ödeme talimatı ve kayıtlı alıcı araçları.</summary>
+    Payment,
+
+    /// <summary>Yatırım pozisyonu, portföy ve gişe kuru araçları.</summary>
+    Investment,
+
+    /// <summary>Müşteri künyesi, limitleri, güvenlik profili ve poliçe araçları.</summary>
+    Customer,
+
     /// <summary>Orkestratöre özel araçlar: uzman köprüleri, akış başlatma ve ekran yönlendirme.</summary>
     Orchestrator
 }

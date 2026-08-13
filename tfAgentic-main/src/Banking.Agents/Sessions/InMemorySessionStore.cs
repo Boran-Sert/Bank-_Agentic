@@ -60,7 +60,7 @@ public sealed class InMemorySessionStore : ISessionStore
 
         var activeWorkflow = evicted.ActiveWorkflowName;
 
-        _hub.Publish(TraceCategories.System, string.IsNullOrWhiteSpace(activeWorkflow)
+        _hub.Publish(TraceCategories.Session, string.IsNullOrWhiteSpace(activeWorkflow)
             ? $"Oturum düştü ({reason}) → {evicted.SessionId}"
             : $"Oturum düştü ({reason}) → {evicted.SessionId} | YARIM KALAN AKIŞ: '{activeWorkflow}' " +
               $"(evre: {evicted.Phase}) ve toplanan parametreler kayboldu");

@@ -1,0 +1,96 @@
+kind: Workflow
+name: doviz-altin-islemi
+displayName: Döviz ve Altın Alım Satım
+description: >-
+  Dolar, euro, sterlin gibi dövizlerin ve gram altının banka gişe kurundan alınıp satılması işlemi.
+mkCode: NewExchangeTransactionFX
+instructions: |
+  Bu akış sadece döviz ve kıymetli maden alım-satımı için kullanılır. Yatırım fonu, hisse senedi
+  ve para transferi bu akışın konusu değildir.
+
+  Kullanıcının hangi yönde (alış/satış), hangi kıymette ve ne kadarlık işlem yapacağını netleştir.
+  İşlem miktarı iki biçimde verilebilir: adet olarak (quantity) ya da TL karşılığı olarak
+  (amountInTry). Kullanıcı hangisini söylediyse yalnızca onu yaz; ikisini birden doldurma ve
+  birinden diğerini hesaplama.
+
+  Hesap kimliğini kullanıcıya sorma; hesap uzmanına danışarak bul, kullanıcı tarif ettiyse doğrudan
+  eşle, tarif etmediyse hesapları okunabilir biçimde sunup seçmesini iste. Güncel kuru yatırım
+  uzmanından öğrenip kullanıcıya söyleyebilirsin, ancak işlem tutarını sen hesaplama.
+
+  Emir türü "Limit" ise hangi kurdan işlem yapılmasını istediğini sor ve limitRate alanına yaz;
+  "Piyasa" ise limit kurunu hiç sorma. Bildirim isteniyorsa bildirim kanalını sor; istenmiyorsa
+  hiç sorma. Kur riski onayını kullanıcıya açıkça sor; sessizliği onay sayma.
+model:
+  options:
+    temperature: 0.1
+outputSchema:
+  type: object
+  properties:
+    side:
+      type: string
+      required: true
+      description: İşlemin yönü. Geçerli değerler Alış, Satış.
+    code:
+      type: string
+      required: true
+      description: >-
+        İşlem yapılacak kıymetin kodu (USD, EUR, GBP, XAU gibi). Kod yatırım uzmanının döndürdüğü
+        kur listesinden alınır.
+    quantity:
+      type: number
+      required: false
+      description: >-
+        İşlem yapılacak adet (dolar adedi, gram altın gibi). TL karşılığı verildiyse boş bırakılır.
+    amountInTry:
+      type: number
+      required: false
+      description: >-
+        İşlemin TL karşılığı. Kullanıcı "1000 TL'lik altın" gibi söylediğinde doldurulur; adet
+        verildiyse boş bırakılır.
+    accountId:
+      type: string
+      required: true
+      description: >-
+        İşlemin TL karşılığının yansıtılacağı hesabın kimliği. Hesap uzmanından gelir; IBAN veya
+        hesap adı bu alana yazılmaz.
+    orderType:
+      type: string
+      required: true
+      description: >-
+        Emir türü. Geçerli değerler Piyasa, Limit. Piyasa emri güncel gişe kurundan gerçekleşir;
+        limit emri ancak verilen kur karşılanıyorsa gerçekleşir.
+    limitRate:
+      type: number
+      required: false
+      description: İşlemin gerçekleşmesi istenen kur. Yalnızca emir türü Limit ise doldurulur.
+    valueDate:
+      type: string
+      required: false
+      description: >-
+        İşlemin valör tarihi, yyyy-MM-dd biçiminde. Bu kanaldan yalnızca aynı gün valörlü işlem
+        yapılır; kullanıcı tarih söylemediyse boş bırakılır.
+    purpose:
+      type: string
+      required: true
+      description: İşlemin amacı (Yatırım, Tasarruf, Seyahat, Eğitim, Ticari).
+    acceptRateRisk:
+      type: boolean
+      required: true
+      description: >-
+        Kur dalgalanmasından doğacak riskin kabul edildiğini gösterir. Kullanıcı açıkça
+        onaylamadan true yazılmaz.
+    notifyOnExecution:
+      type: boolean
+      required: true
+      description: İşlem gerçekleştiğinde bildirim gönderilmesi isteniyorsa true.
+    notificationChannel:
+      type: string
+      required: false
+      description: Bildirimin gönderileceği kanal (SMS, E-posta, Push). Yalnızca bildirim isteniyorsa doldurulur.
+    note:
+      type: string
+      required: false
+      description: İşleme iliştirilecek açıklama. Kullanıcı vermek istemezse boş bırakılır.
+action:
+  method: PUT
+  path: /api/fx-trade

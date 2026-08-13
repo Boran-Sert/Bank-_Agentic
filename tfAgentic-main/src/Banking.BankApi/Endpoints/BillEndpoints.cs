@@ -32,7 +32,7 @@ internal static class BillEndpoints
             if (string.IsNullOrWhiteSpace(request.BillId)) return BankResults.MissingField("billId");
             if (string.IsNullOrWhiteSpace(request.SourceAccountId)) return BankResults.MissingField("sourceAccountId");
 
-            return BankResults.Execute(() => bills.PayBill(request.BillId, request.SourceAccountId));
+            return BankResults.Execute(() => bills.PayBill(request));
         });
     }
 }

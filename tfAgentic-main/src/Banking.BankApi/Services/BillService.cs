@@ -1,3 +1,4 @@
+using Banking.BankApi.Contracts;
 using Banking.Domain.Data;
 using Banking.Domain.Models;
 using Banking.Domain.Validation;
@@ -29,7 +30,8 @@ public interface IBillService
     /// Faturayı öder ve tutarı kaynak hesaptan düşer. Geri alınamaz bir işlemdir; yalnızca kullanıcı
     /// onayı alındıktan sonra çağrılır.
     /// </summary>
-    BillPaymentReceipt PayBill(string billId, string sourceAccountId);
+    /// <exception cref="InvalidOperationException">Form kendi içinde tutarsız olduğunda fırlatılır.</exception>
+    BillPaymentReceipt PayBill(BillPaymentRequest form);
 }
 
 /// <inheritdoc cref="IBillService"/>
@@ -89,8 +91,11 @@ public sealed class BillService(InMemoryBankStore store) : IBillService
             });
     }
 
-    public BillPaymentReceipt PayBill(string billId, string sourceAccountId)
+    public BillPaymentReceipt PayBill(BillPaymentRequest form)
     {
+        var billId = form.BillId ?? string.Empty;
+        var sourceAccountId = form.SourceAccountId ?? string.Empty;
+
         // Doğrulama, bakiye düşümü ve fatura durumu tek atomik adım.
         lock (store.MoneyGate)
         {
@@ -101,10 +106,23 @@ public sealed class BillService(InMemoryBankStore store) : IBillService
             var bill = FindBill(billId) ?? throw new InvalidOperationException($"Fatura bulunamadı: {billId}");
             var account = FindAccount(sourceAccountId) ?? throw new InvalidOperationException($"Hesap bulunamadı: {sourceAccountId}");
 
+            RequireMatchingAmount(bill, form.Amount);
+            RequireReceiptTarget(form.NotifyChannel, form.ReceiptEmail);
+            RequireAutoPaymentLimit(bill, form.EnableAutoPaymentForNextPeriods, form.AutoPaymentUpperLimit);
+
             var date = BankClock.Today;
             var receiptId = $"BILLR-{date:yyyyMMdd}-{Guid.NewGuid():N}"[..24];
 
-            store.Bills[billId] = bill with { Status = "Ödendi", PaidOn = date, ReceiptId = receiptId };
+            var autoPaymentEnabled = form.EnableAutoPaymentForNextPeriods ?? bill.AutoPaymentEnabled;
+
+            store.Bills[billId] = bill with
+            {
+                Status = "Ödendi",
+                PaidOn = date,
+                ReceiptId = receiptId,
+                AutoPaymentEnabled = autoPaymentEnabled,
+                AutoPaymentAccountId = autoPaymentEnabled ? sourceAccountId : bill.AutoPaymentAccountId
+            };
 
             var updatedAccount = account with { Balance = account.Balance - bill.Amount };
             store.Accounts[sourceAccountId] = updatedAccount;
@@ -117,6 +135,45 @@ public sealed class BillService(InMemoryBankStore store) : IBillService
                 receiptId, billId, bill.Institution, bill.SubscriberNumber, bill.Amount,
                 sourceAccountId, date, updatedAccount.Balance, "Başarılı");
         }
+    }
+
+    /// <summary>
+    /// Beyan edilen tutarın faturanın tutarıyla eşleştiğini doğrular. Kurum faturaları kısmi
+    /// ödenmediğinden eşleşmeyen tutar sessizce tamamlanmaz, reddedilir.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Tutar faturanın tutarından farklı olduğunda fırlatılır.</exception>
+    private static void RequireMatchingAmount(Bill bill, decimal? declaredAmount)
+    {
+        if (declaredAmount is not { } amount) return;
+
+        if (amount != bill.Amount)
+            throw new InvalidOperationException(
+                $"{bill.Institution} {bill.Period} dönemi faturasının tutarı {bill.Amount:N2} ₺. " +
+                "Kurum faturaları kısmi veya farklı tutarla ödenemez.");
+    }
+
+    /// <summary>Makbuzun gideceği kanalın gerektirdiği adresin verildiğini doğrular.</summary>
+    /// <exception cref="InvalidOperationException">E-posta kanalında adres boş olduğunda fırlatılır.</exception>
+    private static void RequireReceiptTarget(string? notifyChannel, string? receiptEmail)
+    {
+        var channel = notifyChannel?.Trim().ToLowerInvariant();
+
+        if (channel is "e-posta" or "eposta" or "email" && string.IsNullOrWhiteSpace(receiptEmail))
+            throw new InvalidOperationException("Makbuz e-posta ile gönderilecekse e-posta adresi zorunludur.");
+    }
+
+    /// <summary>Otomatik ödeme kurulurken verilen üst limitin faturayı karşıladığını doğrular.</summary>
+    /// <exception cref="InvalidOperationException">Üst limit faturanın tutarının altında kaldığında fırlatılır.</exception>
+    private static void RequireAutoPaymentLimit(Bill bill, bool? enableAutoPayment, decimal? upperLimit)
+    {
+        if (enableAutoPayment != true || upperLimit is not { } limit) return;
+
+        if (limit <= 0m)
+            throw new InvalidOperationException("Otomatik ödeme üst limiti sıfırdan büyük olmalıdır.");
+
+        if (limit < bill.Amount)
+            throw new InvalidOperationException(
+                $"Otomatik ödeme üst limiti bu dönemin faturasının ({bill.Amount:N2} ₺) altında; talimat ilk ayında çalışmazdı.");
     }
 
     private Bill? FindBill(string? billId) =>

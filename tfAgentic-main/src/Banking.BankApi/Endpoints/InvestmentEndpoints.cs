@@ -36,11 +36,11 @@ internal static class InvestmentEndpoints
         {
             if (string.IsNullOrWhiteSpace(request.Side)) return BankResults.MissingField("side");
             if (string.IsNullOrWhiteSpace(request.Code)) return BankResults.MissingField("code");
-            if (request.Quantity is null) return BankResults.MissingField("quantity");
+            if (request.Quantity is null && request.AmountInTry is null) return BankResults.MissingField("quantity");
             if (string.IsNullOrWhiteSpace(request.AccountId)) return BankResults.MissingField("accountId");
+            if (request.AcceptRateRisk is null) return BankResults.MissingField("acceptRateRisk");
 
-            return BankResults.Execute(() => investments.Trade(
-                request.Side, request.Code, request.Quantity.Value, request.AccountId));
+            return BankResults.Execute(() => investments.Trade(request));
         });
     }
 }

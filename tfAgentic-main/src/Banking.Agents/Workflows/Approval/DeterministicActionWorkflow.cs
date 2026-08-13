@@ -36,13 +36,13 @@ public static class DeterministicActionWorkflow
 
         if (!requiresApproval)
         {
-            hub.Publish(TraceCategories.Workflow, $"{action.WorkflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
+            hub.Publish(TraceCategories.Approval, $"{action.WorkflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
             return new WorkflowBuilder(executorStep)
                 .WithOutputFrom(executorStep)
                 .Build();
         }
 
-        hub.Publish(TraceCategories.Workflow, $"{action.WorkflowName}: MAF RequestPort onay gate'i oluşturuldu");
+        hub.Publish(TraceCategories.Approval, $"{action.WorkflowName}: MAF RequestPort onay gate'i oluşturuldu");
         var approvalPort = RequestPort.Create<GenericConfirmationView, bool>($"{action.WorkflowName}-approval-port");
 
         return new WorkflowBuilder(approvalPort)
@@ -68,7 +68,7 @@ internal sealed class DeterministicActionStep(
     public override async ValueTask<WorkflowOutcome> HandleAsync(
         bool approved, IWorkflowContext context, CancellationToken cancellationToken = default)
     {
-        hub.Publish(TraceCategories.Workflow, $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");
+        hub.Publish(TraceCategories.Approval, $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");
         return await actionExecutor.ExecuteAsync(action, slots, approved, cancellationToken);
     }
 }

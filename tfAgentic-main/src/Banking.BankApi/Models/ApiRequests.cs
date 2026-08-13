@@ -62,6 +62,19 @@ public sealed record CardPaymentRequest(
     string? SourceAccountId,
     DateOnly? Date);
 
+/*
+ * ----------------------------------------------------------------------------------------------
+ *  ÇOK ALANLI FORMLAR
+ *  -----------------
+ *  Başvuru, talimat ve blokaj uçları gerçek bir şube işlemi kadar alan taşır. Bu uçlarda servis
+ *  metodu alanları tek tek değil isteğin kendisini alır: yirmi parametrelik bir imza her yeni alanda
+ *  hem uç noktayı hem servisi değiştirmeye zorlardı, oysa alan listesinin tek sahibi bu dosyadır.
+ *
+ *  Alan adları iş akışlarının YAML slot adlarıyla birebir aynıdır; onay sonrası gövde slot kümesinden
+ *  olduğu gibi üretilir ve arada bir eşleme katmanı yoktur.
+ * ----------------------------------------------------------------------------------------------
+ */
+
 /// <summary>Para transferinin gövdesi. Geri alınamaz bir işlemi tetikler.</summary>
 public sealed record MoneyTransferRequest(
     string? SourceAccountId,
@@ -84,21 +97,42 @@ public sealed record MoneyTransferRequest(
 /// <summary>Müşteri künyesi, limit ve güvenlik sorgularının gövdesi.</summary>
 public sealed record CustomerProfileRequest(string? CustomerId);
 
-/// <summary>İletişim bilgisi güncellemesinin gövdesi. Yalnızca dolu gelen alanlar yazılır.</summary>
+/// <summary>
+/// İletişim bilgisi güncellemesinin gövdesi. Yalnızca dolu gelen alanlar yazılır;
+/// <paramref name="UpdateScope"/> hangi alanların dolu gelmesi gerektiğini belirler.
+/// </summary>
 public sealed record CustomerContactUpdateRequest(
     string? CustomerId,
+    string? UpdateScope,
     string? Phone,
     string? Email,
-    string? AddressLine);
+    string? AddressType,
+    string? AddressLine,
+    string? District,
+    string? City,
+    string? PostalCode,
+    bool? SmsNotificationEnabled,
+    bool? EmailNotificationEnabled,
+    bool? PushNotificationEnabled,
+    string? PreferredLanguage,
+    bool? MarketingConsent);
 
 /// <summary>Tek kredi ve taksit planı sorgularının gövdesi.</summary>
 public sealed record LoanRequest(string? CustomerId, string? LoanId);
 
-/// <summary>Kredi taksidi tahsilatının gövdesi. Geri alınamaz bir işlemi tetikler.</summary>
+/// <summary>
+/// Kredi taksidi tahsilatının gövdesi. <paramref name="PaymentType"/> erken kapamayı seçtiğinde kalan
+/// taksitlerin tamamı tahsil edilir. Geri alınamaz bir işlemi tetikler.
+/// </summary>
 public sealed record LoanInstallmentPaymentRequest(
     string? CustomerId,
     string? LoanId,
-    string? SourceAccountId);
+    string? SourceAccountId,
+    string? PaymentType,
+    int? InstallmentCount,
+    string? ReceiptChannel,
+    string? ReceiptEmail,
+    string? Note);
 
 /// <summary>Fatura listesinin gövdesi. <paramref name="OnlyUnpaid"/> ile ödenmemişler süzülür.</summary>
 public sealed record BillsRequest(string? CustomerId, bool? OnlyUnpaid);
@@ -106,19 +140,32 @@ public sealed record BillsRequest(string? CustomerId, bool? OnlyUnpaid);
 /// <summary>Tek fatura sorgusunun gövdesi.</summary>
 public sealed record BillRequest(string? CustomerId, string? BillId);
 
-/// <summary>Fatura tahsilatının gövdesi. Geri alınamaz bir işlemi tetikler.</summary>
+/// <summary>
+/// Fatura tahsilatının gövdesi. <paramref name="Amount"/> verildiğinde faturanın tutarıyla eşleşmesi
+/// beklenir; kurum faturaları kısmi ödenmez. Geri alınamaz bir işlemi tetikler.
+/// </summary>
 public sealed record BillPaymentRequest(
     string? CustomerId,
     string? BillId,
-    string? SourceAccountId);
+    string? SourceAccountId,
+    decimal? Amount,
+    bool? EnableAutoPaymentForNextPeriods,
+    decimal? AutoPaymentUpperLimit,
+    string? NotifyChannel,
+    string? ReceiptEmail,
+    string? Note);
 
 /// <summary>Talimat listesinin gövdesi. <paramref name="OnlyActive"/> ile iptaller elenir.</summary>
 public sealed record StandingOrdersRequest(string? CustomerId, bool? OnlyActive);
 
-/// <summary>Yeni ödeme talimatının gövdesi. Hedef alanlardan talimatın türüne uyan biri doldurulur.</summary>
+/// <summary>
+/// Yeni ödeme talimatının gövdesi. Hedef alanlardan talimatın türüne uyan biri doldurulur; hangi
+/// hedefin zorunlu olduğunu <paramref name="Kind"/> belirler.
+/// </summary>
 public sealed record StandingOrderCreateRequest(
     string? CustomerId,
     string? Kind,
+    string? Title,
     string? SourceAccountId,
     string? TargetCardId,
     string? TargetIban,
@@ -126,10 +173,21 @@ public sealed record StandingOrderCreateRequest(
     string? PaymentType,
     decimal? FixedAmount,
     decimal? UpperLimit,
-    int? DayOfMonth);
+    int? DayOfMonth,
+    DateOnly? StartDate,
+    DateOnly? EndDate,
+    int? NotifyBeforeDays,
+    bool? RetryOnInsufficientFunds,
+    int? RetryDayCount,
+    string? Description);
 
 /// <summary>Talimat iptalinin gövdesi.</summary>
-public sealed record StandingOrderCancelRequest(string? CustomerId, string? StandingOrderId);
+public sealed record StandingOrderCancelRequest(
+    string? CustomerId,
+    string? StandingOrderId,
+    string? CancellationReason,
+    bool? ConfirmPendingRunWillNotExecute,
+    string? NotifyChannel);
 
 /// <summary>Yeni kayıtlı alıcının gövdesi. IBAN bankanın doğrulayıcısından geçer.</summary>
 public sealed record BeneficiaryCreateRequest(
@@ -139,7 +197,11 @@ public sealed record BeneficiaryCreateRequest(
     string? Iban,
     string? BankName,
     string? TransferType,
-    bool? IsFavorite);
+    bool? IsFavorite,
+    string? Description,
+    decimal? DefaultAmount,
+    string? DefaultTransferDescription,
+    bool? NotifyOnTransfer);
 
 /// <summary>Kayıtlı alıcı silmenin gövdesi.</summary>
 public sealed record BeneficiaryRemoveRequest(string? CustomerId, string? BeneficiaryId);
@@ -147,13 +209,25 @@ public sealed record BeneficiaryRemoveRequest(string? CustomerId, string? Benefi
 /// <summary>Gişe kuru sorgusunun gövdesi. Kod verilmezse tüm kurlar döner.</summary>
 public sealed record ExchangeRateRequest(string? Code);
 
-/// <summary>Döviz veya altın alım-satımının gövdesi. Geri alınamaz bir işlemi tetikler.</summary>
+/// <summary>
+/// Döviz veya altın alım-satımının gövdesi. Miktar <paramref name="Quantity"/> ile adet olarak ya da
+/// <paramref name="AmountInTry"/> ile TL karşılığı olarak verilir. Geri alınamaz bir işlemi tetikler.
+/// </summary>
 public sealed record FxTradeRequest(
     string? CustomerId,
     string? Side,
     string? Code,
     decimal? Quantity,
-    string? AccountId);
+    decimal? AmountInTry,
+    string? AccountId,
+    string? OrderType,
+    decimal? LimitRate,
+    DateOnly? ValueDate,
+    string? Purpose,
+    bool? AcceptRateRisk,
+    bool? NotifyOnExecution,
+    string? NotificationChannel,
+    string? Note);
 
 /// <summary>Poliçe listesinin gövdesi. <paramref name="OnlyActive"/> ile süresi dolanlar elenir.</summary>
 public sealed record InsurancePoliciesRequest(string? CustomerId, bool? OnlyActive);
@@ -165,8 +239,8 @@ public sealed record InsurancePolicyRequest(string? CustomerId, string? PolicyId
 public sealed record ApplicationRequest(string? CustomerId, string? ApplicationId);
 
 /// <summary>
-/// Kredi kartı başvurusunun gövdesi. Alan adları <c>kredi-karti-basvuru</c> iş akışının slot
-/// adlarıyla birebir aynıdır.
+/// Kredi kartı başvuru formunun gövdesi. Beyan edilen gelir ve çalışma bilgileri müşteri künyesiyle
+/// karşılaştırılır; kart ürünü ve teslim tercihi karardan bağımsız olarak kayda geçer.
 /// </summary>
 public sealed record CreditCardApplicationRequest(
     string? CustomerId,
@@ -175,32 +249,91 @@ public sealed record CreditCardApplicationRequest(
     string? Rank,
     string? EduBackground,
     string? FirstWorkDay,
-    int? NumberOfDependents);
+    int? NumberOfDependents,
+    decimal? MonthlyNetIncome,
+    decimal? AdditionalMonthlyIncome,
+    string? EmployerName,
+    string? WorkPhone,
+    string? CardProductPreference,
+    decimal? RequestedLimit,
+    int? StatementDay,
+    string? DeliveryChannel,
+    string? DeliveryAddressLine,
+    string? DeliveryBranchCode,
+    string? EStatementEmail,
+    bool? SupplementaryCardRequested,
+    string? SupplementaryCardHolderName,
+    bool? CardInsuranceOptIn,
+    bool? KvkkConsent);
 
-/// <summary>Kredi başvurusunun gövdesi.</summary>
+/// <summary>
+/// Kredi başvuru formunun gövdesi. Gelir, gider ve teminat alanları bankanın borç/gelir oranı
+/// hesabına girer; tahsis kararı bu orandan ve kredi notundan üretilir.
+/// </summary>
 public sealed record LoanApplicationRequest(
     string? CustomerId,
     string? LoanType,
     decimal? RequestedAmount,
     int? InstallmentCount,
-    string? Purpose);
+    string? Purpose,
+    decimal? MonthlyNetIncome,
+    decimal? AdditionalMonthlyIncome,
+    string? EmploymentType,
+    string? EmployerName,
+    string? JobTitle,
+    DateOnly? WorkStartDate,
+    string? EducationLevel,
+    string? MaritalStatus,
+    int? NumberOfDependents,
+    string? ResidenceType,
+    decimal? MonthlyHousingExpense,
+    decimal? ExistingMonthlyDebtPayment,
+    string? CollateralType,
+    decimal? CollateralValue,
+    string? DisbursementAccountId,
+    bool? CreditProtectionInsurance,
+    string? ContactChannel,
+    bool? KvkkConsent);
 
-/// <summary>Kart limit artırım başvurusunun gövdesi.</summary>
+/// <summary>
+/// Kart limit artırım başvurusunun gövdesi. Talep otomatik onay tavanını aşarsa
+/// <paramref name="AcceptCeilingOffer"/> tavana inmeyi peşinen kabul eder.
+/// </summary>
 public sealed record CardLimitIncreaseRequest(
     string? CustomerId,
     string? CardId,
-    decimal? RequestedLimit);
+    decimal? RequestedLimit,
+    string? Reason,
+    decimal? MonthlyNetIncome,
+    decimal? AdditionalMonthlyIncome,
+    string? EmploymentType,
+    string? EmployerName,
+    DateOnly? WorkStartDate,
+    string? DocumentDeliveryChannel,
+    bool? AcceptCeilingOffer,
+    bool? KvkkConsent);
 
 /// <summary>
 /// Kart blokajının gövdesi. Blokajın kalıcı olup olmadığını <paramref name="Permanent"/> belirler;
-/// <paramref name="Reason"/> yalnızca makbuza yazılır ve karara girmez.
+/// olay ve itiraz alanları kayıp/çalıntı bildirimi dosyasına girer.
 /// </summary>
 public sealed record CardBlockRequest(
     string? CustomerId,
     string? CardId,
     string? Reason,
     bool? Permanent,
-    bool? IssueReplacement);
+    bool? IssueReplacement,
+    DateOnly? IncidentDate,
+    string? IncidentDescription,
+    string? LastKnownLocation,
+    bool? PoliceReportFiled,
+    bool? DisputedTransactionsExist,
+    decimal? DisputedAmount,
+    string? ReplacementDeliveryChannel,
+    string? ReplacementDeliveryAddressLine,
+    string? ReplacementBranchCode,
+    string? ContactPhone,
+    string? NotifyChannel);
 
 /// <summary>Kart blokajının kaldırılmasının gövdesi.</summary>
 public sealed record CardUnblockRequest(string? CustomerId, string? CardId);

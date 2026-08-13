@@ -1,0 +1,131 @@
+kind: Workflow
+name: kredi-basvurusu
+displayName: Kredi Başvurusu
+description: >-
+  İhtiyaç, taşıt, konut veya eğitim kredisi başvurusu; kredi çekme, finansman kullanma ve taksitle
+  ödeme talepleri.
+mkCode: FinancingApplication
+instructions: |
+  Bu akış sadece yeni kredi başvurusu almak için kullanılır. Kredi kartı başvurusu, limit artırımı
+  ve mevcut kredinin taksit ödemesi bu akışın konusu değildir.
+
+  Uzun bir form topluyorsun; soruları anlam gruplarına ayırarak sor, tek mesajda hepsini birden
+  sıralama. Sırasıyla şu grupları netleştir:
+  1) Kredinin kendisi: türü, tutarı, vadesi ve kullanım amacı.
+  2) Gelir ve çalışma bilgisi: net gelir, ek gelir, çalışma şekli, işyeri, ünvan, işe giriş tarihi.
+  3) Kişisel durum: eğitim, medeni hâl, bakmakla yükümlü olunan kişi sayısı.
+  4) Gider ve borç yükü: oturulan konut türü, aylık konut gideri, mevcut aylık borç ödemesi.
+  5) Teminat ve tercihler: teminat, hayat sigortası tercihi, iletişim kanalı, veri işleme izni.
+
+  Kredinin aktarılacağı hesabın kimliğini kullanıcıya sorma; hesap uzmanına danış, kullanıcı tarif
+  ettiyse doğrudan eşle, tarif etmediyse hesapları okunabilir biçimde sunup seçmesini iste.
+  Kullanıcının hâlihazırda ödediği kredi taksitlerini kredi uzmanına, kart borcunu kart uzmanına
+  sorup mevcut aylık borç ödemesini netleştirebilirsin; kullanıcı kendisi bir tutar söylediyse
+  onun verdiği değeri yaz.
+
+  Teminat türü "Yok" dışında bir değer aldıysa teminatın değerini de sor; teminat yoksa değerini
+  hiç sorma. Onay veya izin gerektiren alanlarda kullanıcının açık cevabını bekle; sessizliği onay
+  sayma. Taksit tutarını, faizi ve toplam geri ödemeyi sen hesaplama; bunları banka hesaplar.
+model:
+  options:
+    temperature: 0.1
+outputSchema:
+  type: object
+  properties:
+    loanType:
+      type: string
+      required: true
+      description: Kredinin türü. Geçerli değerler İhtiyaç, Taşıt, Konut, Eğitim.
+    requestedAmount:
+      type: number
+      required: true
+      description: Talep edilen kredi tutarı, TL cinsinden sayı olarak.
+    installmentCount:
+      type: number
+      required: true
+      description: Talep edilen vade, taksit sayısı olarak. Banka 3 ile 120 taksit arasını kabul eder.
+    purpose:
+      type: string
+      required: true
+      description: Kredinin kullanım amacı (ev tadilatı, araç alımı, eğitim gideri gibi).
+    monthlyNetIncome:
+      type: number
+      required: true
+      description: Kullanıcının beyan ettiği aylık net geliri, TL cinsinden sayı olarak.
+    additionalMonthlyIncome:
+      type: number
+      required: false
+      description: Kira, nafaka, ek iş gibi düzenli ek gelir. Yoksa boş bırakılır.
+    employmentType:
+      type: string
+      required: true
+      description: Çalışma şekli. Geçerli değerler Kamu, Özel, Serbest, Emekli.
+    employerName:
+      type: string
+      required: true
+      description: Çalışılan kurumun veya işyerinin adı. Emekli için son çalışılan kurum yazılır.
+    jobTitle:
+      type: string
+      required: true
+      description: Kullanıcının işindeki ünvanı (uzman, yönetici, teknisyen gibi).
+    workStartDate:
+      type: string
+      required: true
+      description: Mevcut işyerinde işe başlama tarihi, yyyy-MM-dd biçiminde.
+    educationLevel:
+      type: string
+      required: true
+      description: Eğitim durumu (İlköğretim, Lise, Ön Lisans, Lisans, Yüksek Lisans, Doktora).
+    maritalStatus:
+      type: string
+      required: true
+      description: Medeni hâli (Bekâr, Evli, Boşanmış, Dul).
+    numberOfDependents:
+      type: number
+      required: true
+      description: Bakmakla yükümlü olunan kişi sayısı. Kimse yoksa 0 yazılır.
+    residenceType:
+      type: string
+      required: true
+      description: Oturulan konutun durumu. Geçerli değerler Kira, Ev Sahibi, Aile Yanı, Lojman.
+    monthlyHousingExpense:
+      type: number
+      required: true
+      description: Aylık kira veya konut kredisi gideri, TL cinsinden. Gider yoksa 0 yazılır.
+    existingMonthlyDebtPayment:
+      type: number
+      required: true
+      description: >-
+        Hâlihazırda ödenen aylık kredi taksitleri ve kart asgari ödemelerinin toplamı. Kullanıcı
+        tarif ettiyse tutarı kredi ve kart uzmanlarından öğrenip yaz, kendin toplama.
+    collateralType:
+      type: string
+      required: false
+      description: Gösterilen teminatın türü (Yok, Taşıt, Konut, Mevduat, Kefil).
+    collateralValue:
+      type: number
+      required: false
+      description: Teminatın değeri, TL cinsinden. Teminat türü Yok ise doldurulmaz.
+    disbursementAccountId:
+      type: string
+      required: true
+      description: >-
+        Kredi tutarının aktarılacağı hesabın kimliği. Hesap uzmanından gelir; IBAN veya hesap adı
+        bu alana yazılmaz.
+    creditProtectionInsurance:
+      type: boolean
+      required: true
+      description: Kredi hayat sigortası isteniyorsa true. Sigorta primi kredi tutarına eklenir.
+    contactChannel:
+      type: string
+      required: false
+      description: Başvuru sonucunun bildirileceği kanal (SMS, E-posta, Telefon).
+    kvkkConsent:
+      type: boolean
+      required: true
+      description: >-
+        Kişisel verilerin başvuru için işlenmesine izin verildiğini gösterir. Kullanıcı açıkça
+        onaylamadan true yazılmaz.
+action:
+  method: POST
+  path: /api/loan-application

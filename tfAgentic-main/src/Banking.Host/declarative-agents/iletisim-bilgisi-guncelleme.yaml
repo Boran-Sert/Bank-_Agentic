@@ -1,0 +1,85 @@
+kind: Workflow
+name: iletisim-bilgisi-guncelleme
+displayName: İletişim Bilgisi Güncelleme
+description: >-
+  Telefon, e-posta ve adres bilgisinin güncellenmesi ile bildirim ve dil tercihlerinin
+  değiştirilmesi.
+mkCode: InformationUpdate
+instructions: |
+  Bu akış sadece müşterinin iletişim bilgilerinin ve bildirim tercihlerinin güncellenmesi için
+  kullanılır. Parola, şifre ve güvenlik sorusu değişikliği ile hesap adı güncelleme bu akışın
+  konusu değildir.
+
+  Önce kullanıcının neyi değiştirmek istediğini netleştirip updateScope alanına yaz, sonra yalnızca
+  o kapsamın alanlarını sor; değiştirmek istemediği alanları hiç sorma ve boş bırak — boş bırakılan
+  alan mevcut değerini korur. Kapsam ile doldurduğun alanlar uyuşmazsa banka güncellemeyi kabul etmez.
+
+  Adres değişiyorsa açık adres, ilçe, il ve adresin türü birlikte gerekir; bunlardan biri eksik
+  kalırsa banka güncellemeyi kabul etmez, dolayısıyla adres değişikliğinde dördünü de sor.
+  Kullanıcının mevcut bilgilerini müşteri uzmanından öğrenip kendisine gösterebilirsin; gösterdiğin
+  değeri değişmiş gibi bu alanlara yazma.
+  SMS, e-posta ve mobil bildirimlerin üçü birden kapatılamaz; kullanıcı hepsini kapatmak isterse
+  en az bir kanalın açık kalması gerektiğini söyle ve hangisini bırakacağını sor.
+model:
+  options:
+    temperature: 0.1
+outputSchema:
+  type: object
+  properties:
+    updateScope:
+      type: string
+      required: true
+      description: >-
+        Hangi bilginin güncelleneceği. Geçerli değerler İletişim Bilgisi, Adres, Bildirim Tercihleri,
+        Tümü. Seçilen kapsama ait en az bir alanın doldurulması gerekir.
+    phone:
+      type: string
+      required: false
+      description: Yeni cep telefonu numarası. Değişmiyorsa boş bırakılır.
+    email:
+      type: string
+      required: false
+      description: Yeni e-posta adresi. Değişmiyorsa boş bırakılır.
+    addressType:
+      type: string
+      required: false
+      description: Güncellenen adresin türü. Geçerli değerler Ev, İş. Yalnızca adres değişiyorsa doldurulur.
+    addressLine:
+      type: string
+      required: false
+      description: Yeni açık adres (mahalle, cadde, kapı ve daire numarası). Değişmiyorsa boş bırakılır.
+    district:
+      type: string
+      required: false
+      description: Yeni adresin ilçesi. Yalnızca adres değişiyorsa doldurulur.
+    city:
+      type: string
+      required: false
+      description: Yeni adresin ili. Yalnızca adres değişiyorsa doldurulur.
+    postalCode:
+      type: string
+      required: false
+      description: Yeni adresin posta kodu. Kullanıcı bilmiyorsa boş bırakılır.
+    smsNotificationEnabled:
+      type: boolean
+      required: false
+      description: SMS bildirimlerinin açık olup olmayacağı. Tercih değişmiyorsa boş bırakılır.
+    emailNotificationEnabled:
+      type: boolean
+      required: false
+      description: E-posta bildirimlerinin açık olup olmayacağı. Tercih değişmiyorsa boş bırakılır.
+    pushNotificationEnabled:
+      type: boolean
+      required: false
+      description: Mobil uygulama bildirimlerinin açık olup olmayacağı. Tercih değişmiyorsa boş bırakılır.
+    preferredLanguage:
+      type: string
+      required: false
+      description: Bildirimlerin gönderileceği dil (Türkçe, İngilizce). Değişmiyorsa boş bırakılır.
+    marketingConsent:
+      type: boolean
+      required: false
+      description: Kampanya ve tanıtım iletileri gönderilmesine izin verilip verilmediği.
+action:
+  method: PUT
+  path: /api/customer-contact

@@ -1,3 +1,4 @@
+using Banking.BankApi.Contracts;
 using Banking.Domain.Data;
 using Banking.Domain.Models;
 
@@ -13,11 +14,12 @@ public interface ICardOperationsService
     /// Kartı bloke eder. Kalıcı blokajda kart bir daha açılmaz ve istenirse aynı adımda yenileme
     /// kartı basılır; geçici blokaj sonradan kaldırılabilir.
     /// </summary>
-    /// <param name="permanent">
-    /// Blokajın kalıcı olduğunu belirtir (kayıp/çalıntı bildirimi). Kararı çağıran verir; gerekçe
-    /// metni yalnızca makbuza yazılır ve blokajın türünü belirlemez.
+    /// <param name="form">
+    /// Blokaj formu. Blokajın türünü <see cref="CardBlockRequest.Permanent"/> belirler; gerekçe metni
+    /// yalnızca makbuza yazılır ve türü değiştirmez.
     /// </param>
-    CardActionReceipt BlockCard(string customerId, string cardId, string reason, bool permanent, bool issueReplacement);
+    /// <exception cref="InvalidOperationException">Form kendi içinde tutarsız olduğunda fırlatılır.</exception>
+    CardActionReceipt BlockCard(string customerId, CardBlockRequest form);
 
     /// <summary>
     /// Geçici blokajı kaldırır. Kayıp/çalıntı bildirimiyle kapatılmış kart bu yolla açılmaz.
@@ -32,12 +34,22 @@ public sealed class CardOperationsService(InMemoryBankStore store) : ICardOperat
     private const string BlockedStatus = "Bloke";
     private const string ActiveStatus = "Aktif";
 
-    public CardActionReceipt BlockCard(string customerId, string cardId, string reason, bool permanent, bool issueReplacement)
+    public CardActionReceipt BlockCard(string customerId, CardBlockRequest form)
     {
+        var cardId = form.CardId ?? throw new InvalidOperationException("Blokaj için kart bilgisi zorunludur.");
         var card = RequireCard(customerId, cardId);
 
         if (card.Status is BlockedStatus or LostOrStolenStatus)
             throw new InvalidOperationException($"{card.MaskedNumber} numaralı kartınız zaten '{card.Status}' durumunda.");
+
+        var permanent = form.Permanent ?? false;
+        var issueReplacement = form.IssueReplacement ?? false;
+        var reason = form.Reason ?? "Belirtilmedi";
+
+        RequireIncidentRecord(permanent, form.IncidentDate);
+        RequireDisputeAmount(form.DisputedTransactionsExist, form.DisputedAmount);
+        RequireDeliveryTarget(issueReplacement, form.ReplacementDeliveryChannel,
+            form.ReplacementDeliveryAddressLine, form.ReplacementBranchCode);
 
         var resultingStatus = permanent ? LostOrStolenStatus : BlockedStatus;
 
@@ -51,9 +63,13 @@ public sealed class CardOperationsService(InMemoryBankStore store) : ICardOperat
         // Kalıcı blokajda istenirse yenileme kartı basılır
         var replacement = permanent && issueReplacement ? IssueReplacement(card) : null;
 
-        var message = replacement is null
-            ? $"{card.MaskedNumber} numaralı kartınız '{resultingStatus}' olarak işaretlendi ve tüm işlemlere kapatıldı. Gerekçe: {reason}"
-            : $"{card.MaskedNumber} numaralı kartınız kapatıldı; yerine {replacement.MaskedNumber} numaralı yeni kartınız adresinize gönderilecektir. Gerekçe: {reason}";
+        // İtiraz bildirimi ayrı bir dosya numarasıyla izlenir
+        var disputeCaseId = form.DisputedTransactionsExist == true
+            ? $"DSP-{BankClock.Today:yyyyMMdd}-{Guid.NewGuid():N}"[..22]
+            : null;
+
+        var message = BuildBlockMessage(card, resultingStatus, reason, replacement,
+            form.ReplacementDeliveryChannel, disputeCaseId, form.DisputedAmount);
 
         return new CardActionReceipt(
             ReceiptId: $"CARDOP-{BankClock.Today:yyyyMMdd}-{Guid.NewGuid():N}"[..26],
@@ -62,7 +78,72 @@ public sealed class CardOperationsService(InMemoryBankStore store) : ICardOperat
             ResultingStatus: resultingStatus,
             Date: BankClock.Today,
             Message: message,
-            ReplacementCardId: replacement?.Id);
+            ReplacementCardId: replacement?.Id,
+            DisputeCaseId: disputeCaseId,
+            ReplacementDeliveryDate: replacement is null ? null : BankClock.Today.AddDays(5));
+    }
+
+    /// <summary>Blokaj makbuzunun kullanıcıya dönecek metnini kurar.</summary>
+    private static string BuildBlockMessage(
+        Card card,
+        string resultingStatus,
+        string reason,
+        Card? replacement,
+        string? deliveryChannel,
+        string? disputeCaseId,
+        decimal? disputedAmount)
+    {
+        var message = replacement is null
+            ? $"{card.MaskedNumber} numaralı kartınız '{resultingStatus}' olarak işaretlendi ve tüm işlemlere kapatıldı. Gerekçe: {reason}"
+            : $"{card.MaskedNumber} numaralı kartınız kapatıldı; yerine {replacement.MaskedNumber} numaralı yeni kartınız " +
+              $"{(deliveryChannel?.Trim().ToLowerInvariant() is "şube" or "sube" ? "şubenize" : "adresinize")} gönderilecektir. Gerekçe: {reason}";
+
+        return disputeCaseId is null
+            ? message
+            : $"{message} İtiraz bildiriminiz {disputeCaseId} numarasıyla kaydedildi; " +
+              $"{disputedAmount:N2} ₺ tutarındaki harcamalar için inceleme başlatıldı.";
+    }
+
+    /// <summary>Kayıp/çalıntı bildiriminin olay tarihini taşıdığını doğrular.</summary>
+    /// <exception cref="InvalidOperationException">Kalıcı blokajda olay tarihi verilmediğinde fırlatılır.</exception>
+    private static void RequireIncidentRecord(bool permanent, DateOnly? incidentDate)
+    {
+        if (!permanent) return;
+
+        if (incidentDate is null)
+            throw new InvalidOperationException("Kayıp/çalıntı bildiriminde olayın gerçekleştiği tarih zorunludur.");
+
+        if (incidentDate > BankClock.Today)
+            throw new InvalidOperationException("Olay tarihi bugünden ileri bir tarih olamaz.");
+    }
+
+    /// <summary>İtiraz bildiriminin tutar taşıdığını doğrular.</summary>
+    /// <exception cref="InvalidOperationException">İtiraz bildirilip tutar verilmediğinde fırlatılır.</exception>
+    private static void RequireDisputeAmount(bool? disputedTransactionsExist, decimal? disputedAmount)
+    {
+        if (disputedTransactionsExist != true) return;
+
+        if (disputedAmount is not { } amount || amount <= 0m)
+            throw new InvalidOperationException("İtiraz edilen harcama bildirildiğinde itiraz tutarı sıfırdan büyük olmalıdır.");
+    }
+
+    /// <summary>Yenileme kartının gideceği adresin tutarlı verildiğini doğrular.</summary>
+    /// <exception cref="InvalidOperationException">Seçilen kanalın gerektirdiği alan boş olduğunda fırlatılır.</exception>
+    private static void RequireDeliveryTarget(
+        bool issueReplacement, string? deliveryChannel, string? addressLine, string? branchCode)
+    {
+        if (!issueReplacement) return;
+
+        var channel = deliveryChannel?.Trim().ToLowerInvariant();
+
+        if (channel is "adres" && string.IsNullOrWhiteSpace(addressLine))
+            throw new InvalidOperationException("Yenileme kartı adrese gönderilecekse teslimat adresi zorunludur.");
+
+        if (channel is "şube" or "sube" && string.IsNullOrWhiteSpace(branchCode))
+            throw new InvalidOperationException("Yenileme kartı şubeden teslim alınacaksa şube kodu zorunludur.");
+
+        if (channel is not ("adres" or "şube" or "sube"))
+            throw new InvalidOperationException("Yenileme kartı istendiğinde teslimat kanalı 'Adres' veya 'Şube' olmalıdır.");
     }
 
     public CardActionReceipt UnblockCard(string customerId, string cardId)

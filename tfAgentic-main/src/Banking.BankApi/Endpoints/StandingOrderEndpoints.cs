@@ -22,22 +22,19 @@ internal static class StandingOrderEndpoints
 
             return BankResults.Execute(() => orders.CreateStandingOrder(
                 BankResults.ResolveCustomerId(request.CustomerId),
-                request.Kind ?? "Düzenli Transfer",
-                request.SourceAccountId,
-                request.TargetCardId,
-                request.TargetIban,
-                request.BillId,
-                request.PaymentType ?? "Tamamı",
-                request.FixedAmount,
-                request.UpperLimit,
-                request.DayOfMonth.Value));
+                request with
+                {
+                    Kind = request.Kind ?? "Düzenli Transfer",
+                    PaymentType = request.PaymentType ?? "Tamamı"
+                }));
         });
 
         app.MapPut("/api/standing-order-cancel", (StandingOrderCancelRequest request, IStandingOrderService orders) =>
         {
             if (string.IsNullOrWhiteSpace(request.StandingOrderId)) return BankResults.MissingField("standingOrderId");
 
-            return BankResults.Execute(() => orders.CancelStandingOrder(request.StandingOrderId));
+            return BankResults.Execute(() => orders.CancelStandingOrder(
+                BankResults.ResolveCustomerId(request.CustomerId), request));
         });
     }
 }

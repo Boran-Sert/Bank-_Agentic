@@ -40,13 +40,12 @@ internal static class CardEndpoints
         app.MapPut("/api/card-block", (CardBlockRequest request, ICardOperationsService cardOperations) =>
         {
             if (string.IsNullOrWhiteSpace(request.CardId)) return BankResults.MissingField("cardId");
+            if (request.Permanent is null) return BankResults.MissingField("permanent");
+            if (string.IsNullOrWhiteSpace(request.ContactPhone)) return BankResults.MissingField("contactPhone");
 
             return BankResults.Execute(() => cardOperations.BlockCard(
                 BankResults.ResolveCustomerId(request.CustomerId),
-                request.CardId,
-                request.Reason ?? "Belirtilmedi",
-                request.Permanent ?? false,
-                request.IssueReplacement ?? false));
+                request with { Reason = request.Reason ?? "Belirtilmedi" }));
         });
 
         app.MapPut("/api/card-unblock", (CardUnblockRequest request, ICardOperationsService cardOperations) =>
@@ -61,9 +60,11 @@ internal static class CardEndpoints
         {
             if (string.IsNullOrWhiteSpace(request.CardId)) return BankResults.MissingField("cardId");
             if (request.RequestedLimit is null) return BankResults.MissingField("requestedLimit");
+            if (request.MonthlyNetIncome is null) return BankResults.MissingField("monthlyNetIncome");
+            if (request.KvkkConsent is null) return BankResults.MissingField("kvkkConsent");
 
             return BankResults.Execute(() => applications.CreateLimitIncreaseApplication(
-                BankResults.ResolveCustomerId(request.CustomerId), request.CardId, request.RequestedLimit.Value));
+                BankResults.ResolveCustomerId(request.CustomerId), request));
         });
     }
 }

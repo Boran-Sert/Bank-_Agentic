@@ -133,7 +133,10 @@ public record LoanPaymentReceipt(
     int RemainingInstallmentCount,
     decimal RemainingDebt,
     decimal RemainingBalance,
-    string Status);
+    string Status,
+    string? PaymentType = null,
+    int PaidInstallmentCount = 1,
+    decimal SavedInterest = 0m);
 
 /// <summary>
 /// Müşterinin abone olduğu kuruma ait fatura. Ödenmemiş faturalar için gecikme ve kalan gün
@@ -195,7 +198,11 @@ public record StandingOrder(
     DateOnly? EndDate,
     DateOnly NextRunDate,
     string Status,                  // "Aktif" | "İptal"
-    DateOnly CreatedOn);
+    DateOnly CreatedOn,
+    string? Description = null,
+    int NotifyBeforeDays = 0,
+    bool RetryOnInsufficientFunds = false,
+    int RetryDayCount = 0);
 
 /// <summary>Transferlerde tekrar kullanılmak üzere kaydedilmiş alıcı.</summary>
 public record Beneficiary(
@@ -208,7 +215,11 @@ public record Beneficiary(
     string TransferType,            // "Havale" | "EFT" | "FAST"
     bool IsFavorite,
     DateOnly CreatedOn,
-    DateOnly? LastUsedOn)
+    DateOnly? LastUsedOn,
+    string? Description = null,
+    decimal? DefaultAmount = null,
+    string? DefaultTransferDescription = null,
+    bool NotifyOnTransfer = false)
 {
     /// <summary>Listelerde gösterilen maskelenmiş IBAN ("…3344").</summary>
     public string MaskedIban => IbanDisplay.Mask(Iban);
@@ -270,7 +281,9 @@ public record FxTradeReceipt(
     string AccountId,
     DateOnly Date,
     decimal RemainingBalance,
-    string Status);
+    string Status,
+    string? OrderType = null,
+    string? Purpose = null);
 
 /// <summary>
 /// Müşterinin varlık ve borç toplamlarının tek bakışta özeti. Alanlar sorgu anındaki kayıtlardan
@@ -336,4 +349,6 @@ public record CardActionReceipt(
     DateOnly Date,
     string Message,
     string? ApplicationId = null,
-    string? ReplacementCardId = null);
+    string? ReplacementCardId = null,
+    string? DisputeCaseId = null,
+    DateOnly? ReplacementDeliveryDate = null);

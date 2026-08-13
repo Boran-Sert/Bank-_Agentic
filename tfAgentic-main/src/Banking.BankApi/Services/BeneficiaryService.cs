@@ -1,3 +1,4 @@
+using Banking.BankApi.Contracts;
 using Banking.Domain.Data;
 using Banking.Domain.Models;
 using Banking.Domain.Validation;
@@ -19,9 +20,8 @@ public interface IBeneficiaryService
     /// <summary>
     /// Yeni alıcı kaydeder. IBAN geçersizse veya aynı IBAN zaten kayıtlıysa kayıt oluşturulmaz.
     /// </summary>
-    Beneficiary AddBeneficiary(
-        string customerId, string title, string fullName, string iban,
-        string bankName, string transferType, bool isFavorite);
+    /// <exception cref="InvalidOperationException">Form kendi içinde tutarsız olduğunda fırlatılır.</exception>
+    Beneficiary AddBeneficiary(string customerId, BeneficiaryCreateRequest form);
 
     /// <summary>Kayıtlı alıcıyı siler ve silinen kaydı döner.</summary>
     Beneficiary RemoveBeneficiary(string beneficiaryId);
@@ -40,10 +40,20 @@ public sealed class BeneficiaryService(InMemoryBankStore store) : IBeneficiarySe
     public Beneficiary? GetBeneficiary(string beneficiaryId) =>
         store.Beneficiaries.GetValueOrDefault(beneficiaryId);
 
-    public Beneficiary AddBeneficiary(
-        string customerId, string title, string fullName, string iban,
-        string bankName, string transferType, bool isFavorite)
+    public Beneficiary AddBeneficiary(string customerId, BeneficiaryCreateRequest form)
     {
+        var iban = form.Iban ?? string.Empty;
+        var transferType = NormalizeTransferType(form.TransferType);
+
+        if (string.IsNullOrWhiteSpace(form.Title))
+            throw new InvalidOperationException("Kayıtlı alıcıya vereceğiniz kısa ad zorunludur.");
+
+        if (string.IsNullOrWhiteSpace(form.FullName))
+            throw new InvalidOperationException("Alıcının ad soyadı zorunludur.");
+
+        if (form.DefaultAmount is <= 0m)
+            throw new InvalidOperationException("Varsayılan transfer tutarı sıfırdan büyük olmalıdır.");
+
         var ibanStatus = TurkishIbanValidator.Validate(iban);
 
         if (ibanStatus == TurkishIbanValidationStatus.MalformedStructure)
@@ -64,18 +74,32 @@ public sealed class BeneficiaryService(InMemoryBankStore store) : IBeneficiarySe
         var beneficiary = new Beneficiary(
             Id: $"BEN-{Guid.NewGuid():N}"[..12].ToUpperInvariant(),
             CustomerId: customerId,
-            Title: title,
-            FullName: fullName,
+            Title: form.Title.Trim(),
+            FullName: form.FullName.Trim(),
             Iban: iban.Trim(),
-            BankName: bankName,
+            BankName: string.IsNullOrWhiteSpace(form.BankName) ? "Belirtilmedi" : form.BankName.Trim(),
             TransferType: transferType,
-            IsFavorite: isFavorite,
+            IsFavorite: form.IsFavorite ?? false,
             CreatedOn: BankClock.Today,
-            LastUsedOn: null);
+            LastUsedOn: null,
+            Description: form.Description,
+            DefaultAmount: form.DefaultAmount,
+            DefaultTransferDescription: form.DefaultTransferDescription,
+            NotifyOnTransfer: form.NotifyOnTransfer ?? false);
 
         store.Beneficiaries[beneficiary.Id] = beneficiary;
         return beneficiary;
     }
+
+    /// <summary>Transfer türünü kanonik değere çevirir.</summary>
+    /// <exception cref="InvalidOperationException">Tür tanınmadığında fırlatılır.</exception>
+    private static string NormalizeTransferType(string? transferType) => transferType?.Trim().ToLowerInvariant() switch
+    {
+        "havale" => "Havale",
+        "eft" => "EFT",
+        "fast" => "FAST",
+        _ => throw new InvalidOperationException("Transfer türü 'Havale', 'EFT' veya 'FAST' olmalıdır.")
+    };
 
     public Beneficiary RemoveBeneficiary(string beneficiaryId)
     {

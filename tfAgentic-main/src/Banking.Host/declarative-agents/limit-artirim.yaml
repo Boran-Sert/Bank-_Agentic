@@ -1,29 +1,77 @@
-kind: Prompt
+kind: Workflow
 name: limit-artirim
 displayName: Kredi Kartı Limit Artırım Akışı
 description: Kullanıcının kredi kartı limitini artırma taleplerini ve gerekli tutar bilgilerini toplar.
+mkCode: CashAndPaymentSolutionsLimitUpdate
 instructions: |
-  Bu akış sadece kredi kartı limiti arttırımı için kullanılacaktır .Kullanıcının hangi kartının limitini, 
-  hangi tutara çıkarmak istediğini netleştir.
-  Kart kimliğini kullanıcıya sorma; kart uzmanına danışarak bul, kullanıcı tarif ettiyse
-  doğrudan eşle, tarif etmediyse seçenekleri sun.
+  Bu akış sadece mevcut bir kredi kartının limitinin artırılması için kullanılır. Yeni kart
+  başvurusu, kart borcu ödeme ve nakit avans bu akışın konusu değildir.
+
+  Kart kimliğini kullanıcıya sorma; kart uzmanına danışarak bul, kullanıcı tarif ettiyse doğrudan
+  eşle, tarif etmediyse kartları okunabilir biçimde sunup seçmesini iste. Kullanıcı yeni limiti
+  rakamla söyleyebilir ya da mevcut limite göre tarif edebilir; tarif edildiyse güncel limiti kart
+  uzmanından öğrenip yaz, kendin hesaplama.
+
+  Talep edilen limit bankanın otomatik onay tavanını aşabilir. Bu durumda başvurunun uzman
+  incelemesine düşmesi yerine tavana inilerek anında sonuçlanmasını isteyip istemediğini kullanıcıya
+  sor ve cevabını acceptCeilingOffer alanına yaz. Tavanı sen hesaplama; kararı banka verir.
+  Onay veya izin gerektiren alanlarda kullanıcının açık cevabını bekle; sessizliği onay sayma.
 model:
   options:
     temperature: 0.1
-inputSchema:
+outputSchema:
   type: object
   properties:
     cardId:
       type: string
+      required: true
       description: >-
-        Limit artırımı yapılacak kartın kimliği. Kart uzmanından gelir; kart numarası
-        veya son haneler bu alana yazılmaz.
+        Limit artırımı yapılacak kartın kimliği. Kart uzmanından gelir; kart numarası veya son
+        haneler bu alana yazılmaz.
     requestedLimit:
       type: number
+      required: true
+      description: Talep edilen yeni kart limiti, TL cinsinden sayı olarak.
+    reason:
+      type: string
+      required: true
+      description: Limit artırımının gerekçesi (tatil, tadilat, düğün, iş harcamaları gibi).
+    monthlyNetIncome:
+      type: number
+      required: true
+      description: Kullanıcının beyan ettiği aylık net geliri, TL cinsinden sayı olarak.
+    additionalMonthlyIncome:
+      type: number
+      required: false
+      description: Kira, nafaka, ek iş gibi düzenli ek gelir. Yoksa boş bırakılır.
+    employmentType:
+      type: string
+      required: true
+      description: Çalışma şekli. Geçerli değerler Kamu, Özel, Serbest, Emekli.
+    employerName:
+      type: string
+      required: true
+      description: Çalışılan kurumun veya işyerinin adı.
+    workStartDate:
+      type: string
+      required: true
+      description: Mevcut işyerinde işe başlama tarihi, yyyy-MM-dd biçiminde.
+    documentDeliveryChannel:
+      type: string
+      required: true
+      description: Gelir belgesinin bankaya nasıl ulaştırılacağı. Geçerli değerler Mobil, Şube.
+    acceptCeilingOffer:
+      type: boolean
+      required: true
       description: >-
-        Talep edilen yeni kart limiti, sayı olarak. Kullanıcı rakamı söyleyebilir ya da
-        mevcut limite göre tarif edebilir; tarif edildiyse güncel limiti kart uzmanından
-        öğrenip yaz.
-  required:
-    - cardId
-    - requestedLimit
+        Talep otomatik onay tavanını aşarsa tavan limitle onaylanmasının kabul edildiğini gösterir.
+        Kullanıcı açıkça kabul etmediyse false yazılır.
+    kvkkConsent:
+      type: boolean
+      required: true
+      description: >-
+        Kişisel verilerin başvuru için işlenmesine izin verildiğini gösterir. Kullanıcı açıkça
+        onaylamadan true yazılmaz.
+action:
+  method: PUT
+  path: /api/card-limit-increase

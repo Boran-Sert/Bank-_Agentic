@@ -8,9 +8,4 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
-  <ItemGroup>
-    <!-- Ekran kodu kataloğu çıktı dizinine kopyalanır; servis onu tek ve sabit bir yolda arar. -->
-    <Content Update="Data\mkcodes.json" CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-
 </Project>

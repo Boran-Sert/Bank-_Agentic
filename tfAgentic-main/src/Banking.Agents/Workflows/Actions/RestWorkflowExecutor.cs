@@ -62,7 +62,10 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
         {
             var response = await bank.SendAsync(action.Method, action.Path!, requestBody, idempotencyKey, cancellationToken);
             hub.Publish(TraceCategories.Service, $"{action.Method.Method} {action.Path}", "Banka işlemi tamamladı");
-            return null; // TODO: BUNU KONTROL ET
+            return WorkflowOutcome.Success(
+                action.WorkflowName,
+                userMessage: $"{action.Label} başarıyla gerçekleştirildi.",
+                details: ReadAllFields(response));
         }
         catch (BankApiException exception) when (exception.StatusCode == 404)
         {

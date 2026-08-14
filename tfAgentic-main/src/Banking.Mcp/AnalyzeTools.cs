@@ -55,7 +55,7 @@ public sealed class AnalyzeTools
     [McpServerTool(Name = AnalyzeToolNames.AnalyzeCategoryBreakdown)]
     [Description(
         "Harcamaları sektör ve kategori bazında (market, gıda, giyim vb.) analiz eder. Tetikleyici niyetler: 'Nereye ne kadar harcamışım?', 'En çok hangi sektöre para gitmiş?'.")]
-    public async Task<object> AnalyzeCategoryBreakdown(
+    public async Task<string> AnalyzeCategoryBreakdown(
         [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")]
         string? filePath = null,
         CancellationToken cancellationToken = default) =>
@@ -64,21 +64,21 @@ public sealed class AnalyzeTools
 
     [McpServerTool(Name = AnalyzeToolNames.AnalyzePaymentTypeRatio)]
     [Description("Harcamaları peşin ve taksitli olarak ayırıp oranlarını gösterir. Tetikleyici niyetler: 'Harcamalarımın ne kadarı taksitli?'.")]
-    public async Task<object> AnalyzePaymentTypeRatio(
+    public async Task<string> AnalyzePaymentTypeRatio(
         [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
         CancellationToken cancellationToken = default) =>
         (await _bank.AskBankAsync(BankApiPaths.StatementPaymentTypes, StatementBody(filePath), cancellationToken)).ToReadableJson();
 
     [McpServerTool(Name = AnalyzeToolNames.AnalyzeBonusAndPoints)]
     [Description("Kazanılan puan ve bonus durumlarını analiz eder. Tetikleyici niyetler: 'Ne kadar puan kazandım?', 'Hangi kampanyadan bonus gelmiş?'.")]
-    public async Task<object> AnalyzeBonusAndPoints(
+    public async Task<string> AnalyzeBonusAndPoints(
         [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
         CancellationToken cancellationToken = default) =>
         (await _bank.AskBankAsync(BankApiPaths.StatementBonus, StatementBody(filePath), cancellationToken)).ToReadableJson();
 
     [McpServerTool(Name = AnalyzeToolNames.AnalyzeTopMerchants)]
     [Description("En çok alışveriş yapılan marka ve işyerlerini sıralar. Tetikleyici niyetler: 'En çok hangi mağazadan alışveriş yapmışım?'.")]
-    public async Task<object> AnalyzeTopMerchants(
+    public async Task<string> AnalyzeTopMerchants(
         [Description("Opsiyonel: Okunacak ekstre kaynağı. Verilmezse bankanın varsayılan ekstresi kullanılır.")] string? filePath = null,
         [Description("Dönecek işyeri sayısı.")] int topCount = 5,
         CancellationToken cancellationToken = default) =>
@@ -89,7 +89,7 @@ public sealed class AnalyzeTools
 
     [McpServerTool(Name = AnalyzeToolNames.CompareSpendingPeriods)]
     [Description("İki farklı dönemin veya kategorinin harcamalarını karşılaştırır. Tetikleyici niyetler: 'Geçen aya göre market harcamalarım artmış mı?'.")]
-    public async Task<object> CompareSpendingPeriods(
+    public async Task<string> CompareSpendingPeriods(
         [Description("Bu dönemin başlangıcı, ISO tarih (yyyy-MM-dd).")] string currentStartIso,
         [Description("Bu dönemin bitişi, ISO tarih (yyyy-MM-dd).")] string currentEndIso,
         [Description("Karşılaştırılacak önceki dönemin başlangıcı, ISO tarih (yyyy-MM-dd).")] string previousStartIso,
@@ -112,7 +112,7 @@ public sealed class AnalyzeTools
 
     [McpServerTool(Name = AnalyzeToolNames.KampanyaVektorelAra)]
     [Description("Kullanıcının profiline uygun kampanyaları arar ve önerir. Tetikleyici niyetler: 'Bana uygun kampanya var mı?', 'Giyim kampanyalarını listele'. İstisna: Kullanıcı doğrudan finansman, limit artırımı veya borç yapılandırması talep ediyorsa bu aracı kullanmayın.")]
-    public async Task<object> KampanyaVektorelAra(
+    public async Task<string> KampanyaVektorelAra(
         string sorguVektoruMetni,
         string? mccKategorisi = null,
         int topK = 3,

@@ -27,17 +27,17 @@ public sealed class SemanticWorkflowSearcher(LocalEmbedder embedder, ILogger<Sem
 
     /// <summary>Verilen iş akışlarını vektörleştirip indekse alır.</summary>
     /// <param name="discoveredWorkflows">İndekslenecek akışların metadatası.</param>
-    public void Initialize(IEnumerable<WorkflowMetadata> discoveredWorkflows) => _index.Replace(discoveredWorkflows);
+    public void IndexAllWorkflows(IEnumerable<WorkflowMetadata> discoveredWorkflows) => _index.ReplaceAllEntries(discoveredWorkflows);
 
     /// <summary>
     /// Tek bir iş akışını indekse ekler veya günceller. Çalışma zamanında kaydedilen akış aramada
     /// anında görünür.
     /// </summary>
-    public void AddOrUpdate(WorkflowMetadata workflow) => _index.AddOrUpdate(workflow);
+    public void AddOrUpdateWorkflow(WorkflowMetadata workflow) => _index.AddOrUpdateEntry(workflow);
 
     /// <summary>Kullanıcı mesajına en yakın iş akışlarını benzerlik skorlarıyla birlikte döner.</summary>
     /// <param name="intent">Kullanıcının mesajı veya niyet ifadesi.</param>
     /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
-    public IReadOnlyList<(WorkflowMetadata Metadata, float Score)> Search(string intent, int topK = 5) =>
-        _index.Search(intent, topK);
+    public IReadOnlyList<(WorkflowMetadata Metadata, float Score)> SearchWorkflowsByIntent(string intent, int topK = 5) =>
+        _index.SearchByIntent(intent, topK);
 }

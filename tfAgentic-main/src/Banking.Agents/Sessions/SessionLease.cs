@@ -2,8 +2,8 @@ namespace Banking.Agents.Sessions;
 
 /// <summary>
 /// Açılmış bir oturum scope'u: kilit alınmış, durum depodan bir kez okunmuştur. İki adımda
-/// kullanılır — <see cref="AmbientSessionAccessor.OpenAsync"/> kilidi alıp durumu yükler,
-/// <see cref="Enter"/> oturumu ambient hâle getirir. <c>await using</c> ile kapatılır; kapanışta
+/// kullanılır — <see cref="AmbientSessionAccessor.OpenSessionScopeAsync"/> kilidi alıp durumu yükler,
+/// <see cref="EnterAmbientScope"/> oturumu ambient hâle getirir. <c>await using</c> ile kapatılır; kapanışta
 /// durum depoya bir kez yazılır, ambient oturum temizlenir ve kilit bırakılır. Yazma, istek iptal
 /// edilse veya hata alsa da yapılır.
 /// </summary>
@@ -45,7 +45,7 @@ public sealed class SessionLease : IAsyncDisposable
     /// Oturumu ambient hâle getirir ve <c>await using</c> için kendini döner. Bu metot asla
     /// <c>async</c> yapılmaz; <see cref="AsyncLocal{T}"/> ataması çağırana yayılmaz.
     /// </summary>
-    public SessionLease Enter()
+    public SessionLease EnterAmbientScope()
     {
         if (!IsNested) _accessor.SetAmbientSession(Context);
         return this;
@@ -57,7 +57,7 @@ public sealed class SessionLease : IAsyncDisposable
         if (_closed) return;
         _closed = true;
 
-        await _accessor.CloseAsync(this);
+        await _accessor.CloseSessionScopeAsync(this);
     }
 
     internal static SessionLease Owned(

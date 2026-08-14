@@ -19,10 +19,7 @@ public sealed class FakeBankApiClient : IBankApiClient
     /// </summary>
     private readonly Dictionary<string, string> _receiptsByIdempotencyKey = [];
 
-    public Task<JsonElement> GetAsync(string path, CancellationToken cancellationToken = default) =>
-        SendAsync(HttpMethod.Get, path, body: null, idempotencyKey: null, cancellationToken);
-
-    public Task<JsonElement> SendAsync(
+    public Task<JsonElement> SendToBankAsync(
         HttpMethod method,
         string path,
         object? body,

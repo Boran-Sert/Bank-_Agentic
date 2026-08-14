@@ -32,7 +32,7 @@ public sealed class TracingChatClient(
         var response = await base.GetResponseAsync(msgList, options, cancellationToken);
         watch.Stop();
 
-        hub.Publish(TraceCategories.Llm, $"{label} -> Model Yanıtı Alındı",
+        hub.PublishTraceEvent(TraceCategories.Llm, $"{label} -> Model Yanıtı Alındı",
             $"Çıktı: \"{Truncate(GetResponseSummary(response), ResponseSummaryLimit)}\"");
 
         PublishTurnCost(response.Usage, watch.ElapsedMilliseconds);
@@ -52,7 +52,7 @@ public sealed class TracingChatClient(
             : $"girdi={usage.InputTokenCount} çıktı={usage.OutputTokenCount} " +
               $"toplam={usage.TotalTokenCount} ";
 
-        hub.Publish(TraceCategories.Llm, $"{label} -> Token Maliyeti",
+        hub.PublishTraceEvent(TraceCategories.Llm, $"{label} -> Token Maliyeti",
             $"model={model} {cost}süre={elapsedMilliseconds} ms");
     }
 
@@ -79,7 +79,7 @@ public sealed class TracingChatClient(
 
         var msgList = (messages ?? []).ToList();
 
-        hub.Publish(TraceCategories.Llm, $"{label} -> {eventName}",
+        hub.PublishTraceEvent(TraceCategories.Llm, $"{label} -> {eventName}",
             $"Girdi: \"{Truncate(GetMessageSummary(msgList.LastOrDefault()), RequestSummaryLimit)}\"");
 
         return msgList;

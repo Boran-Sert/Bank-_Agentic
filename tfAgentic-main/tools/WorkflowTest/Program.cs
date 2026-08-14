@@ -74,21 +74,23 @@ async Task RunDoubleApprovalScenarioAsync()
     var first = await RunApprovalGraphAsync(executor, hub, approve: true);
     var second = await RunApprovalGraphAsync(executor, hub, approve: true);
 
-    Console.WriteLine($"  1. makbuz: {first?.ReceiptId}");
-    Console.WriteLine($"  2. makbuz: {second?.ReceiptId}");
+    // Makbuz numarası bu branch'te sonuca taşınmıyor; çift tıklamanın kanıtı
+    // tek idempotency anahtarı ve iki turda birebir aynı sonuç mesajıdır.
+    Console.WriteLine($"  1. sonuç: {first?.UserMessage}");
+    Console.WriteLine($"  2. sonuç: {second?.UserMessage}");
 
     var keys = bank.SentRequests.Select(request => request.IdempotencyKey).Distinct().ToList();
     Console.WriteLine($"  Farklı idempotency anahtarı sayısı: {keys.Count} (beklenen 1)");
 
     Check(keys.Count == 1, "idempotency anahtarı tekliği");
-    Check(first?.ReceiptId == second?.ReceiptId, "aynı makbuz");
+    Check(first?.UserMessage == second?.UserMessage, "aynı sonuç mesajı");
 }
 
 async Task<WorkflowOutcome?> RunApprovalGraphAsync(RestWorkflowExecutor executor, TraceHub hub, bool approve)
 {
     var view = executor.BuildConfirmationView(action, slots);
 
-    var wf = DeterministicActionWorkflow.Build(
+    var wf = DeterministicActionWorkflow.BuildApprovalGraph(
         action: action,
         slots: slots,
         actionExecutor: executor,

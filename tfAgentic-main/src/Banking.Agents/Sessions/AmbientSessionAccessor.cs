@@ -6,7 +6,7 @@ namespace Banking.Agents.Sessions;
 /// Aktif isteğin oturumuna erişim noktası; <see cref="AsyncLocal{T}"/> tabanlıdır. Oturum kimliği
 /// katmanlar arasında parametre olarak taşınmaz ve araçlara verilmez. Üç garantiyi birlikte sağlar:
 /// <list type="bullet">
-/// <item>İzolasyon — aynı oturumla iç içe <see cref="OpenAsync"/> zararsızdır, farklı bir oturumla
+/// <item>İzolasyon — aynı oturumla iç içe <see cref="OpenSessionScopeAsync"/> zararsızdır, farklı bir oturumla
 /// iç içe açmak istisna fırlatır.</item>
 /// <item>Tek okuma / tek yazma — durum scope açılışında yüklenir, kapanışında yazılır; aradaki
 /// katmanların hiçbiri depoya erişmez.</item>
@@ -27,15 +27,15 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
     public SessionContext Current =>
         _currentSession.Value
         ?? throw new InvalidOperationException(
-            "Aktif oturum scope'u yok. Bu çağrı OpenAsync ile açılmış bir scope içinden yapılmalıdır.");
+            "Aktif oturum scope'u yok. Bu çağrı OpenSessionScopeAsync ile açılmış bir scope içinden yapılmalıdır.");
 
     /// <summary>
     /// Oturum scope'unu açar: oturuma özel kilit alınır ve durum depodan bir kez yüklenir. Dönen
-    /// kiralama <see cref="SessionLease.Enter"/> ile ambient hâle getirilir ve <c>await using</c>
+    /// kiralama <see cref="SessionLease.EnterAmbientScope"/> ile ambient hâle getirilir ve <c>await using</c>
     /// ile kapatılır; kapanışta durum depoya bir kez yazılır.
     /// <code>
-    /// var lease = await sessionAccessor.OpenAsync(sessionId, cancellationToken);
-    /// await using var session = lease.Enter();
+    /// var lease = await sessionAccessor.OpenSessionScopeAsync(sessionId, cancellationToken);
+    /// await using var session = lease.EnterAmbientScope();
     /// </code>
     /// </summary>
     /// <param name="sessionId">Çalışılacak oturumun kimliği; boş olamaz.</param>
@@ -43,7 +43,7 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
     /// <exception cref="InvalidOperationException">
     /// Aktif bir scope varken farklı bir <paramref name="sessionId"/> ile çağrıldığında fırlatılır.
     /// </exception>
-    public async Task<SessionLease> OpenAsync(string sessionId, CancellationToken cancellationToken = default)
+    public async Task<SessionLease> OpenSessionScopeAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
@@ -73,7 +73,7 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
 
         try
         {
-            var state = await sessionStore.TryGetAsync(sessionId, cancellationToken)
+            var state = await sessionStore.TryLoadSessionStateAsync(sessionId, cancellationToken)
                         ?? new SessionState { SessionId = sessionId };
 
             return SessionLease.Owned(this, new SessionContext(state, hub), state, sessionLock);
@@ -88,7 +88,7 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
     }
 
     /// <summary>
-    /// Ambient oturumu yazar. <see cref="SessionLease.Enter"/> tarafından senkron çağrılır.
+    /// Ambient oturumu yazar. <see cref="SessionLease.EnterAmbientScope"/> tarafından senkron çağrılır.
     /// </summary>
     internal void SetAmbientSession(SessionContext? session) => _currentSession.Value = session;
 
@@ -96,14 +96,14 @@ public sealed class AmbientSessionAccessor(ISessionStore sessionStore, TraceHub 
     /// Scope'u kapatır: durumu depoya yazar, ambient oturumu temizler ve kilidi bırakır.
     /// İç içe scope'ta hiçbir şey yapmaz; sahiplik dıştaki scope'undur.
     /// </summary>
-    internal async ValueTask CloseAsync(SessionLease lease)
+    internal async ValueTask CloseSessionScopeAsync(SessionLease lease)
     {
         if (lease.IsNested) return;
 
         try
         {
             // İptal ve hata durumunda da yazılır
-            await sessionStore.SaveAsync(lease.State!, CancellationToken.None);
+            await sessionStore.SaveSessionStateAsync(lease.State!, CancellationToken.None);
         }
         finally
         {

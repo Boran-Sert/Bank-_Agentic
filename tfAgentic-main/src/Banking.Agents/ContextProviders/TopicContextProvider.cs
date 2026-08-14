@@ -56,7 +56,7 @@ public sealed class TopicContextProvider : AIContextProvider
             return new ValueTask<AIContext>(new AIContext());
 
         _logger?.LogInformation("TopicContextProvider: önceki tur bağlamı sistem prompt'una ekleniyor.");
-        _hub?.Publish(TraceCategories.Context,
+        _hub?.PublishTraceEvent(TraceCategories.Context,
             $"[TopicContextProvider] Önceki tur bağlamı sisteme enjekte ediliyor ({state.LastAssistantResponse.Length} karakter)");
 
         var message = $"[Sistem Bilgisi: Bir önceki turda asistandan kullanıcıya şu yanıt verildi:\n\n{state.LastAssistantResponse}\n Buna göre yeni niyeti analiz et.]";
@@ -86,7 +86,7 @@ public sealed class TopicContextProvider : AIContextProvider
             _sessionState.SaveState(context.Session, state);
 
             _logger?.LogInformation("TopicContextProvider: '{Tool}' tetiklendi, bağlam temizlendi.", triggeredResettingTool.Name);
-            _hub?.Publish(TraceCategories.Context, $"[TopicContextProvider] '{triggeredResettingTool.Name}' tetiklendi → bağlam temizlendi");
+            _hub?.PublishTraceEvent(TraceCategories.Context, $"[TopicContextProvider] '{triggeredResettingTool.Name}' tetiklendi → bağlam temizlendi");
             return ValueTask.CompletedTask;
         }
 
@@ -97,7 +97,7 @@ public sealed class TopicContextProvider : AIContextProvider
         _sessionState.SaveState(context.Session, state);
 
         _logger?.LogInformation("TopicContextProvider: asistan yanıtı bağlam olarak saklandı.");
-        _hub?.Publish(TraceCategories.Context, $"[TopicContextProvider] Asistan yanıtı bağlam olarak saklandı ({text.Length} karakter)");
+        _hub?.PublishTraceEvent(TraceCategories.Context, $"[TopicContextProvider] Asistan yanıtı bağlam olarak saklandı ({text.Length} karakter)");
 
         return ValueTask.CompletedTask;
     }

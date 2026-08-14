@@ -126,7 +126,7 @@ Kural metnini yalnızca `AgentPrompts` içindeki sabitte değiştir. Sabit, hem 
 | Uzmanlar (deklaratif) | YAML `model.options.temperature`, yoksa `Agents:Temperature` | `SpecialistDefinition` |
 | Akış ajanları | YAML `model.options.temperature`, yoksa `Agents:Temperature` | `WorkflowAgentDefinition` |
 
-Model adı `Agents:Model` ile gelir (varsayılan `gpt-4o-mini`). Prompt'lar sağlayıcıdan bağımsız yazılmıştır; Ollama gibi küçük modellerde uzun XML ağaçları maliyetli olduğu için blok sayısı bilinçli olarak beşle sınırlıdır.
+Model adı `Agents:Model` ile gelir (varsayılan `gpt-4o-mini`). Prompt'lar sağlayıcıdan bağımsız yazılmıştır; küçük modellerde uzun XML ağaçları maliyetli olduğu için blok sayısı bilinçli olarak beşle sınırlıdır.
 
 ## 6. Değişikliği doğrulama
 

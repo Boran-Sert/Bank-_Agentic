@@ -30,14 +30,14 @@ public static class StartupLoader
         var services = scope.ServiceProvider;
 
         // Semantik indeksler; banka ayakta değilse boş kalır ve ilk çağrıda yeniden denenir
-        await services.GetRequiredService<SemanticMkCodeSearcher>().InitializeAsync();
-        await services.GetRequiredService<SemanticCampaignSearcher>().InitializeAsync();
-        await services.GetRequiredService<SemanticFinancingSearcher>().InitializeAsync();
+        await services.GetRequiredService<SemanticMkCodeSearcher>().EnsureScreenCodeIndexBuiltAsync();
+        await services.GetRequiredService<SemanticCampaignSearcher>().EnsureCampaignIndexBuiltAsync();
+        await services.GetRequiredService<SemanticFinancingSearcher>().EnsureFinancingIndexBuiltAsync();
 
         var workflowRegistry = services.GetRequiredService<WorkflowRegistry>();
 
         foreach (var (filePath, content) in
-                 DeclarativeFileStore.ReadAll(app.Environment.ContentRootPath, WorkflowsFolder))
+                 DeclarativeFileStore.ReadAllDefinitionFiles(app.Environment.ContentRootPath, WorkflowsFolder))
         {
             try
             {
@@ -54,13 +54,13 @@ public static class StartupLoader
             }
         }
 
-        services.GetRequiredService<SemanticWorkflowSearcher>().Initialize(workflowRegistry.DiscoveredWorkflows);
+        services.GetRequiredService<SemanticWorkflowSearcher>().IndexAllWorkflows(workflowRegistry.DiscoveredWorkflows);
 
         // Uzman kartları; ajanların kurulumunu ön ısıtma yapar
         var specialistCatalog = services.GetRequiredService<SpecialistCatalog>();
 
         foreach (var (filePath, content) in
-                 DeclarativeFileStore.ReadAll(app.Environment.ContentRootPath, SpecialistsFolder))
+                 DeclarativeFileStore.ReadAllDefinitionFiles(app.Environment.ContentRootPath, SpecialistsFolder))
         {
             try
             {

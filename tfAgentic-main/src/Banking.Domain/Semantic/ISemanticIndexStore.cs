@@ -19,11 +19,11 @@ public interface ISemanticIndexStore
     /// <summary>Anahtara karşılık saklanmış vektörleri döner; kayıt yoksa <c>null</c>.</summary>
     /// <param name="indexKey">İndeksin içerik özetini taşıyan anahtar; içerik değişince anahtar da değişir.</param>
     /// <param name="cancellationToken">İptal jetonu.</param>
-    ValueTask<IReadOnlyList<StoredVector>?> TryLoadAsync(string indexKey, CancellationToken cancellationToken);
+    ValueTask<IReadOnlyList<StoredVector>?> TryLoadVectorsAsync(string indexKey, CancellationToken cancellationToken);
 
     /// <summary>Hesaplanmış vektörleri anahtara yazar.</summary>
     /// <param name="indexKey">İndeksin içerik özetini taşıyan anahtar.</param>
     /// <param name="vectors">Saklanacak vektörler.</param>
     /// <param name="cancellationToken">İptal jetonu.</param>
-    ValueTask SaveAsync(string indexKey, IReadOnlyList<StoredVector> vectors, CancellationToken cancellationToken);
+    ValueTask SaveVectorsAsync(string indexKey, IReadOnlyList<StoredVector> vectors, CancellationToken cancellationToken);
 }

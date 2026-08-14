@@ -25,7 +25,7 @@ public sealed class InMemorySessionStore : ISessionStore
     }
 
     /// <inheritdoc />
-    public ValueTask<SessionState?> TryGetAsync(string sessionId, CancellationToken cancellationToken = default)
+    public ValueTask<SessionState?> TryLoadSessionStateAsync(string sessionId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
@@ -34,7 +34,7 @@ public sealed class InMemorySessionStore : ISessionStore
     }
 
     /// <inheritdoc />
-    public ValueTask SaveAsync(SessionState state, CancellationToken cancellationToken = default)
+    public ValueTask SaveSessionStateAsync(SessionState state, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(state);
 
@@ -60,7 +60,7 @@ public sealed class InMemorySessionStore : ISessionStore
 
         var activeWorkflow = evicted.ActiveWorkflowName;
 
-        _hub.Publish(TraceCategories.Session, string.IsNullOrWhiteSpace(activeWorkflow)
+        _hub.PublishTraceEvent(TraceCategories.Session, string.IsNullOrWhiteSpace(activeWorkflow)
             ? $"Oturum düştü ({reason}) → {evicted.SessionId}"
             : $"Oturum düştü ({reason}) → {evicted.SessionId} | YARIM KALAN AKIŞ: '{activeWorkflow}' " +
               $"(evre: {evicted.Phase}) ve toplanan parametreler kayboldu");

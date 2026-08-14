@@ -30,7 +30,7 @@ public sealed class SchemaValidatedSlotWriter(
         if (FindDeclaredType(slotName) is { } declaredType &&
             !MatchesDeclaredType(declaredType, candidateSlotValue, out var expectedType))
         {
-            hub.Publish(TraceCategories.Slot,
+            hub.PublishTraceEvent(TraceCategories.Slot,
                 $"Şema doğrulaması reddetti → [{slotName} = {candidateSlotValue}] · beklenen tip: {expectedType}");
 
             return BuildRejectedMessage(slotName, expectedType);

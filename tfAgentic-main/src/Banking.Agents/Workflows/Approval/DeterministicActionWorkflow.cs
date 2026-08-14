@@ -24,7 +24,7 @@ public static class DeterministicActionWorkflow
     /// <c>false</c> verildiğinde onay kapısı kurulmaz ve eylem doğrudan çalışır. Para hareketi
     /// içeren akışlarda daima <c>true</c> olmalıdır.
     /// </param>
-    public static Workflow Build(
+    public static Workflow BuildApprovalGraph(
         WorkflowActionDefinition action,
         IReadOnlyDictionary<string, object?> slots,
         RestWorkflowExecutor actionExecutor,
@@ -36,13 +36,13 @@ public static class DeterministicActionWorkflow
 
         if (!requiresApproval)
         {
-            hub.Publish(TraceCategories.Approval, $"{action.WorkflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
+            hub.PublishTraceEvent(TraceCategories.Approval, $"{action.WorkflowName}: Onay ekranı bypass edildi → Doğrudan çalıştırılıyor");
             return new WorkflowBuilder(executorStep)
                 .WithOutputFrom(executorStep)
                 .Build();
         }
 
-        hub.Publish(TraceCategories.Approval, $"{action.WorkflowName}: MAF RequestPort onay gate'i oluşturuldu");
+        hub.PublishTraceEvent(TraceCategories.Approval, $"{action.WorkflowName}: MAF RequestPort onay gate'i oluşturuldu");
         var approvalPort = RequestPort.Create<GenericConfirmationView, bool>($"{action.WorkflowName}-approval-port");
 
         return new WorkflowBuilder(approvalPort)
@@ -68,7 +68,7 @@ internal sealed class DeterministicActionStep(
     public override async ValueTask<WorkflowOutcome> HandleAsync(
         bool approved, IWorkflowContext context, CancellationToken cancellationToken = default)
     {
-        hub.Publish(TraceCategories.Approval, $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");
-        return await actionExecutor.ExecuteAsync(action, slots, approved, cancellationToken);
+        hub.PublishTraceEvent(TraceCategories.Approval, $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");
+        return await actionExecutor.ExecuteBankActionForApprovalDecisionAsync(action, slots, approved, cancellationToken);
     }
 }

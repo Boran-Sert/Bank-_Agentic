@@ -27,11 +27,11 @@ public sealed class MkCodeCatalog(IBankApiClient bank, ILogger<MkCodeCatalog> lo
     /// çözerken kullanılan yol budur.
     /// </summary>
     /// <param name="value">Aranan ekran kodu.</param>
-    public MkCodeDefinition? Get(string value) =>
+    public MkCodeDefinition? GetScreenCodeDefinition(string value) =>
         string.IsNullOrWhiteSpace(value) ? null : _codes.GetValueOrDefault(value);
 
     /// <summary>Bankanın bir ekran için döndürdüğü arama takma adlarını okur.</summary>
-    private static IReadOnlyList<string> ReadKeywords(JsonElement code) =>
+    private static IReadOnlyList<string> ReadSearchAliases(JsonElement code) =>
         code.TryGetProperty("keywords", out var keywords) && keywords.ValueKind == JsonValueKind.Array
             ? keywords.EnumerateArray()
                 .Select(keyword => keyword.GetString())
@@ -46,7 +46,7 @@ public sealed class MkCodeCatalog(IBankApiClient bank, ILogger<MkCodeCatalog> lo
     /// </summary>
     public async Task EnsureLoadedAsync(CancellationToken cancellationToken = default)
     {
-        if (_codes.IsEmpty) await RefreshAsync(cancellationToken);
+        if (_codes.IsEmpty) await ReloadScreenCodesFromBankAsync(cancellationToken);
     }
 
     /// <summary>
@@ -54,7 +54,7 @@ public sealed class MkCodeCatalog(IBankApiClient bank, ILogger<MkCodeCatalog> lo
     /// yönlendirme bir önceki listeyle çalışmaya devam eder.
     /// </summary>
     /// <returns>Kataloğa alınan kod sayısı; banka okunamadığında sıfır.</returns>
-    public async Task<int> RefreshAsync(CancellationToken cancellationToken = default)
+    public async Task<int> ReloadScreenCodesFromBankAsync(CancellationToken cancellationToken = default)
     {
         var response = await bank.AskBankAsync(BankApiPaths.MkCodes, new { }, cancellationToken);
 
@@ -66,9 +66,9 @@ public sealed class MkCodeCatalog(IBankApiClient bank, ILogger<MkCodeCatalog> lo
 
         var loaded = codes.EnumerateArray()
             .Select(code => new MkCodeDefinition(
-                Value: code.Text("value", string.Empty),
-                Label: code.Text("label", string.Empty),
-                Keywords: ReadKeywords(code)))
+                Value: code.ReadText("value", string.Empty),
+                Label: code.ReadText("label", string.Empty),
+                Keywords: ReadSearchAliases(code)))
             .Where(code => code.Value.Length > 0 && code.Label.Length > 0)
             .ToList();
 

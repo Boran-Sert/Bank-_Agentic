@@ -30,18 +30,18 @@ public sealed class TracingAIFunction(AIFunction inner, TraceHub hub, string lay
 
         // Parametre var mı
         if (arguments != null && arguments.Count > 0)
-            hub.Publish(layer, $"{Name} Aracı Tetiklendi ({infoTag})", arguments);
+            hub.PublishTraceEvent(layer, $"{Name} Aracı Tetiklendi ({infoTag})", arguments);
         else
-            hub.Publish(layer, $"{Name} Aracı Tetiklendi ({infoTag})");
+            hub.PublishTraceEvent(layer, $"{Name} Aracı Tetiklendi ({infoTag})");
 
         // Aracın kendisini çağır
         var result = await inner.InvokeAsync(arguments, cancellationToken);
 
         // Sonuç var mı
         if (result != null)
-            hub.Publish(layer, $"{Name} Aracı Tamamlandı ({text})", Unwrap(result));
+            hub.PublishTraceEvent(layer, $"{Name} Aracı Tamamlandı ({text})", UnwrapJsonStringResult(result));
         else
-            hub.Publish(layer, $"{Name} Aracı Tamamlandı ({text})");
+            hub.PublishTraceEvent(layer, $"{Name} Aracı Tamamlandı ({text})");
 
         // Sonucu dön
         return result;
@@ -51,7 +51,7 @@ public sealed class TracingAIFunction(AIFunction inner, TraceHub hub, string lay
     /// Metin dönen bir aracın sonucunu ham metne indirger. Araç sonucu <c>JsonElement</c> olarak
     /// sarmalandığından, indirgenmezse iz kaydında bir kez daha kaçışlanıp okunmaz hale gelir.
     /// </summary>
-    private static object Unwrap(object result) =>
+    private static object UnwrapJsonStringResult(object result) =>
         result is JsonElement { ValueKind: JsonValueKind.String } element
             ? element.GetString() ?? string.Empty
             : result;

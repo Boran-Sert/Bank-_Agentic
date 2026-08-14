@@ -112,7 +112,7 @@ public sealed class McpToolProvider(AgentOptions options, TraceHub hub, ILogger<
 
             DiscoveredToolCount = tools.Count;
             logger.LogInformation("MCP bağlantısı kuruldu ve registry doğrulandı. Keşfedilen araç sayısı: {Count}", DiscoveredToolCount);
-            hub.Publish(TraceCategories.System, $"MCP bağlantısı kuruldu → {DiscoveredToolCount} araç");
+            hub.PublishTraceEvent(TraceCategories.System, $"MCP bağlantısı kuruldu → {DiscoveredToolCount} araç");
 
             return _discoveredTools = tools;
         }

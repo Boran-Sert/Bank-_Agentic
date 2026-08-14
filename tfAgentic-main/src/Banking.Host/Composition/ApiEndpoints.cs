@@ -105,13 +105,13 @@ public static class ApiEndpoints
                 return Results.BadRequest(new { error = exception.Message });
             }
 
-            var savedAs = await DeclarativeFileStore.SaveAsync(
+            var savedAs = await DeclarativeFileStore.SaveDefinitionFileAsync(
                 environment.ContentRootPath, StartupLoader.WorkflowsFolder, workflowName, content);
 
             // Anında indeksleme
-            searcher.AddOrUpdate(new WorkflowMetadata(workflowName, definition.Description, definition.Instructions));
+            searcher.AddOrUpdateWorkflow(new WorkflowMetadata(workflowName, definition.Description, definition.Instructions));
 
-            hub.Publish(TraceCategories.Workflow,
+            hub.PublishTraceEvent(TraceCategories.Workflow,
                 $"[WORKFLOW REGISTERED] '{definition.Name}' ajanı çalışma zamanında eklendi ve diske kaydedildi",
                 $"Tanım: '{definition.Description}' · Dosya: {savedAs}");
 
@@ -162,10 +162,10 @@ public static class ApiEndpoints
                 return Results.BadRequest(new { error = exception.Message });
             }
 
-            var savedAs = await DeclarativeFileStore.SaveAsync(
+            var savedAs = await DeclarativeFileStore.SaveDefinitionFileAsync(
                 environment.ContentRootPath, StartupLoader.SpecialistsFolder, specialistName, content);
 
-            hub.Publish(TraceCategories.Agent,
+            hub.PublishTraceEvent(TraceCategories.Agent,
                 $"[UZMAN KAYDEDİLDİ] '{card.DisplayName}' çalışma zamanında eklendi ve diske kaydedildi",
                 $"Köprü aracı: {card.BridgeToolName} · Adres: /a2a/{card.A2ARoute} · Dosya: {savedAs}");
 
@@ -221,7 +221,7 @@ public static class ApiEndpoints
         app.MapPost("/api/campaigns/sync", async (ICampaignSyncService syncService, TraceHub hub, CancellationToken ct) =>
         {
             var syncedCount = await syncService.SyncFromBackendAsync(ct);
-            hub.Publish(TraceCategories.Semantic,
+            hub.PublishTraceEvent(TraceCategories.Semantic,
                 $"[CAMPAIGN SYNC] Banka senkronizasyonu tetiklendi → {syncedCount} kampanya indekste");
             return Results.Ok(new { syncedCount });
         });

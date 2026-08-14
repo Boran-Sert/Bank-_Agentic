@@ -24,7 +24,7 @@ public sealed class SemanticMkCodeSearcher(
     private readonly SemanticIndex<MkCodeDefinition> _index = new(
         embedder,
         keySelector: code => code.Value,
-        textSelector: Describe,
+        textSelector: BuildEmbeddingText,
         SimilarityThreshold,
         logger,
         label: "Ekran Kodu",
@@ -34,7 +34,7 @@ public sealed class SemanticMkCodeSearcher(
     /// Ekranın gömülecek metnini üretir: görünen ad, kod değeri ve bankanın tanımladığı arama takma
     /// adları. Takma adlar bankanın verisidir; burada tahmin üretilmez.
     /// </summary>
-    private static string Describe(MkCodeDefinition code)
+    private static string BuildEmbeddingText(MkCodeDefinition code)
     {
         var aliases = code.Keywords is { Count: > 0 }
             ? " " + string.Join(", ", code.Keywords.Distinct(StringComparer.OrdinalIgnoreCase))
@@ -47,22 +47,22 @@ public sealed class SemanticMkCodeSearcher(
     /// Kataloğu bankadan yükleyip vektörleştirir. Uygulama başlangıcında çağrılarak ilk sorgudaki
     /// soğuk başlangıç gecikmesini önler; indeks zaten doluysa etkisizdir.
     /// </summary>
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public async Task EnsureScreenCodeIndexBuiltAsync(CancellationToken cancellationToken = default)
     {
         if (_index.Count > 0) return;
-        await RefreshAsync(cancellationToken);
+        await RebuildScreenCodeIndexFromBankAsync(cancellationToken);
     }
 
     /// <summary>
     /// Kataloğu bankadan tazeleyip indeksi kesintisiz yeniden kurar.
     /// </summary>
     /// <returns>İndekslenen kod sayısı; katalog boşsa sıfır.</returns>
-    public async Task<int> RefreshAsync(CancellationToken cancellationToken = default)
+    public async Task<int> RebuildScreenCodeIndexFromBankAsync(CancellationToken cancellationToken = default)
     {
         await catalog.EnsureLoadedAsync(cancellationToken);
 
         var codes = catalog.All;
-        return codes.Count == 0 ? 0 : await _index.ReplaceAsync(codes, cancellationToken);
+        return codes.Count == 0 ? 0 : await _index.ReplaceAllEntriesAsync(codes, cancellationToken);
     }
 
     /// <summary>
@@ -78,12 +78,12 @@ public sealed class SemanticMkCodeSearcher(
     /// <param name="intent">Kullanıcının ekran arama niyeti.</param>
     /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
     /// <param name="cancellationToken">İptal jetonu.</param>
-    public async Task<IReadOnlyList<(MkCodeDefinition Code, float Score)>> SearchAsync(
+    public async Task<IReadOnlyList<(MkCodeDefinition Code, float Score)>> SearchScreenCodesByIntentAsync(
         string intent, int topK = DefaultCandidateCount, CancellationToken cancellationToken = default)
     {
         // Boş indeks toparlaması
-        if (_index.Count == 0) await RefreshAsync(cancellationToken);
+        if (_index.Count == 0) await RebuildScreenCodeIndexFromBankAsync(cancellationToken);
 
-        return _index.Search(intent, topK);
+        return _index.SearchByIntent(intent, topK);
     }
 }

@@ -44,7 +44,7 @@ public sealed class SemanticCampaignSearcher(
     private readonly SemanticIndex<CampaignSummary> _index = new(
         embedder,
         keySelector: campaign => campaign.Id,
-        textSelector: Describe,
+        textSelector: BuildEmbeddingText,
         SimilarityThreshold,
         logger,
         label: "Kampanya",
@@ -54,10 +54,10 @@ public sealed class SemanticCampaignSearcher(
     /// İndeksi bir kez doldurur; indeks zaten doluysa etkisizdir. Banka o an ayakta değilse indeks
     /// boş kalır ve sonraki çağrı yeniden dener.
     /// </summary>
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public async Task EnsureCampaignIndexBuiltAsync(CancellationToken cancellationToken = default)
     {
         if (_index.Count > 0) return;
-        await RefreshAsync(cancellationToken);
+        await RebuildCampaignIndexFromBankAsync(cancellationToken);
     }
 
     /// <summary>
@@ -65,7 +65,7 @@ public sealed class SemanticCampaignSearcher(
     /// indekse dokunulmaz; arama bir önceki listeyle yanıt vermeye devam eder.
     /// </summary>
     /// <returns>İndekslenen kampanya sayısı; banka okunamadığında sıfır.</returns>
-    public async Task<int> RefreshAsync(CancellationToken cancellationToken = default)
+    public async Task<int> RebuildCampaignIndexFromBankAsync(CancellationToken cancellationToken = default)
     {
         var response = await bank.AskBankAsync(BankApiPaths.Campaigns, new { campaignId = (string?)null }, cancellationToken);
 
@@ -75,7 +75,7 @@ public sealed class SemanticCampaignSearcher(
             return 0;
         }
 
-        return await _index.ReplaceAsync(campaigns.EnumerateArray().Select(ToSummary), cancellationToken);
+        return await _index.ReplaceAllEntriesAsync(campaigns.EnumerateArray().Select(ToCampaignSummary), cancellationToken);
     }
 
     /// <summary>
@@ -85,9 +85,9 @@ public sealed class SemanticCampaignSearcher(
     /// <param name="intent">Kullanıcının harcama profili veya arama metni.</param>
     /// <param name="mccCategoryFilter">İsteğe bağlı MCC sektör kategorisi filtresi.</param>
     /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
-    public IReadOnlyList<(CampaignSummary Campaign, float Score)> Search(
+    public IReadOnlyList<(CampaignSummary Campaign, float Score)> SearchCampaignsByIntent(
         string intent, string? mccCategoryFilter = null, int topK = 3) =>
-        _index.Search(intent, topK, filter: string.IsNullOrWhiteSpace(mccCategoryFilter)
+        _index.SearchByIntent(intent, topK, filter: string.IsNullOrWhiteSpace(mccCategoryFilter)
             ? null
             : campaign =>
                 string.Equals(campaign.TargetMccGroup, mccCategoryFilter, StringComparison.OrdinalIgnoreCase) ||
@@ -97,17 +97,17 @@ public sealed class SemanticCampaignSearcher(
     /// Kampanyanın metinsel alanlarını birleştirip gömülecek metni üretir. Koşul metni de gömmeye
     /// girer; kullanıcının sorusu çoğu zaman kampanyanın adını değil koşulunu tarif eder.
     /// </summary>
-    private static string Describe(CampaignSummary campaign) =>
+    private static string BuildEmbeddingText(CampaignSummary campaign) =>
         $"Kampanya: {campaign.Title}. Açıklama: {campaign.Description}. " +
         $"Sektör Kategori: {campaign.TargetMccGroup}. Koşullar: {campaign.TermsOfUse}. Kazanım Fayda: {campaign.Benefit}.";
 
-    private static CampaignSummary ToSummary(JsonElement campaign) => new(
-        Id: campaign.Text("id", string.Empty),
-        Title: campaign.Text("title", string.Empty),
-        Description: campaign.Text("description", string.Empty),
-        TargetMccGroup: campaign.Text("targetMccGroup", string.Empty),
-        TermsOfUse: campaign.Text("termsOfUse", string.Empty),
-        Benefit: campaign.Text("benefit", string.Empty),
-        BonusPoints: campaign.Number("bonusPoints"),
-        MinimumSpendAmount: campaign.Number("minimumSpendAmount"));
+    private static CampaignSummary ToCampaignSummary(JsonElement campaign) => new(
+        Id: campaign.ReadText("id", string.Empty),
+        Title: campaign.ReadText("title", string.Empty),
+        Description: campaign.ReadText("description", string.Empty),
+        TargetMccGroup: campaign.ReadText("targetMccGroup", string.Empty),
+        TermsOfUse: campaign.ReadText("termsOfUse", string.Empty),
+        Benefit: campaign.ReadText("benefit", string.Empty),
+        BonusPoints: campaign.ReadDecimal("bonusPoints"),
+        MinimumSpendAmount: campaign.ReadDecimal("minimumSpendAmount"));
 }

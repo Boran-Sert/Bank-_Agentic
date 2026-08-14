@@ -32,7 +32,7 @@ internal static class BankApiToolGateway
     {
         try
         {
-            return await bank.SendAsync(HttpMethod.Post, path, body, cancellationToken: cancellationToken);
+            return await bank.SendToBankAsync(HttpMethod.Post, path, body, cancellationToken: cancellationToken);
         }
         catch (BankApiException exception)
         {
@@ -49,7 +49,7 @@ internal static class BankApiToolGateway
     /// JSON alanını büyük/küçük harf ayrımı olmadan okur. Bankanın alan adlandırması (camelCase)
     /// C# özellik adlarından farklı olduğu için okuma tarafında ada birebir güvenilmez.
     /// </summary>
-    public static JsonElement? Field(this JsonElement element, string propertyName)
+    public static JsonElement? FindPropertyIgnoreCase(this JsonElement element, string propertyName)
     {
         if (element.ValueKind != JsonValueKind.Object) return null;
 
@@ -63,12 +63,12 @@ internal static class BankApiToolGateway
     }
 
     /// <summary>Sayısal bir alanı okur; alan yoksa veya sayı değilse sıfır döner.</summary>
-    public static decimal Number(this JsonElement element, string propertyName) =>
-        element.Field(propertyName) is { ValueKind: JsonValueKind.Number } value ? value.GetDecimal() : 0m;
+    public static decimal ReadDecimal(this JsonElement element, string propertyName) =>
+        element.FindPropertyIgnoreCase(propertyName) is { ValueKind: JsonValueKind.Number } value ? value.GetDecimal() : 0m;
 
     /// <summary>Metin alanını okur; alan yoksa veya metin değilse verilen varsayılana düşer.</summary>
-    public static string Text(this JsonElement element, string propertyName, string defaultValue) =>
-        element.Field(propertyName) is { ValueKind: JsonValueKind.String } value
+    public static string ReadText(this JsonElement element, string propertyName, string defaultValue) =>
+        element.FindPropertyIgnoreCase(propertyName) is { ValueKind: JsonValueKind.String } value
             ? value.GetString() ?? defaultValue
             : defaultValue;
 }

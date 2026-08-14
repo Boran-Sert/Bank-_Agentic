@@ -23,7 +23,7 @@ public sealed class TracedChatClientFactory(AgentOptions options, TraceHub hub)
     /// çağırdığını gösterir hem de kullanılacak modeli seçer.
     /// </summary>
     /// <param name="label">İzlerde görünecek ajan adı (örn. <c>Orkestratör</c>).</param>
-    public IChatClient Create(string label)
+    public IChatClient CreateTracedChatClient(string label)
     {
         var model = options.ModelFor(label);
         var client = _clientsByModel.GetOrAdd(model, name => CreateChatClient(options, name));
@@ -40,8 +40,7 @@ public sealed class TracedChatClientFactory(AgentOptions options, TraceHub hub)
     /// <exception cref="NotSupportedException">Yapılandırılan sağlayıcı desteklenmediğinde fırlatılır.</exception>
     private static OpenAI.Chat.ChatClient CreateChatClient(AgentOptions options, string model)
     {
-        var isSupported = string.Equals(options.Provider, "openai", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(options.Provider, "ollama", StringComparison.OrdinalIgnoreCase);
+        var isSupported = string.Equals(options.Provider, "openai", StringComparison.OrdinalIgnoreCase);
 
         if (!isSupported)
             throw new NotSupportedException($"Desteklenmeyen sağlayıcı: {options.Provider}");

@@ -92,7 +92,7 @@ dotnet run --project tools/WorkflowTest    # modelsiz, deterministik
 
 1. `GetResponseAsync` içinde model çağrısını `Stopwatch` ile ölç.
 2. Yanıttaki `response.Usage` okunup `TraceHub` ile yayınlanır. **Ayrı log kanalı açma** —
-   `TraceHub.Publish` kaydı hem canlı ize hem `ILogger`'a düşürüyor.
+   `TraceHub.PublishTraceEvent` kaydı hem canlı ize hem `ILogger`'a düşürüyor.
 3. Kategori `TraceCategories.Llm`; metin `"{label} -> Token Maliyeti"`, detay
    `"girdi=<n> çıktı=<n> toplam=<n> süre=<ms> ms"`.
 4. `Usage` `null` ise token satırı yayınlanmaz (bazı sağlayıcılar döndürmez); süre yine yayınlanır.
@@ -230,8 +230,8 @@ Bugün her açılışta 266 mkCode + kampanya + finansman yeniden vektörleştir
 ```csharp
 public interface ISemanticIndexStore
 {
-    ValueTask<IReadOnlyList<StoredVector>?> TryLoadAsync(string indexKey, CancellationToken ct);
-    ValueTask SaveAsync(string indexKey, IReadOnlyList<StoredVector> vectors, CancellationToken ct);
+    ValueTask<IReadOnlyList<StoredVector>?> TryLoadVectorsAsync(string indexKey, CancellationToken ct);
+    ValueTask SaveVectorsAsync(string indexKey, IReadOnlyList<StoredVector> vectors, CancellationToken ct);
 }
 ```
 
@@ -255,7 +255,7 @@ bankada güncellenmiş bir kampanyanın aramada hiç görünmemesine yol açar.
 | Nereye takılır | `McpToolProvider`'ın dağıttığı araçlara dekoratör | `SemanticIndex<T>` |
 | Ne kazandırır | Banka HTTP çağrısı | Gömme hesabı |
 
-Semantik arayıcılar MCP araçlarından geçmez — `SemanticCampaignSearcher.RefreshAsync` doğrudan
+Semantik arayıcılar MCP araçlarından geçmez — `SemanticCampaignSearcher.RebuildCampaignIndexFromBankAsync` doğrudan
 `bank.AskBankAsync` çağırır. Dekoratör bu yolu **kapsamaz**; ikisi birbirinin yerine geçmez.
 
 **Kabul:** banka kapalıyken host açılıyor, arama boş dönüyor ve izde "indeks boş" var; banka açılınca
@@ -277,7 +277,7 @@ yapar; büyük modelin turları yarıya iner.
 eski talimatın 2. ve 4. adımları düştü. **Kalan iş:**
 
 1. `AgentOptions`'a `Dictionary<string, string> Models` (OrdinalIgnoreCase). Anahtar
-   `TracedChatClientFactory.Create(label)` etiketi (örn. `Orkestratör`), değer model adı. Karşılığı
+   `TracedChatClientFactory.CreateTracedChatClient(label)` etiketi (örn. `Orkestratör`), değer model adı. Karşılığı
    olmayan etiket `Model` alanındaki varsayılana düşer.
 2. `TracedChatClientFactory`: bugün yapıcıda tek bir `ChatClient` kuruyor
    (`TracedChatClientFactory.cs:22`). Bunun yerine model adına göre `ConcurrentDictionary` içinde
@@ -325,7 +325,7 @@ Anahtar `banking-session:{sessionId}` (bellek içi uygulamayla aynı ön ek).
 Serileştirici sınıf içinde `static readonly` ve Türkçe kaçışını kapatır
 (`Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)`).
 
-**Bağlantı hatasında istisnayı yutma.** `AmbientSessionAccessor.OpenAsync` okuma hatasını zaten ele
+**Bağlantı hatasında istisnayı yutma.** `AmbientSessionAccessor.OpenSessionScopeAsync` okuma hatasını zaten ele
 alıyor (kilidi bırakıp fırlatıyor) ve kullanıcı görünür hata alır. Sessiz bir `null`, oturumu yeni
 gibi göstererek yarım kalan akışı siler.
 
@@ -342,7 +342,7 @@ kaybeder. Çözüm:
 ```
 
 `StringComparer.OrdinalIgnoreCase` karşılaştırıcısının gidiş-dönüşten sonra korunduğu doğrulanır;
-korunmuyorsa alan `{ get; set; }` yapılıp `TryGetAsync` içinde sözlük yeniden kurulur.
+korunmuyorsa alan `{ get; set; }` yapılıp `TryLoadSessionStateAsync` içinde sözlük yeniden kurulur.
 
 **b) İdempotency parmak izi kayar.** `SlotValues`, `ProposedSlots`, `PendingConfirmation.Parameters`
 ve `CompletedOutcome.Details` sözlükleri `object?` taşır; JSON gidiş-dönüşünden sonra değerler
@@ -388,7 +388,7 @@ if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) 
 
 **Koşulsuz `KeyDeleteAsync` kullanma:** TTL dolup kilidi başka bir istek almışsa onun kilidini silersin.
 
-**İç içe scope yolunu bozma.** `OpenAsync`, aynı oturum zaten aktifse kilide *hiç dokunmadan*
+**İç içe scope yolunu bozma.** `OpenSessionScopeAsync`, aynı oturum zaten aktifse kilide *hiç dokunmadan*
 `SessionLease.Nested(...)` döner. Bu sıra korunmalı; kilit alınmaya çalışılırsa istek kendi kilidini
 bekleyip kilitlenir. Durum yükleme başarısız olduğunda kilidi bırakan `catch` bloğu da korunur.
 
@@ -468,7 +468,7 @@ düşer. Sarmalama sırası `CachingAIFunction(TracingAIFunction(mcpTool))`: izl
 **aynı biçimde** serileşmeli. `JsonNode`/`JsonElement` uygundur; ham `string` döndürmek yanıtı çift
 kaçışlı metne çevirir. İstisnalar önbelleğe **yazılmaz.**
 
-**Geçersiz kılma:** `RestWorkflowExecutor.ExecuteAsync` içinde banka çağrısı **başarıyla** döndükten
+**Geçersiz kılma:** `RestWorkflowExecutor.ExecuteBankActionForApprovalDecisionAsync` içinde banka çağrısı **başarıyla** döndükten
 sonra `InvalidateCustomerAsync(...)`. Müşteri kimliği `CustomerContext`'ten. Sürüm sayacının bir
 artması o müşterinin tüm T2/T3 kayıtlarını tek işlemde geçersizleştirir; anahtar taraması gerekmez.
 `RestWorkflowExecutor`'ın diğer davranışlarına dokunulmaz.
@@ -553,7 +553,8 @@ birleştiren yanıtlar kuramaz olur. **Bu bir mimari karardır ve karar verilmed
   slot doldurmada düşük, finansal analizde yüksek olmalı. *Doğrulanması gereken:* değerin kurulu
   `Microsoft.Extensions.AI` + OpenAI SDK üzerinden nasıl geçirildiği sürüme bağlıdır; reflection'la
   kontrol edilmeden yazılmaz.
-- **Ollama'da kalınacaksa:** `OLLAMA_NUM_PARALLEL`, `OLLAMA_MAX_QUEUE`, `OLLAMA_KEEP_ALIVE=-1`,
+- **Ollama'da kalınacaksa** (bu branch'te geçerli değil — Ollama desteği kaldırıldı,
+  `TracedChatClientFactory` yalnızca `openai` sağlayıcısını kabul ediyor)**:** `OLLAMA_NUM_PARALLEL`, `OLLAMA_MAX_QUEUE`, `OLLAMA_KEEP_ALIVE=-1`,
   `OLLAMA_FLASH_ATTENTION=1`, `OLLAMA_KV_CACHE_TYPE=q8_0`, `OLLAMA_CONTEXT_LENGTH`. Denge:
   **KV bellek = paralel yuva × bağlam uzunluğu.** 128k bağlamla çok yuva açılamaz; gerçek ihtiyaç
   kadar bağlam (8-16k) + çok yuva doğru tercihtir.
@@ -605,15 +606,15 @@ içerikleri kaybolursa sistemin neden öyle yazıldığı kaybolur:
 
 | Metot | Kaybolmaması gereken |
 |---|---|
-| `RestWorkflowExecutor.ExecuteAsync` | "Hiçbir koşulda istisna sızdırmaz" (MAF event akışı) |
+| `RestWorkflowExecutor.ExecuteBankActionForApprovalDecisionAsync` | "Hiçbir koşulda istisna sızdırmaz" (MAF event akışı) |
 | `WorkflowEngine.ApplyApprovalDecisionAsync` | Anlaşılmayan yanıt onay sayılmaz; idempotency |
 | `WorkflowEngine.ConcludeSlotFillingAsync` | Onay kapısı `CallsBank`'e bağlıdır |
 | `WorkflowEngine.InterpretAgentOutputAsync` | Kontrol sırasının bağlayıcılığı |
 | `SessionContext.ResetWorkflow` | Orkestratör geçmişinin de temizlenme gerekçesi |
-| `SessionLease.Enter` | `Enter()` neden asla `async` olamaz |
-| `AmbientSessionAccessor.OpenAsync` | İç içe farklı oturum yasağı |
+| `SessionLease.EnterAmbientScope` | `EnterAmbientScope()` neden asla `async` olamaz |
+| `AmbientSessionAccessor.OpenSessionScopeAsync` | İç içe farklı oturum yasağı |
 | `SchemaValidatedSlotWriter.WriteSlotIfSchemaAccepts` | Değer dönüştürülmez, reddedilir |
-| `SemanticIndex.Search` | Eleme sıralamadan ve kotadan önce |
+| `SemanticIndex.SearchByIntent` | Eleme sıralamadan ve kotadan önce |
 | `McpToolProvider.GetTracedToolsByNamesAsync` | Bilinmeyen araç adı sessizce atlanmaz |
 | `SpecialistCatalog.GuardAgainstCompiledCollision` | Korumanın ad ile sınırlı olmadığı |
 | `GenericConfirmationView.ComputeIdempotencyToken` | Tek yerde hesaplanma zorunluluğu |

@@ -51,8 +51,6 @@ public sealed record WorkflowOutcome
     /// </summary>
     public string UserMessage { get; }
 
-    /// <summary>Banka tarafından üretilen makbuz numarası; para hareketi içermeyen akışlarda <c>null</c>.</summary>
-
     /// <summary>Bankanın döndürdüğü yapısal alanlar (tutar, kalan bakiye, IBAN vb.); UI kartları içindir.</summary>
     public IReadOnlyDictionary<string, object?> Details { get; }
 
@@ -63,7 +61,6 @@ public sealed record WorkflowOutcome
     public static WorkflowOutcome Success(
         string workflowName,
         string userMessage,
-        string? receiptId = null,
         IReadOnlyDictionary<string, object?>? details = null) =>
         new(workflowName, WorkflowOutcomeStatus.Succeeded, userMessage, details);
 

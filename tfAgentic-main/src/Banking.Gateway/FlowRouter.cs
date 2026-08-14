@@ -49,14 +49,14 @@ public sealed class FlowRouter(
         // Aktif akış hattı
         if (session.HasActiveWorkflow && session.ActiveWorkflowName is { } activeWorkflowName)
         {
-            hub.Publish(TraceCategories.FlowRouter, "Aktif iş akışı oturumu → mesaj doğrudan workflow ajanına yönlendiriliyor");
+            hub.PublishTraceEvent(TraceCategories.FlowRouter, "Aktif iş akışı oturumu → mesaj doğrudan workflow ajanına yönlendiriliyor");
             logger.LogInformation("Deterministik yönlendirme: session={SessionId}", session.SessionId);
 
             var engine = await workflowRegistry.CreateEngineAsync(activeWorkflowName);
             var stepResult = await engine.AdvanceWorkflowStepAsync(userMessage, cancellationToken);
 
             if (stepResult.Status is WorkflowStatuses.Completed or WorkflowStatuses.Cancelled)
-                hub.Publish(TraceCategories.FlowRouter, $"İş akışı oturumu sonlandı (durum: {stepResult.Status})");
+                hub.PublishTraceEvent(TraceCategories.FlowRouter, $"İş akışı oturumu sonlandı (durum: {stepResult.Status})");
 
             return new FlowExecutionResult(FlowExecutionType.WorkflowStep, WorkflowResult: stepResult);
         }

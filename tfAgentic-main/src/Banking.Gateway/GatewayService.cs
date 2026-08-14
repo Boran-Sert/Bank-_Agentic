@@ -34,16 +34,16 @@ public sealed class GatewayService(
         var sessionToken = NormalizeSessionToken(request.SessionToken);
 
         // Oturum scope'u
-        var lease = await sessionAccessor.OpenAsync(sessionToken, cancellationToken);
-        await using var session = lease.Enter();
+        var lease = await sessionAccessor.OpenSessionScopeAsync(sessionToken, cancellationToken);
+        await using var session = lease.EnterAmbientScope();
 
-        hub.Publish(TraceCategories.Gateway, "İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
+        hub.PublishTraceEvent(TraceCategories.Gateway, "İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
         logger.LogInformation("Gateway istek: session={SessionToken}, text={Text}", sessionToken, Truncate(request.Text, 100));
 
         try
         {
             var flowResult = await router.RouteUserRequestAsync(request.Text, cancellationToken);
-            return FinalizeResponse(responseMapper.Map(flowResult), sessionToken);
+            return FinalizeResponse(responseMapper.MapFlowResultToGatewayResponse(flowResult), sessionToken);
         }
         catch (OperationCanceledException)
         {
@@ -53,7 +53,7 @@ public sealed class GatewayService(
         catch (Exception exception)
         {
             logger.LogError(exception, "Gateway hatası: session={SessionToken}", sessionToken);
-            hub.Publish(TraceCategories.Gateway, $"HATA: {exception.Message}");
+            hub.PublishTraceEvent(TraceCategories.Gateway, $"HATA: {exception.Message}");
             return FinalizeResponse(GatewayResponse.AsText("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin."), sessionToken);
         }
     }

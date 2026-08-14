@@ -30,17 +30,7 @@ public sealed class WorkflowAgentFactory(
     TraceHub hub)
 {
     private const string UpdateSlotToolName = "update_slot";
-
-    /// <summary>
-    /// Şema üretiminde boolean düğümleri boş nesneye (<c>{}</c>) dönüştüren seçenekler. Ollama'nın
-    /// araç çağrısı ayrıştırıcısı <c>properties</c> altında nesne bekler; boş nesne çıplak
-    /// <c>true</c> ile anlamca eşdeğerdir ve her iki sağlayıcı tarafından kabul edilir.
-    /// </summary>
-    private static readonly AIJsonSchemaCreateOptions OllamaCompatibleSchemaOptions = new()
-    {
-        TransformSchemaNode = (_, schema) =>
-            schema.GetValueKind() is JsonValueKind.True or JsonValueKind.False ? new JsonObject() : schema
-    };
+    
 
     /// <summary>
     /// Önbellekteki ajan ve kurulduğu andaki girdilerin parmak izi. Eşleşme ada değil bu parmak
@@ -142,13 +132,13 @@ public sealed class WorkflowAgentFactory(
             {
                 Name = UpdateSlotToolName,
                 Description = definition.SlotUpdateDescription + DescribeExpectedTypes(definition.SlotSchema),
-                JsonSchemaCreateOptions = OllamaCompatibleSchemaOptions,
                 SerializerOptions = AgentJsonPolicy.ToolOptions
             });
 
         return new TracingAIFunction(tool, hub, TraceCategories.Slot, UpdateSlotToolName, "Oturum Parametresi Güncelleme");
     }
 
+    //TODO: BURAYI OPENAI YA UYGUN ŞEKİLDE DÜZENLE
     /// <summary>
     /// Beklenen slot tiplerini araç açıklamasına ekler. Tip bilgisinin modele ulaştığı tek kanal
     /// budur; şemaya yazılamaz çünkü <c>value</c> düğümü

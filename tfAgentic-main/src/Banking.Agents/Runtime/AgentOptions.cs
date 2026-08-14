@@ -8,14 +8,14 @@ public sealed class AgentOptions
     /// <summary>Bu seçeneklerin bağlandığı yapılandırma bölümünün adı.</summary>
     public const string SectionName = "Agents";
 
-    /// <summary>Model sağlayıcısı. <c>openai</c> ve OpenAI uyumlu API sunan <c>ollama</c> desteklenir.</summary>
-    public string Provider { get; set; } = "Ollama";
+    /// <summary>Model sağlayıcısı. <c>openai</c></summary>
+    public string Provider { get; set; } = "openai";
 
     /// <summary>
     /// Karşılığı olmayan her ajanın kullandığı model. Model araç çağrısını (tool calling)
     /// desteklemelidir.
     /// </summary>
-    public string Model { get; set; } = "gemma4:31b-cloud";
+    public string Model { get; set; } = "gpt-4o-mini";
 
     /// <summary>
     /// Ajan etiketinden model adına eşleme. Anahtar, izlerde görünen ajan etiketidir (örn.

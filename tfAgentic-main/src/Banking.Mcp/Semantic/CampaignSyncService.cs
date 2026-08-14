@@ -26,7 +26,7 @@ public sealed class CampaignSyncService(
     /// <inheritdoc />
     public async Task<int> SyncFromBackendAsync(CancellationToken cancellationToken = default)
     {
-        var indexedCount = await campaignSearcher.RefreshAsync(cancellationToken);
+        var indexedCount = await campaignSearcher.RebuildCampaignIndexFromBankAsync(cancellationToken);
 
         logger.LogInformation("Kampanya senkronizasyonu tamamlandı: {Count} kampanya indekste.", indexedCount);
 

@@ -24,8 +24,8 @@ public sealed class NavigationTools(
         EnsureOpenScreenParameterName();
 
         var registry = ToolRegistry.Instance;
-        var searchDefinition = registry.Get(ToolNames.SearchScreenCode);
-        var openDefinition = registry.Get(ToolNames.OpenScreen);
+        var searchDefinition = registry.GetToolDefinition(ToolNames.SearchScreenCode);
+        var openDefinition = registry.GetToolDefinition(ToolNames.OpenScreen);
 
         return
         [
@@ -44,7 +44,7 @@ public sealed class NavigationTools(
     {
         logger.LogInformation("Semantik ekran kodu araması yapılıyor. Niyet: '{UserIntent}'", userIntent);
 
-        var results = await screenCodeSearcher.SearchAsync(userIntent);
+        var results = await screenCodeSearcher.SearchScreenCodesByIntentAsync(userIntent);
         if (results.Count == 0)
         {
             logger.LogWarning("Semantik ekran kodu araması sonuç vermedi. Niyet: '{UserIntent}'", userIntent);

@@ -13,7 +13,7 @@ public interface IBankApiClient
     /// <param name="path">Bankadaki hedef yol.</param>
     /// <param name="cancellationToken">İptal jetonu.</param>
     /// <exception cref="BankApiException">Banka isteği reddettiğinde veya hata döndürdüğünde fırlatılır.</exception>
-    Task<JsonElement> GetAsync(string path, CancellationToken cancellationToken = default);
+    Task<JsonElement> ReadFromBankAsync(string path, CancellationToken cancellationToken = default);
 
     /// <summary>Gövdeli istek gönderir ve bankanın ham JSON yanıtını döner.</summary>
     /// <param name="method">İsteğin HTTP metodu.</param>
@@ -25,7 +25,7 @@ public interface IBankApiClient
     /// </param>
     /// <param name="cancellationToken">İptal jetonu.</param>
     /// <exception cref="BankApiException">Banka isteği reddettiğinde veya hata döndürdüğünde fırlatılır.</exception>
-    Task<JsonElement> SendAsync(
+    Task<JsonElement> SendToBankAsync(
         HttpMethod method,
         string path,
         object? body,

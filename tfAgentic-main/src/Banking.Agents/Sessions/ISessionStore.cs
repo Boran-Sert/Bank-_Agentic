@@ -12,8 +12,8 @@ public interface ISessionStore
 {
     /// <summary>Oturum durumunu okur ve TTL'i tazeler.</summary>
     /// <returns>Bulunan oturum durumu; kayıt yoksa veya süresi dolmuşsa <c>null</c>.</returns>
-    ValueTask<SessionState?> TryGetAsync(string sessionId, CancellationToken cancellationToken = default);
+    ValueTask<SessionState?> TryLoadSessionStateAsync(string sessionId, CancellationToken cancellationToken = default);
 
     /// <summary>Oturum durumunu yazar ve TTL'i tazeler.</summary>
-    ValueTask SaveAsync(SessionState state, CancellationToken cancellationToken = default);
+    ValueTask SaveSessionStateAsync(SessionState state, CancellationToken cancellationToken = default);
 }

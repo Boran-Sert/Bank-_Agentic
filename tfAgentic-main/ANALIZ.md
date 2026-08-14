@@ -68,8 +68,8 @@ Süreç ayağa kalkarken şu adımlar sırayla çalışır.
 Scope açılışı iki adımdır ve bu ayrım zorunludur:
 
 ```csharp
-var lease = await sessionAccessor.OpenAsync(sessionToken, cancellationToken);
-await using var session = lease.Enter();
+var lease = await sessionAccessor.OpenSessionScopeAsync(sessionToken, cancellationToken);
+await using var session = lease.EnterAmbientScope();
 ```
 
 ---
@@ -106,7 +106,7 @@ await using var session = lease.Enter();
 - `CompleteWorkflow()` / `CancelWorkflow()`: `ResetWorkflow` üzerinden akışı sonlandırır.
 - `ResetWorkflow(finalPhase, trace)` (private): Akış durumunu, slotları, şemayı, teklifi, onayı, idempotency'yi, akış ajanı geçmişini **ve** `SerializedOrchestratorSession`'ı temizler. Sonuncusu, tamamlanmış bir akıştan sonra orkestratörün onay bekliyormuş gibi davranmasını engeller — bkz. Bölüm 4.4.
 - `SetSlot(name, value)`: Tek slot değerini yazar.
-- `GetSlotStatus()`: `SlotBinder.GetStatus` ile dolu/eksik/opsiyonel slotları hesaplar.
+- `GetSlotStatus()`: `SlotBinder.DetermineSlotStatus` ile dolu/eksik/opsiyonel slotları hesaplar.
 - `StoreProposedSlots(workflowName, slots)`: Teklifi saklar ve `null` olmayan değerleri StateBag'e geri yazar.
 - `DeclareExpectedSlots(schema)`: Akışın YAML şemasını oturuma tanıtır; akış her başladığında yeniden yazılır.
 - `RaiseAgentSignal(signal)` / `ConsumeAgentSignal()`: Akış ajanının araç sinyalini yazar / okuyup siler.
@@ -120,12 +120,12 @@ await using var session = lease.Enter();
 3. **Oturum başına serileştirme** — aynı oturuma gelen eşzamanlı istekler sıraya girer. Onay düğmesine çift tıklamayı güvenli kılan kilit budur.
 
 - `Current`: Aktif oturum; scope yoksa istisna. Sessizce yeni oturum üretmek iki kullanıcının verisini karıştırırdı.
-- `OpenAsync(sessionId, ct)`: Kilidi alır, durumu **bir kez** yükler, `SessionLease` döner. Aynı oturumla iç içe çağrıldığında yeniden yükleme/kilitleme yapmaz.
-- `CloseAsync(lease)` (internal): Durumu yazar, ambient'ı temizler, kilidi bırakır. **İstek iptal edilse veya hata alsa bile yazma yapılır**; o ana kadarki ilerleme korunur.
+- `OpenSessionScopeAsync(sessionId, ct)`: Kilidi alır, durumu **bir kez** yükler, `SessionLease` döner. Aynı oturumla iç içe çağrıldığında yeniden yükleme/kilitleme yapmaz.
+- `CloseSessionScopeAsync(lease)` (internal): Durumu yazar, ambient'ı temizler, kilidi bırakır. **İstek iptal edilse veya hata alsa bile yazma yapılır**; o ana kadarki ilerleme korunur.
 
 **`SessionLease`** (`Sessions/SessionLease.cs`) — `IAsyncDisposable`.
 
-- `Enter()`: Oturumu ambient hâle getirir. **Senkron olmak zorundadır:** `async` yapılırsa `AsyncLocal` yazımı yalnızca metodun kendi bağlamında kalır ve `Current` çağrının devamında istisna fırlatır.
+- `EnterAmbientScope()`: Oturumu ambient hâle getirir. **Senkron olmak zorundadır:** `async` yapılırsa `AsyncLocal` yazımı yalnızca metodun kendi bağlamında kalır ve `Current` çağrının devamında istisna fırlatır.
 
 ### 2.4 Kalıcılık — `ISessionStore` / `InMemorySessionStore`
 
@@ -248,7 +248,7 @@ Ajanın araç kümesi: uzman köprüleri + dört denetim aracı.
 
 | Evre | Metot | Ne yapar |
 |---|---|---|
-| başlangıç | `StartAsync` | Slot doldurmaya geçirir; tetikleyen cümleyi ajana verir ki verilmiş değerler tekrar sorulmasın |
+| başlangıç | `StartWorkflowAndCollectFirstSlotsAsync` | Slot doldurmaya geçirir; tetikleyen cümleyi ajana verir ki verilmiş değerler tekrar sorulmasın |
 | `slot_filling` | `CollectSlotsAsync` | Kullanıcı yanıtını + slot özetini + tur yönergesini ajana iletir |
 | `awaiting_approval` | `ApplyApprovalDecisionAsync` | Onay kararını uygular; anlaşılmayan yanıt **onay sayılmaz** |
 
@@ -263,11 +263,11 @@ Ajanın araç kümesi: uzman köprüleri + dört denetim aracı.
 **`SlotStatus`** (record, `Slots/SlotBinder.cs`) — Alanları `FilledSlots`, `MissingSlots`, `OptionalSlots`.
 - `IsComplete`: Zorunlu slotların tamamı dolu mu. **Bu bir C# karşılaştırmasıdır, modelin kanaati değil.**
 - `ToProposedSlots()`: Onaya sunulacak kümeyi üretir.
-- `DescribeProblems()`: Eksikleri ajanın sorabileceği biçimde özetler.
-- `Describe()`: Durumu ajanın turuna eklenecek tek satırlık özete çevirir.
+- `DescribeMissingSlots()`: Eksikleri ajanın sorabileceği biçimde özetler.
+- `DescribeForAgentTurn()`: Durumu ajanın turuna eklenecek tek satırlık özete çevirir.
 
 **`SlotBinder`** (static, internal) — Toplanan değerler ile YAML şeması arasındaki **saf** karşılaştırma; bağımlılığı, durumu ve yan etkisi yoktur.
-- `GetStatus(slotValues, expectedSlots)`: Dolu/eksik/opsiyonel ayrımını yapar.
+- `DetermineSlotStatus(slotValues, expectedSlots)`: Dolu/eksik/opsiyonel ayrımını yapar.
 - `ResolveSlotNames(...)` (private): Toplanan anahtarlar ∪ şemadaki slotlar. **Şemada olmayan ama model tarafından yazılmış anahtarlar da görünür kalır**; yanlış slot adı üreten model böylece izde teşhis edilir.
 - `IsRequired(...)` (private): Şemada tanımlı olmayan slot zorunlu sayılmaz — modelin fazladan yazdığı bir anahtar akışı kalıcı olarak "eksik" durumunda bırakamaz.
 - `IsBlank(value)` (private): Boş metin ya da sıfır/negatif tutar.
@@ -298,7 +298,7 @@ Ajanın araç kümesi: uzman köprüleri + dört denetim aracı.
 **`RestWorkflowExecutor`** (`Workflows/Actions/RestWorkflowExecutor.cs`) — **Sistemdeki tek executor.** Durumsuz ve singleton; akışın kimliği ve hedefi her çağrıda parametre olarak gelir. Yeni bir akış eklemek bu sınıfta değişiklik gerektirmez.
 
 - `BuildConfirmationView(action, slots)`: Onay ekranını YAML'da tanımlı slotlardan kurar.
-- `ExecuteAsync(action, slots, approved, ct)`: Onay yoksa bankaya istek atmaz. **Hiçbir koşulda istisna sızdırmaz** — banka reddi ve ağ hatası dâhil tüm başarısızlıklar `WorkflowOutcome.Failure` olarak döner; eylem MAF grafiğinin içinde çalıştığı için oradan fırlayan bir istisna çağırana ulaşmaz, event akışına düşer. Yol bankada bulunamazsa (`404`) genel banka-reddi dalından ayrı yakalanır: YAML'daki `action.path` bankanın güncel yüzeyiyle uyuşmuyor demektir (ör. gerçek bankaya geçişte unutulan bir eşleme) — bu, tanı gerektiren bir yapılandırma hatasıdır, sıradan bir işlem reddi değil, bu yüzden ize ayrı bir uyarı satırı düşer.
+- `ExecuteBankActionForApprovalDecisionAsync(action, slots, approved, ct)`: Onay yoksa bankaya istek atmaz. **Hiçbir koşulda istisna sızdırmaz** — banka reddi ve ağ hatası dâhil tüm başarısızlıklar `WorkflowOutcome.Failure` olarak döner; eylem MAF grafiğinin içinde çalıştığı için oradan fırlayan bir istisna çağırana ulaşmaz, event akışına düşer. Yol bankada bulunamazsa (`404`) genel banka-reddi dalından ayrı yakalanır: YAML'daki `action.path` bankanın güncel yüzeyiyle uyuşmuyor demektir (ör. gerçek bankaya geçişte unutulan bir eşleme) — bu, tanı gerektiren bir yapılandırma hatasıdır, sıradan bir işlem reddi değil, bu yüzden ize ayrı bir uyarı satırı düşer.
 - `BuildReceipt(action, bankResponse)` (private): **Makbuz numarası yalnızca bankadan gelir**; banka numara döndürmediyse makbuz üretilmez, bu katman numara türetmez.
 
 **Bankacılık kuralı içermez.** Tutar karşılaştırması, limit denetimi ve IBAN doğrulaması bankanın kendi uçlarına aittir.
@@ -347,7 +347,7 @@ Ajanın araç kümesi: uzman köprüleri + dört denetim aracı.
 
 > **Bakım notu:** XML etiket listesi elle tutulur. Prompt'a yeni bir etiket eklerken `XmlTagPattern` ve `XmlBlockPattern`'e de eklenmelidir; unutulan etiket yakalanmaz.
 
-Temizlenmiş yanıt HTTP 200 ile UI'a döner. Bu sırada `await using` bloğu kapanır: `SessionLease.DisposeAsync` → `AmbientSessionAccessor.CloseAsync` durumu depoya **bir kez** yazar, ambient oturumu temizler ve kilidi bırakır.
+Temizlenmiş yanıt HTTP 200 ile UI'a döner. Bu sırada `await using` bloğu kapanır: `SessionLease.DisposeAsync` → `AmbientSessionAccessor.CloseSessionScopeAsync` durumu depoya **bir kez** yazar, ambient oturumu temizler ve kilidi bırakır.
 
 ---
 
@@ -386,7 +386,7 @@ Katman disiplininin **tek istisnası semantik aramanın kendisidir**: banka bir 
 
 ### 7.4 Semantik Arayıcılar — `Semantic/`
 
-- **`SemanticCampaignSearcher`** — `InitializeAsync` / `RefreshAsync` bankadan (`/api/campaigns`) okur; `Search(intent, mccFilter, topK)` eşik `0.70`. `CampaignSummary` bankanın kayıt tipi değildir, yalnızca gerekli alanları taşır.
+- **`SemanticCampaignSearcher`** — `EnsureCampaignIndexBuiltAsync` / `RebuildCampaignIndexFromBankAsync` bankadan (`/api/campaigns`) okur; `SearchCampaignsByIntent(intent, mccFilter, topK)` eşik `0.70`. `CampaignSummary` bankanın kayıt tipi değildir, yalnızca gerekli alanları taşır.
 - **`SemanticFinancingSearcher`** — Aynı desen, `/api/financing-options`, eşik `0.65` (kullanıcı ihtiyacını ürün adıyla değil durumuyla anlatır, eşleşme metinsel olarak daha uzaktır).
 - **`CampaignSyncService`** — `/api/campaigns/sync` ucunun arkasında; indeksi bankanın güncel hâline eşitler. **Yerel bir kampanya kataloğu tutmaz.**
 
@@ -418,7 +418,7 @@ Dört tüketici ve **bilerek farklı** eşikleri:
 ### 8.2 Ekran Kodları ve Akış Metadatası
 
 - **`MkCodeCatalog`** (`Banking.Mcp/Semantic/`) — Ekran kodu kataloğunun tek kaynağı; `POST /api/mkcodes` ile bankadan okunur. Sessiz varsayılan kod listesi yoktur: banka erişilemezken katalog boş kalır, bir sonraki çağrı yeniden dener. `MkCodeDefinition` (`Value`, `Label`, `Keywords`) taşıdığı kayıt tipidir.
-- **`SemanticMkCodeSearcher`** — `InitializeAsync()`/`RefreshAsync()` kataloğu bankadan çekip `ISemanticIndexStore` üzerinden vektörize eder (içerik değişmediyse yeniden hesaplamaz); `SearchAsync` indeks boşsa kendini yeniden doldurur. Gömme metni etiket + kod + bankanın arama takma adlarını (`Keywords`) birleştirir. Varsayılan aday sayısı **10** — doğru kodun sıralamada üstte çıkması değil, listeye girmesi yeterlidir; hangisinin kastedildiğine model, cümleyi okuyarak karar verir.
+- **`SemanticMkCodeSearcher`** — `EnsureScreenCodeIndexBuiltAsync()`/`RebuildScreenCodeIndexFromBankAsync()` kataloğu bankadan çekip `ISemanticIndexStore` üzerinden vektörize eder (içerik değişmediyse yeniden hesaplamaz); `SearchScreenCodesByIntentAsync` indeks boşsa kendini yeniden doldurur. Gömme metni etiket + kod + bankanın arama takma adlarını (`Keywords`) birleştirir. Varsayılan aday sayısı **10** — doğru kodun sıralamada üstte çıkması değil, listeye girmesi yeterlidir; hangisinin kastedildiğine model, cümleyi okuyarak karar verir.
 - **`WorkflowMetadata`** (record) — `WorkflowName` + `Description`.
 - **`SemanticWorkflowSearcher`** — `Initialize(workflows)`, `AddOrUpdate(workflow)` (çalışma zamanı kaydı), `Search(intent, topK)`.
 - **`ISemanticIndexStore`** (`Banking.Domain/Semantic/`) — Hesaplanmış vektörlerin depolanacağı seam; anahtar indekslenen içeriğin özetidir, banka kataloğu değiştiğinde otomatik geçersizleşir. `InMemorySemanticIndexStore` tek örnekli çalışmada açılış maliyetini değiştirmez ama süreç ömrü boyunca tekrar tazelemede gömme hesabını atlar. `SmartComponents.LocalEmbeddings.EmbeddingF32` doğrudan serileştirilemez ama `Buffer` (`ReadOnlyMemory<byte>`) ↔ `.ctor(ReadOnlyMemory<byte>)` üzerinden kayıpsız gidip gelir — depo bunu saklar, `float[]`'i değil.

@@ -23,11 +23,11 @@ public sealed class BankApiClient(
     private readonly ILogger<BankApiClient> _logger = logger ?? NullLogger<BankApiClient>.Instance;
 
     /// <inheritdoc />
-    public Task<JsonElement> GetAsync(string path, CancellationToken cancellationToken = default) =>
-        SendAsync(HttpMethod.Get, path, body: null, idempotencyKey: null, cancellationToken);
+    public Task<JsonElement> ReadFromBankAsync(string path, CancellationToken cancellationToken = default) =>
+        SendToBankAsync(HttpMethod.Get, path, body: null, idempotencyKey: null, cancellationToken);
 
     /// <inheritdoc />
-    public async Task<JsonElement> SendAsync(
+    public async Task<JsonElement> SendToBankAsync(
         HttpMethod method,
         string path,
         object? body,
@@ -35,7 +35,7 @@ public sealed class BankApiClient(
         CancellationToken cancellationToken = default)
     {
         var callId = Guid.NewGuid().ToString("N")[..8];
-        var parameters = BankApiPayloadReader.Read(body);
+        var parameters = BankApiPayloadReader.ReadFields(body);
         var startedAt = Stopwatch.GetTimestamp();
 
         ReportRequest(new BankApiRequestTrace(callId, method.Method, path, parameters, idempotencyKey));
@@ -90,7 +90,7 @@ public sealed class BankApiClient(
 
             ReportResponse(new BankApiResponseTrace(
                 callId, method.Method, path, (int)response.StatusCode, elapsed,
-                BankApiPayloadReader.Read(result)));
+                BankApiPayloadReader.ReadFields(result)));
 
             return result;
         }
@@ -100,7 +100,7 @@ public sealed class BankApiClient(
     {
         _logger.LogInformation(
             "[{CallId}] Bankaya istek → {Method} {Path} | Parametreler: {Parameters}{IdempotencyKey}",
-            trace.CallId, trace.Method, trace.Path, BankApiPayloadReader.Describe(trace.Parameters),
+            trace.CallId, trace.Method, trace.Path, BankApiPayloadReader.FormatFieldsForLog(trace.Parameters),
             trace.IdempotencyKey is null ? string.Empty : $" | Idempotency-Key: {trace.IdempotencyKey}");
 
         Observe(() => _observer.OnRequest(trace));
@@ -111,7 +111,7 @@ public sealed class BankApiClient(
         _logger.LogInformation(
             "[{CallId}] Bankadan yanıt ← {Method} {Path} | {StatusCode} · {Elapsed:F0} ms | Alanlar: {Fields}",
             trace.CallId, trace.Method, trace.Path, trace.StatusCode, trace.ElapsedMilliseconds,
-            BankApiPayloadReader.Describe(trace.Fields));
+            BankApiPayloadReader.FormatFieldsForLog(trace.Fields));
 
         Observe(() => _observer.OnResponse(trace));
     }
@@ -121,7 +121,7 @@ public sealed class BankApiClient(
         _logger.LogWarning(
             "[{CallId}] Banka isteği başarısız ✗ {Method} {Path} | {StatusCode} · {Elapsed:F0} ms | Gerekçe: {Reason} | Parametreler: {Parameters}",
             trace.CallId, trace.Method, trace.Path, trace.StatusCode?.ToString() ?? "bağlantı yok",
-            trace.ElapsedMilliseconds, trace.Reason, BankApiPayloadReader.Describe(trace.Parameters));
+            trace.ElapsedMilliseconds, trace.Reason, BankApiPayloadReader.FormatFieldsForLog(trace.Parameters));
 
         Observe(() => _observer.OnError(trace));
     }

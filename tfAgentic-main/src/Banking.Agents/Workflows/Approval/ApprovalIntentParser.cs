@@ -65,7 +65,7 @@ public static partial class ApprovalIntentParser
 
     /// <summary>Onay yanıtını yorumlar. Boş veya tanınmayan yanıt <see cref="ApprovalIntent.Unclear"/> döner.</summary>
     /// <param name="answer">Kullanıcının onay ekranına verdiği ham yanıt.</param>
-    public static ApprovalIntent Parse(string? answer)
+    public static ApprovalIntent ParseApprovalAnswer(string? answer)
     {
         if (string.IsNullOrWhiteSpace(answer))
             return ApprovalIntent.Unclear;

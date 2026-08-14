@@ -68,7 +68,7 @@ public sealed class WorkflowAgentFactory(
             && string.Equals(cached.InstructionsFingerprint, fingerprint, StringComparison.Ordinal))
             return Task.FromResult(cached.Agent);
 
-        AIAgent agent = chatClientFactory.Create(definition.AgentName).AsAIAgent(new ChatClientAgentOptions
+        AIAgent agent = chatClientFactory.CreateTracedChatClient(definition.AgentName).AsAIAgent(new ChatClientAgentOptions
         {
             Name = definition.AgentName,
             // Sıcaklık YAML'dan gelir; boşsa TracingChatClient yapılandırmadan doldurur
@@ -97,7 +97,7 @@ public sealed class WorkflowAgentFactory(
     {
         if (reason is EvictionReason.Replaced or EvictionReason.Removed) return;
 
-        hub.Publish(TraceCategories.Agent,
+        hub.PublishTraceEvent(TraceCategories.Agent,
             $"Akış ajanı bırakıldı ({reason}) → {state} | sonraki istekte yeniden kurulacak");
     }
 
@@ -181,14 +181,14 @@ public sealed class WorkflowAgentFactory(
 
                 if (!slotStatus.IsComplete)
                 {
-                    hub.Publish(TraceCategories.Slot, $"Teklif reddedildi → {slotStatus.DescribeProblems()}");
-                    return $"ERROR: Teklif oluşturulamadı ({slotStatus.DescribeProblems()}). Bu alanları kullanıcıdan tekrar iste.";
+                    hub.PublishTraceEvent(TraceCategories.Slot, $"Teklif reddedildi → {slotStatus.DescribeMissingSlots()}");
+                    return $"ERROR: Teklif oluşturulamadı ({slotStatus.DescribeMissingSlots()}). Bu alanları kullanıcıdan tekrar iste.";
                 }
 
                 var proposedSlots = slotStatus.ToProposedSlots();
 
                 session.StoreProposedSlots(session.ActiveWorkflowName ?? definition.AgentName, proposedSlots);
-                hub.Publish(TraceCategories.Approval, $"{definition.AgentName} parametreleri onaya hazır");
+                hub.PublishTraceEvent(TraceCategories.Approval, $"{definition.AgentName} parametreleri onaya hazır");
 
                 return WorkflowAgentSignals.ProposalReady + proposedSlots.ToReadableJson();
             },

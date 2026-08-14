@@ -10,7 +10,7 @@ namespace Banking.Agents.Workflows.Actions;
 /// ve hedef yolu her çağrıda <see cref="WorkflowActionDefinition"/> ile gelir, yeni bir akış bu
 /// sınıfta değişiklik gerektirmez. Üç iş yapar: onay ekranını kurar, onaylanırsa bankaya tek istek
 /// gönderir, yanıtı olduğu gibi taşır. Bankacılık kuralı içermez ve
-/// <see cref="ExecuteAsync"/> hiçbir koşulda istisna sızdırmaz — MAF grafiğinin içinde çalıştığı
+/// <see cref="ExecuteBankActionForApprovalDecisionAsync"/> hiçbir koşulda istisna sızdırmaz — MAF grafiğinin içinde çalıştığı
 /// için başarısızlıklar <see cref="WorkflowOutcome.Failure"/> olarak döner.
 /// </summary>
 public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
@@ -29,7 +29,7 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
     /// <param name="slots">Onaya sunulmuş slot kümesi.</param>
     /// <param name="approved">Kullanıcının onay kararı. <c>false</c> ise bankaya istek gönderilmez.</param>
     /// <param name="cancellationToken">İptal jetonu.</param>
-    public async ValueTask<WorkflowOutcome> ExecuteAsync(
+    public async ValueTask<WorkflowOutcome> ExecuteBankActionForApprovalDecisionAsync(
         WorkflowActionDefinition action,
         IReadOnlyDictionary<string, object?> slots,
         bool approved,
@@ -37,14 +37,14 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
     {
         if (!approved)
         {
-            hub.Publish(TraceCategories.Approval, $"{action.WorkflowName} → onay reddedildi, bankaya istek atılmadı");
+            hub.PublishTraceEvent(TraceCategories.Approval, $"{action.WorkflowName} → onay reddedildi, bankaya istek atılmadı");
             return WorkflowOutcome.RejectedByUser(action.WorkflowName, "İşlem iptal edildi.");
         }
 
         // Banka çağrısı olmayan akış
         if (!action.CallsBank)
         {
-            hub.Publish(TraceCategories.Workflow, $"{action.WorkflowName} onaylandı → talep kaydedildi (banka çağrısı tanımlı değil)");
+            hub.PublishTraceEvent(TraceCategories.Workflow, $"{action.WorkflowName} onaylandı → talep kaydedildi (banka çağrısı tanımlı değil)");
             return WorkflowOutcome.Success(
                 action.WorkflowName,
                 userMessage: $"{action.Label} talebiniz alındı ve kaydedildi.",
@@ -56,20 +56,20 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
         var requestBody = BuildConfirmationView(action, slots).Parameters;
         var idempotencyKey = GenericConfirmationView.ComputeIdempotencyToken(BuildConfirmationView(action, slots));
 
-        hub.Publish(TraceCategories.Workflow,
+        hub.PublishTraceEvent(TraceCategories.Workflow,
             $"Onay alındı → {action.Method.Method} {action.Path} çağrılıyor ({requestBody.Count} parametre)");
 
         try
         {
-            var response = await bank.SendAsync(action.Method, action.Path!, requestBody, idempotencyKey, cancellationToken);
-            hub.Publish(TraceCategories.Service, $"{action.Method.Method} {action.Path}", "Banka işlemi tamamladı");
+            var response = await bank.SendToBankAsync(action.Method, action.Path!, requestBody, idempotencyKey, cancellationToken);
+            hub.PublishTraceEvent(TraceCategories.Service, $"{action.Method.Method} {action.Path}", "Banka işlemi tamamladı");
 
             return BuildReceipt(action, response);
         }
         catch (BankApiException exception) when (exception.StatusCode == 404)
         {
             // Tanımdaki yol bankada yok
-            hub.Publish(TraceCategories.Service,
+            hub.PublishTraceEvent(TraceCategories.Service,
                 $"UYARI: {action.Method.Method} {action.Path} bankada bulunamadı (404)",
                 $"'{action.WorkflowName}' tanımındaki action.path bankada karşılığı olmayan bir uca işaret ediyor; işlem yapılmadı.");
             return WorkflowOutcome.Failure(action.WorkflowName, $"{action.Label} şu anda gerçekleştirilemiyor.");
@@ -77,12 +77,12 @@ public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
         catch (BankApiException exception)
         {
             // Bankanın gerekçesi kullanıcıya taşınır
-            hub.Publish(TraceCategories.Service, $"{action.Method.Method} {action.Path}", $"Reddedildi: {exception.Message}");
+            hub.PublishTraceEvent(TraceCategories.Service, $"{action.Method.Method} {action.Path}", $"Reddedildi: {exception.Message}");
             return WorkflowOutcome.Failure(action.WorkflowName, $"{action.Label} gerçekleştirilemedi: {exception.Message}");
         }
         catch (HttpRequestException exception)
         {
-            hub.Publish(TraceCategories.Service, $"{action.Method.Method} {action.Path}", $"Bankaya ulaşılamadı: {exception.Message}");
+            hub.PublishTraceEvent(TraceCategories.Service, $"{action.Method.Method} {action.Path}", $"Bankaya ulaşılamadı: {exception.Message}");
             return WorkflowOutcome.Failure(action.WorkflowName, "Bankaya şu anda ulaşılamıyor. Lütfen daha sonra tekrar deneyin.");
         }
     }

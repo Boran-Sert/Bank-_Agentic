@@ -19,19 +19,19 @@ public sealed class TraceHubBankApiObserver(TraceHub hub) : IBankApiCallObserver
         if (trace.IdempotencyKey is { Length: > 0 } key)
             summary += $" (Idempotency-Key: {key})";
 
-        hub.Publish(TraceCategories.ApiRequest, summary, ToDetail(trace.Parameters));
+        hub.PublishTraceEvent(TraceCategories.ApiRequest, summary, ToDetail(trace.Parameters));
     }
 
     /// <inheritdoc />
     public void OnResponse(BankApiResponseTrace trace) =>
-        hub.Publish(
+        hub.PublishTraceEvent(
             TraceCategories.ApiResponse,
             $"[{trace.CallId}] ← {trace.Method} {trace.Path} · {trace.StatusCode} · {trace.ElapsedMilliseconds:F0} ms",
             ToDetail(trace.Fields));
 
     /// <inheritdoc />
     public void OnError(BankApiErrorTrace trace) =>
-        hub.Publish(
+        hub.PublishTraceEvent(
             TraceCategories.ApiError,
             $"[{trace.CallId}] ✗ {trace.Method} {trace.Path} · {trace.StatusCode?.ToString() ?? "bağlantı yok"} · {trace.ElapsedMilliseconds:F0} ms → {trace.Reason}",
             ToDetail(trace.Parameters));

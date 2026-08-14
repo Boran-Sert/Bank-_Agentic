@@ -123,7 +123,7 @@ public sealed class SpecialistCatalog(
             await BuildAndCacheAsync(card, cancellationToken);
 
         logger.LogInformation("Deklaratif uzman kaydedildi: {Name} (/a2a/{Route}).", card.Name, card.A2ARoute);
-        hub.Publish(Banking.Domain.Constants.TraceCategories.Agent,
+        hub.PublishTraceEvent(Banking.Domain.Constants.TraceCategories.Agent,
             $"[UZMAN KAYDEDİLDİ] '{card.DisplayName}' → köprü aracı: {card.BridgeToolName} · /a2a/{card.A2ARoute}");
 
         Interlocked.Increment(ref _version);
@@ -279,7 +279,7 @@ public sealed class SpecialistCatalog(
             ? await mcpToolProvider.GetTracedToolsByNamesAsync(card.ToolNames, cancellationToken)
             : await mcpToolProvider.GetTracedToolsForGroupAsync(card.ToolGroup, cancellationToken);
 
-        return chatClientFactory.Create(card.DisplayName).AsAIAgent(
+        return chatClientFactory.CreateTracedChatClient(card.DisplayName).AsAIAgent(
             instructions: card.Instructions,
             name: card.Name,
             description: card.Description,
@@ -309,7 +309,7 @@ public sealed class SpecialistCatalog(
     {
         if (reason is EvictionReason.Replaced or EvictionReason.Removed) return;
 
-        hub.Publish(TraceCategories.Agent,
+        hub.PublishTraceEvent(TraceCategories.Agent,
             $"Uzman ajan bırakıldı ({reason}) → {state} | sonraki istekte yeniden kurulacak");
     }
 

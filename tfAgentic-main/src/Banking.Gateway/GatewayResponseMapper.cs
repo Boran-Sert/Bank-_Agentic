@@ -17,7 +17,7 @@ public sealed class GatewayResponseMapper(
     TraceHub hub, MkCodeCatalog mkCodeCatalog, ILogger<GatewayResponseMapper> logger)
 {
     /// <summary>Yönlendirme sonucunu istemciye gönderilecek yanıta dönüştürür.</summary>
-    public GatewayResponse Map(FlowExecutionResult flowResult) => flowResult switch
+    public GatewayResponse MapFlowResultToGatewayResponse(FlowExecutionResult flowResult) => flowResult switch
     {
         { ExecutionType: FlowExecutionType.WorkflowStep, WorkflowResult: { } workflowResult } =>
             MapWorkflowStep(workflowResult),
@@ -33,23 +33,23 @@ public sealed class GatewayResponseMapper(
         switch (stepResult.Status)
         {
             case WorkflowStatuses.Question:
-                hub.Publish(TraceCategories.Gateway, "Slot-filling sorusu → TEXT");
+                hub.PublishTraceEvent(TraceCategories.Gateway, "Slot-filling sorusu → TEXT");
                 return GatewayResponse.AsText(stepResult.Prompt ?? "Devam etmek için lütfen bilgi verir misiniz?");
 
             case WorkflowStatuses.Confirmation when stepResult.Confirmation is { } confirmation:
-                hub.Publish(TraceCategories.Gateway, "Onay ekranı hazır → CONFIRM_PAYMENT");
+                hub.PublishTraceEvent(TraceCategories.Gateway, "Onay ekranı hazır → CONFIRM_PAYMENT");
                 return BuildConfirmationScreen(confirmation);
 
             case WorkflowStatuses.Completed when stepResult.Outcome is { IsSuccess: true } outcome:
-                hub.Publish(TraceCategories.Gateway, $"İşlem tamamlandı ({outcome.WorkflowName}) → TEXT");
+                hub.PublishTraceEvent(TraceCategories.Gateway, $"İşlem tamamlandı ({outcome.WorkflowName}) → TEXT");
                 return GatewayResponse.AsText(outcome.UserMessage);
 
             case WorkflowStatuses.Cancelled:
-                hub.Publish(TraceCategories.Gateway, "Oturum sonlandı → TEXT");
+                hub.PublishTraceEvent(TraceCategories.Gateway, "Oturum sonlandı → TEXT");
                 return GatewayResponse.AsText(stepResult.Outcome?.UserMessage ?? stepResult.Prompt ?? "İşlem iptal edildi.");
 
             default:
-                hub.Publish(TraceCategories.Gateway, $"Beklenmeyen durum: {stepResult.Status} → TEXT");
+                hub.PublishTraceEvent(TraceCategories.Gateway, $"Beklenmeyen durum: {stepResult.Status} → TEXT");
                 return GatewayResponse.AsText(stepResult.Prompt ?? "Bir hata oluştu. Lütfen tekrar deneyin.");
         }
     }
@@ -63,11 +63,11 @@ public sealed class GatewayResponseMapper(
 
         if (string.IsNullOrEmpty(targetMkCode))
         {
-            hub.Publish(TraceCategories.Gateway, "Metin yanıtı hazır → TEXT");
+            hub.PublishTraceEvent(TraceCategories.Gateway, "Metin yanıtı hazır → TEXT");
             return GatewayResponse.AsText(reply.Reply ?? string.Empty);
         }
 
-        hub.Publish(TraceCategories.Gateway, $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({targetMkCode})");
+        hub.PublishTraceEvent(TraceCategories.Gateway, $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({targetMkCode})");
         return GatewayResponse.AsOpenScreen(targetMkCode);
     }
 
@@ -84,7 +84,7 @@ public sealed class GatewayResponseMapper(
             return GatewayResponse.AsGenericConfirmation(confirmation.WorkflowName, confirmation.Parameters);
         }
 
-        if (mkCodeCatalog.Get(confirmation.ScreenMkCode) is not { } mkCodeDefinition)
+        if (mkCodeCatalog.GetScreenCodeDefinition(confirmation.ScreenMkCode) is not { } mkCodeDefinition)
         {
             logger.LogWarning("'{WorkflowName}' akışının ekran kodu '{MkCode}' bankanın kataloğunda bulunamadı.",
                 confirmation.WorkflowName, confirmation.ScreenMkCode);

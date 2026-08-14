@@ -10,7 +10,7 @@ namespace Banking.Agents.Sessions;
 /// <summary>
 /// Bir isteğin oturum durumuna açılan tek erişim noktası. Oturum verisine erişen her katman —
 /// orkestratör, iş akışı motoru, slot yazıcı — bu tip üzerinden geçer. Durum istek başına bir kez
-/// yüklenir (<see cref="AmbientSessionAccessor.OpenAsync"/>) ve scope kapanışında bir kez yazılır;
+/// yüklenir (<see cref="AmbientSessionAccessor.OpenSessionScopeAsync"/>) ve scope kapanışında bir kez yazılır;
 /// ara okuma veya ara yazma yapılmaz. Veri bellekte olduğundan buradaki metotlar senkrondur.
 /// Akış sona erdiğinde orkestratörün konuşma geçmişi de sıfırlanır (<see cref="CompleteWorkflow"/>,
 /// <see cref="CancelWorkflow"/>).
@@ -63,7 +63,7 @@ public sealed class SessionContext
 
         State.ActiveWorkflowName = workflowName;
         State.Phase = WorkflowPhases.Idle;
-        _hub.Publish(TraceCategories.Session, $"İş akışı ({workflowName}) oturumu başlatıldı: {SessionId}");
+        _hub.PublishTraceEvent(TraceCategories.Session, $"İş akışı ({workflowName}) oturumu başlatıldı: {SessionId}");
     }
 
     /// <summary>Akışı başarıyla sonlandırır ve oturumu bir sonraki iş için temizler.</summary>
@@ -82,7 +82,7 @@ public sealed class SessionContext
     public void RaiseAgentSignal(string signal)
     {
         State.PendingAgentSignal = signal;
-        _hub.Publish(TraceCategories.Workflow, $"Ajan sinyali alındı → {signal}");
+        _hub.PublishTraceEvent(TraceCategories.Workflow, $"Ajan sinyali alındı → {signal}");
     }
 
     /// <summary>Bekleyen ajan sinyalini okur ve siler. Sinyal yalnızca üretildiği tur boyunca geçerlidir.</summary>
@@ -104,14 +104,14 @@ public sealed class SessionContext
         ArgumentException.ThrowIfNullOrWhiteSpace(slotName);
 
         State.SlotValues[slotName] = slotValue;
-        _hub.Publish(TraceCategories.Slot, $"StateBag Parametre Eklendi → [{slotName} = {slotValue}] (Session: {SessionId})");
+        _hub.PublishTraceEvent(TraceCategories.Slot, $"StateBag Parametre Eklendi → [{slotName} = {slotValue}] (Session: {SessionId})");
     }
 
     /// <summary>Akışın YAML şemasına göre dolu, eksik ve opsiyonel slotları hesaplar.</summary>
     public SlotStatus GetSlotStatus()
     {
-        var status = SlotBinder.GetStatus(State.SlotValues, State.ExpectedSlots);
-        _hub.Publish(TraceCategories.Slot,
+        var status = SlotBinder.DetermineSlotStatus(State.SlotValues, State.ExpectedSlots);
+        _hub.PublishTraceEvent(TraceCategories.Slot,
             $"StateBag Durumu Sorgulandı → Dolu: {status.FilledSlots.Count}, Eksik: {status.MissingSlots.Count} | Tamamlandı: {status.IsComplete}");
 
         return status;
@@ -139,7 +139,7 @@ public sealed class SessionContext
             storedValues.Add($"{slotName}={slotValue}");
         }
 
-        _hub.Publish(TraceCategories.Slot,
+        _hub.PublishTraceEvent(TraceCategories.Slot,
             $"StateBag Kaydedildi → Workflow: '{workflowName}' | Saklanan Değerler: [{string.Join(", ", storedValues)}]");
     }
 
@@ -214,7 +214,7 @@ public sealed class SessionContext
         // Tur bağlamı geçmişin içinde taşınır
         State.SerializedOrchestratorSession = null;
 
-        _hub.Publish(TraceCategories.Context, $"Akış kapandı → önceki tur bağlamı ve orkestratör geçmişi temizlendi");
-        _hub.Publish(TraceCategories.Workflow, $"{traceMessage} → SessionId: {SessionId}");
+        _hub.PublishTraceEvent(TraceCategories.Context, $"Akış kapandı → önceki tur bağlamı ve orkestratör geçmişi temizlendi");
+        _hub.PublishTraceEvent(TraceCategories.Workflow, $"{traceMessage} → SessionId: {SessionId}");
     }
 }

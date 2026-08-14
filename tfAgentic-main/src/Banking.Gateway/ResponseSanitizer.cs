@@ -183,7 +183,7 @@ public sealed class ResponseSanitizer
                 "ResponseSanitizer: {Count} güvenlik ihlali tespit edildi ve temizlendi.",
                 totalViolations);
 
-            _hub.Publish(TraceCategories.Security,
+            _hub.PublishTraceEvent(TraceCategories.Security,
                 $"Output Guard: {totalViolations} iç bilgi sızıntısı tespit edildi ve temizlendi",
                 $"Orijinal uzunluk: {text.Length}, Temiz uzunluk: {sanitized.Length}");
         }
@@ -308,7 +308,7 @@ public sealed class ResponseSanitizer
             "SECURITY İHLAL [{Category}]: Kullanıcı yanıtında iç bilgi sızıntısı tespit edildi → \"{Snippet}\"",
             category, snippet);
 
-        _hub.Publish(TraceCategories.Security,
+        _hub.PublishTraceEvent(TraceCategories.Security,
             $"İç bilgi sızıntısı tespit edildi [{category}]",
             $"İçerik: \"{snippet}\"");
     }

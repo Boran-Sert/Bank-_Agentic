@@ -15,7 +15,7 @@ public static class DeclarativeFileStore
     /// </summary>
     /// <param name="contentRootPath">Uygulamanın içerik kök dizini.</param>
     /// <param name="folderName">Tanımların bulunduğu alt klasör (örn. <c>declarative-agents</c>).</param>
-    public static IEnumerable<(string FilePath, string Content)> ReadAll(string contentRootPath, string folderName)
+    public static IEnumerable<(string FilePath, string Content)> ReadAllDefinitionFiles(string contentRootPath, string folderName)
     {
         var directory = Path.Combine(contentRootPath, folderName);
         Directory.CreateDirectory(directory);
@@ -44,7 +44,7 @@ public static class DeclarativeFileStore
     /// <param name="folderName">Tanımın yazılacağı alt klasör.</param>
     /// <param name="definitionName">Doğrulanmış tanım adı; dosya adı olarak kullanılır.</param>
     /// <param name="content">Diske yazılacak ham tanım metni.</param>
-    public static async Task<string> SaveAsync(
+    public static async Task<string> SaveDefinitionFileAsync(
         string contentRootPath, string folderName, string definitionName, string content)
     {
         var directory = Path.Combine(contentRootPath, folderName);

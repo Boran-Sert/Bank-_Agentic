@@ -120,9 +120,9 @@ public sealed class AnalyzeTools
     {
         // İndeks açılışta dolmadıysa (banka o an ayakta değildi) burada yeniden denenir; doluysa
         // bu çağrı etkisizdir.
-        await _campaignSearcher.InitializeAsync(cancellationToken);
+        await _campaignSearcher.EnsureCampaignIndexBuiltAsync(cancellationToken);
 
-        var searchResults = _campaignSearcher.Search(sorguVektoruMetni, mccKategorisi, topK);
+        var searchResults = _campaignSearcher.SearchCampaignsByIntent(sorguVektoruMetni, mccKategorisi, topK);
 
         return new
         {
@@ -160,13 +160,13 @@ public sealed class AnalyzeTools
 
         // Listede ise koşul metinleri taşınmaz; kullanıcı hangisini soracağını seçebilsin diye
         // yalnızca ayırt edici alanlar döner.
-        var summaries = Items(campaigns)
+        var summaries = EnumerateBankArrayItems(campaigns)
             .Select(campaign => new
             {
-                Id = campaign.Field("id"),
-                Title = campaign.Field("title"),
-                TargetMccGroup = campaign.Field("targetMccGroup"),
-                Benefit = campaign.Field("benefit")
+                Id = campaign.FindPropertyIgnoreCase("id"),
+                Title = campaign.FindPropertyIgnoreCase("title"),
+                TargetMccGroup = campaign.FindPropertyIgnoreCase("targetMccGroup"),
+                Benefit = campaign.FindPropertyIgnoreCase("benefit")
             })
             .ToList();
 
@@ -184,12 +184,12 @@ public sealed class AnalyzeTools
         var response = await _bank.AskBankAsync(BankApiPaths.StatementTransactions, StatementBody(null), cancellationToken);
         if (response is not JsonElement statement) return response.ToReadableJson();
 
-        var transactions = Items(statement).ToList();
-        var totalDebt = transactions.Sum(transaction => transaction.Number("amount"));
+        var transactions = EnumerateBankArrayItems(statement).ToList();
+        var totalDebt = transactions.Sum(transaction => transaction.ReadDecimal("amount"));
 
         var topCategories = string.Join(", ", transactions
-            .GroupBy(transaction => transaction.Text("statementMccGroupType", "Other"))
-            .Select(group => new { Category = group.Key, TotalAmount = group.Sum(item => item.Number("amount")) })
+            .GroupBy(transaction => transaction.ReadText("statementMccGroupType", "Other"))
+            .Select(group => new { Category = group.Key, TotalAmount = group.Sum(item => item.ReadDecimal("amount")) })
             .OrderByDescending(summary => summary.TotalAmount)
             .Take(2)
             .Select(summary => summary.Category));
@@ -197,9 +197,9 @@ public sealed class AnalyzeTools
         var enrichedQuery = $"{query}. Kullanıcının toplam borcu: {totalDebt} TL. En çok harcama yaptığı sektörler: {topCategories}.";
 
         // İndeks açılışta dolmadıysa burada yeniden denenir; doluysa bu çağrı etkisizdir.
-        await _financingSearcher.InitializeAsync(cancellationToken);
+        await _financingSearcher.EnsureFinancingIndexBuiltAsync(cancellationToken);
 
-        var results = _financingSearcher.Search(enrichedQuery, topK);
+        var results = _financingSearcher.SearchFinancingOptionsByIntent(enrichedQuery, topK);
         if (results.Count == 0)
             return new { Message = "Uygun finansman önerisi bulunamadı." }.ToReadableJson();
 
@@ -233,7 +233,7 @@ public sealed class AnalyzeTools
 
         if (response is not JsonElement options) return response.ToReadableJson();
 
-        var financingOptions = Items(options).ToList();
+        var financingOptions = EnumerateBankArrayItems(options).ToList();
         return new { Count = financingOptions.Count, FinancingOptions = financingOptions }.ToReadableJson();
     }
 
@@ -244,7 +244,7 @@ public sealed class AnalyzeTools
     private static object StatementBody(string? filePath) => new { filePath = NullIfBlank(filePath) };
 
     /// <summary>Bankanın dizi yanıtını gezer; yanıt dizi değilse boş kalır.</summary>
-    private static IEnumerable<JsonElement> Items(JsonElement response) =>
+    private static IEnumerable<JsonElement> EnumerateBankArrayItems(JsonElement response) =>
         response.ValueKind == JsonValueKind.Array ? response.EnumerateArray() : [];
 
     private static string? NullIfBlank(string? value) =>

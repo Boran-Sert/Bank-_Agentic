@@ -22,13 +22,13 @@ public sealed record SlotStatus(
         FilledSlots.ToDictionary(slot => slot.Key, slot => (object?)slot.Value, StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Eksik slotları, ajanın kullanıcıya tekrar sorabileceği biçimde özetler.</summary>
-    public string DescribeProblems() =>
+    public string DescribeMissingSlots() =>
         MissingSlots.Count == 0
             ? "Tüm zorunlu alanlar dolu."
             : $"eksik alanlar: {string.Join(", ", MissingSlots)}";
 
     /// <summary>Durumu, ajanın turuna eklenecek tek satırlık özete çevirir.</summary>
-    public string Describe()
+    public string DescribeForAgentTurn()
     {
         if (FilledSlots.Count == 0 && MissingSlots.Count == 0 && OptionalSlots.Count == 0)
             return "Henüz parametre toplanmadı.";
@@ -63,7 +63,7 @@ internal static class SlotBinder
     /// Akışın YAML şeması. <c>null</c> veya boş olduğunda beklenen slot kümesi bilinmiyor demektir;
     /// bu durumda yalnızca toplanmış değerler dolu sayılır ve eksik slot raporlanmaz.
     /// </param>
-    public static SlotStatus GetStatus(
+    public static SlotStatus DetermineSlotStatus(
         IReadOnlyDictionary<string, object?> slotValues,
         IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
     {

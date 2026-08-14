@@ -96,7 +96,7 @@ public sealed class AgentRuntime(
         tools.Add(BuildStartWorkflowTool());
         tools.AddRange(navigationTools.BuildTools());
 
-        return chatClientFactory.Create("Orkestratör").AsAIAgent(new ChatClientAgentOptions
+        return chatClientFactory.CreateTracedChatClient("Orkestratör").AsAIAgent(new ChatClientAgentOptions
         {
             Name = "Orkestrator",
             ChatOptions = new ChatOptions
@@ -123,7 +123,7 @@ public sealed class AgentRuntime(
         var session = sessionAccessor.Current;
 
         logger.LogInformation("Kullanıcı sorusu işleniyor.");
-        hub.Publish(TraceCategories.System, $"Kullanıcı sorusu alındı → '{userMessage}'");
+        hub.PublishTraceEvent(TraceCategories.System, $"Kullanıcı sorusu alındı → '{userMessage}'");
 
         // Akış başlatma aracı bu mesajı okur
         session.LastUserMessage = userMessage;
@@ -179,13 +179,15 @@ public sealed class AgentRuntime(
         if (restored.RestoreFailure is { } restoreFailure)
             logger.LogWarning(restoreFailure, "Orkestratör oturumu geri yüklenemedi; yeni oturum açılıyor.");
 
+        // Modele sor
         var response = await Orchestrator.RunAsync(
             messages, session: restored.Session, cancellationToken: cancellationToken);
 
+        // Gelen yanıtı al
         session.OrchestratorConversation =
             await AgentConversationStore.CaptureAsync(Orchestrator, restored.Session, cancellationToken);
 
-        hub.Publish(TraceCategories.System, "Yanıt kullanıcıya hazır");
+        hub.PublishTraceEvent(TraceCategories.System, "Yanıt kullanıcıya hazır");
 
         var lastFunctionCall = response.Messages?
             .SelectMany(message => message.Contents.OfType<FunctionCallContent>())
@@ -204,9 +206,9 @@ public sealed class AgentRuntime(
     /// </summary>
     private List<WorkflowMetadata> SearchCandidateWorkflows(string userMessage)
     {
-        var matches = workflowSearcher.Search(userMessage, topK: 3);
+        var matches = workflowSearcher.SearchWorkflowsByIntent(userMessage, topK: 3);
 
-        hub.Publish(TraceCategories.Semantic,
+        hub.PublishTraceEvent(TraceCategories.Semantic,
             $"Aday akış araması → {matches.Count} eşleşme",
             matches.Select(match => $"{match.Metadata.WorkflowName} ({match.Score:F2})"));
 
@@ -215,7 +217,7 @@ public sealed class AgentRuntime(
 
     private AITool BuildStartWorkflowTool()
     {
-        var definition = ToolRegistry.Instance.Get(ToolNames.StartWorkflow);
+        var definition = ToolRegistry.Instance.GetToolDefinition(ToolNames.StartWorkflow);
 
         var tool = AIFunctionFactory.Create(
             StartWorkflowAsync,
@@ -240,7 +242,7 @@ public sealed class AgentRuntime(
         // Aktif iş akışı kontrolü
         if (sessionAccessor.Current.HasActiveWorkflow)
         {
-            hub.Publish(TraceCategories.Workflow,
+            hub.PublishTraceEvent(TraceCategories.Workflow,
                 $"'{workflowName}' başlatılmadı → devam eden bir işlem var");
 
             return "Şu anda devam eden bir işlem var; yeni bir işlem başlatılamaz. " +

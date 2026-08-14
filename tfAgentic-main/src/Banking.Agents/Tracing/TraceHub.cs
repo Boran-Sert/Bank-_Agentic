@@ -57,7 +57,7 @@ public sealed class TraceHub
     /// <param name="layer">Olayın katmanı; geçerli değerler <see cref="Banking.Domain.Constants.TraceCategories"/> içindedir.</param>
     /// <param name="text">Olayın tek satırlık özeti.</param>
     /// <param name="detail">İsteğe bağlı ek yük. Serileştirilir ve uzunsa kırpılır.</param>
-    public void Publish(string layer, string text, object? detail = null)
+    public void PublishTraceEvent(string layer, string text, object? detail = null)
     {
         string? detailStr = null;
         if (detail != null)

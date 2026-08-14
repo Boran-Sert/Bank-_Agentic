@@ -57,14 +57,14 @@ public sealed class ToolRegistry
                 var descAttr = method.GetCustomAttribute<DescriptionAttribute>();
                 var description = descAttr?.Description ?? $"{name} aracı.";
 
-                Register(new ToolDefinition(name, group, ToolType.Mcp, description));
+                RegisterToolDefinition(new ToolDefinition(name, group, ToolType.Mcp, description));
             }
         }
     }
 
     /// <summary>Tek bir araç tanımını kayıt defterine ekler. Aynı ad zaten kayıtlıysa işlem etkisizdir.</summary>
     /// <exception cref="ArgumentException">Araç adı boş olduğunda fırlatılır.</exception>
-    public void Register(ToolDefinition definition)
+    public void RegisterToolDefinition(ToolDefinition definition)
     {
         if (string.IsNullOrWhiteSpace(definition.Name))
             throw new ArgumentException("Tool ismi boş olamaz.");
@@ -73,7 +73,7 @@ public sealed class ToolRegistry
     }
 
     /// <summary>Adı verilen aracın tanımını döner.</summary>
-    public ToolDefinition Get(string name)
+    public ToolDefinition GetToolDefinition(string name)
     {
         return _definitions.TryGetValue(name, out var def)
             ? def
@@ -128,12 +128,12 @@ public sealed class ToolRegistry
     private void RegisterNonMcpCoreTools()
     {
         // Orkestratör köprü araçları
-        Register(new ToolDefinition(ToolNames.AskAccountSpecialist, ToolGroup.Orchestrator, ToolType.OrchestratorBridge, "Hesap, bakiye, IBAN, hesap hareketi/işlem soruları"));
-        Register(new ToolDefinition(ToolNames.AskCardSpecialist, ToolGroup.Orchestrator, ToolType.OrchestratorBridge, "SADECE kredi kartı borcu, kullanılabilir limit, asgari ödeme ve son ödeme tarihi soruları"));
-        Register(new ToolDefinition(ToolNames.AskAnalyzeSpecialist, ToolGroup.Orchestrator, ToolType.OrchestratorBridge, "Kredi kartı harcama analizi, ekstre özetleri, puan ve bonus kazançları, taksitli/peşin harcama oranları, en çok harcama yapılan mağazalar, kampanya/bonus önerileri ile FINANSMAN, KREDİ, BANA UYGUN FİNANSMANLAR veya BORÇ YAPILANDIRMA TAVSİYELERİ (DİKKAT: Kullanıcı \"Finansmanları göster\", \"Bana uygun krediler\", \"Kredi kartı harcamalarımı analiz et\", \"Ekstremi incele\" gibi ifadeler kullandığında BU TALEBİ KESİNLİKLE yönlendir)"));
-        Register(new ToolDefinition(ToolNames.StartWorkflow, ToolGroup.Orchestrator, ToolType.Workflow, "Kullanıcının niyetine uygun jenerik iş akışını (ör: 'card-payment', 'money-transfer') başlatır."));
-        Register(new ToolDefinition(ToolNames.SearchScreenCode, ToolGroup.Orchestrator, ToolType.Workflow, "Geçerli ekran kodlarını semantik arama ile bulur."));
-        Register(new ToolDefinition(ToolNames.OpenScreen, ToolGroup.Orchestrator, ToolType.Workflow, "Kullanıcıyı belirlenen ekran koduna yönlendirir."));
+        RegisterToolDefinition(new ToolDefinition(ToolNames.AskAccountSpecialist, ToolGroup.Orchestrator, ToolType.OrchestratorBridge, "Hesap, bakiye, IBAN, hesap hareketi/işlem soruları"));
+        RegisterToolDefinition(new ToolDefinition(ToolNames.AskCardSpecialist, ToolGroup.Orchestrator, ToolType.OrchestratorBridge, "SADECE kredi kartı borcu, kullanılabilir limit, asgari ödeme ve son ödeme tarihi soruları"));
+        RegisterToolDefinition(new ToolDefinition(ToolNames.AskAnalyzeSpecialist, ToolGroup.Orchestrator, ToolType.OrchestratorBridge, "Kredi kartı harcama analizi, ekstre özetleri, puan ve bonus kazançları, taksitli/peşin harcama oranları, en çok harcama yapılan mağazalar, kampanya/bonus önerileri ile FINANSMAN, KREDİ, BANA UYGUN FİNANSMANLAR veya BORÇ YAPILANDIRMA TAVSİYELERİ (DİKKAT: Kullanıcı \"Finansmanları göster\", \"Bana uygun krediler\", \"Kredi kartı harcamalarımı analiz et\", \"Ekstremi incele\" gibi ifadeler kullandığında BU TALEBİ KESİNLİKLE yönlendir)"));
+        RegisterToolDefinition(new ToolDefinition(ToolNames.StartWorkflow, ToolGroup.Orchestrator, ToolType.Workflow, "Kullanıcının niyetine uygun jenerik iş akışını (ör: 'card-payment', 'money-transfer') başlatır."));
+        RegisterToolDefinition(new ToolDefinition(ToolNames.SearchScreenCode, ToolGroup.Orchestrator, ToolType.Workflow, "Geçerli ekran kodlarını semantik arama ile bulur."));
+        RegisterToolDefinition(new ToolDefinition(ToolNames.OpenScreen, ToolGroup.Orchestrator, ToolType.Workflow, "Kullanıcıyı belirlenen ekran koduna yönlendirir."));
     }
 
     /// <summary>

@@ -46,7 +46,7 @@ public sealed class SemanticIndex<T>(
     /// sonra tek adımda devreye alınır; arama trafiği bu sırada eski içerikten yanıtlanır.
     /// </summary>
     /// <returns>İndekslenen kayıt sayısı.</returns>
-    public int Replace(IEnumerable<T> items)
+    public int ReplaceAllEntries(IEnumerable<T> items)
     {
         var rebuilt = items
             .Select(item => (Key: keySelector(item), Vector: embedder.Embed(textSelector(item)), Item: item))
@@ -69,17 +69,17 @@ public sealed class SemanticIndex<T>(
     /// tamamını karşılayan bir vektör kümesi kabul edilir.
     /// </summary>
     /// <returns>İndekslenen kayıt sayısı.</returns>
-    public async Task<int> ReplaceAsync(IEnumerable<T> items, CancellationToken cancellationToken = default)
+    public async Task<int> ReplaceAllEntriesAsync(IEnumerable<T> items, CancellationToken cancellationToken = default)
     {
         var materialized = items.Select(item => (Key: keySelector(item), Text: textSelector(item), Item: item)).ToList();
 
         if (vectorStore is null)
-            return Replace(materialized.Select(entry => entry.Item));
+            return ReplaceAllEntries(materialized.Select(entry => entry.Item));
 
         var indexKey = BuildIndexKey(materialized.Select(entry => (entry.Key, entry.Text)));
 
-        var stored = await vectorStore.TryLoadAsync(indexKey, cancellationToken);
-        if (stored is not null && TryRestore(materialized, stored, out var restored))
+        var stored = await vectorStore.TryLoadVectorsAsync(indexKey, cancellationToken);
+        if (stored is not null && TryRestoreVectorsFromStore(materialized, stored, out var restored))
         {
             lock (_entriesGate)
             {
@@ -94,12 +94,12 @@ public sealed class SemanticIndex<T>(
             return restored.Count;
         }
 
-        var count = Replace(materialized.Select(entry => entry.Item));
+        var count = ReplaceAllEntries(materialized.Select(entry => entry.Item));
 
         List<(string Key, EmbeddingF32 Vector, T Item)> snapshot;
         lock (_entriesGate) snapshot = [.. _entries];
 
-        await vectorStore.SaveAsync(
+        await vectorStore.SaveVectorsAsync(
             indexKey,
             snapshot.Select(entry => new StoredVector(entry.Key, entry.Vector.Buffer.ToArray())).ToList(),
             cancellationToken);
@@ -111,7 +111,7 @@ public sealed class SemanticIndex<T>(
     /// Saklanan vektörleri bugünkü kayıtlarla eşleştirir. Her kaydın karşılığı bulunamazsa
     /// <c>false</c> döner ve çağıran baştan hesaplar.
     /// </summary>
-    private static bool TryRestore(
+    private static bool TryRestoreVectorsFromStore(
         List<(string Key, string Text, T Item)> items,
         IReadOnlyList<StoredVector> stored,
         out List<(string Key, EmbeddingF32 Vector, T Item)> restored)
@@ -148,7 +148,7 @@ public sealed class SemanticIndex<T>(
     /// Tek bir kaydı indekse ekler veya günceller. İndeksin tamamını yeniden kurmaz; çalışma
     /// zamanında eklenen kayıt aramada anında görünür.
     /// </summary>
-    public void AddOrUpdate(T item)
+    public void AddOrUpdateEntry(T item)
     {
         var key = keySelector(item);
         var vector = embedder.Embed(textSelector(item));
@@ -169,7 +169,7 @@ public sealed class SemanticIndex<T>(
     /// <param name="intent">Kullanıcının mesajı veya niyet ifadesi.</param>
     /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
     /// <param name="filter">İsteğe bağlı ön eleme; skorlamadan önce uygulanır.</param>
-    public IReadOnlyList<(T Item, float Score)> Search(string intent, int topK, Func<T, bool>? filter = null)
+    public IReadOnlyList<(T Item, float Score)> SearchByIntent(string intent, int topK, Func<T, bool>? filter = null)
     {
         List<(string Key, EmbeddingF32 Vector, T Item)> snapshot;
         lock (_entriesGate) snapshot = [.. _entries];

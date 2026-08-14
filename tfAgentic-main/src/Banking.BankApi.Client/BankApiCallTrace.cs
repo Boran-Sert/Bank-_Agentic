@@ -116,14 +116,14 @@ public static class BankApiPayloadReader
     /// Nesne biçimindeki istek gövdesini alanlarına ayırır. Gövde anonim tip, kayıt ya da sözlük
     /// olabilir; hepsi JSON'a çevrildikten sonra aynı biçimde okunur.
     /// </summary>
-    public static IReadOnlyList<BankApiField> Read(object? body)
+    public static IReadOnlyList<BankApiField> ReadFields(object? body)
     {
         if (body is null) return Empty;
 
         try
         {
             using var document = JsonSerializer.SerializeToDocument(body, body.GetType());
-            return Read(document.RootElement);
+            return ReadFields(document.RootElement);
         }
         catch (NotSupportedException)
         {
@@ -133,7 +133,7 @@ public static class BankApiPayloadReader
     }
 
     /// <summary>Ayrıştırılmış bir JSON gövdesini alanlarına ayırır.</summary>
-    public static IReadOnlyList<BankApiField> Read(JsonElement element)
+    public static IReadOnlyList<BankApiField> ReadFields(JsonElement element)
     {
         if (element.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null) return Empty;
 
@@ -148,7 +148,7 @@ public static class BankApiPayloadReader
     }
 
     /// <summary>Alanları <c>ad = değer</c> çiftleri hâlinde tek satıra yazar.</summary>
-    public static string Describe(IReadOnlyList<BankApiField> fields) =>
+    public static string FormatFieldsForLog(IReadOnlyList<BankApiField> fields) =>
         fields.Count == 0 ? "(parametre yok)" : string.Join(", ", fields);
 
     private static void Flatten(JsonElement element, string prefix, List<BankApiField> fields)

@@ -39,7 +39,7 @@ public sealed class SemanticFinancingSearcher(
     private readonly SemanticIndex<FinancingSummary> _index = new(
         embedder,
         keySelector: option => option.Id,
-        textSelector: Describe,
+        textSelector: BuildEmbeddingText,
         SimilarityThreshold,
         logger,
         label: "Finansman",
@@ -49,10 +49,10 @@ public sealed class SemanticFinancingSearcher(
     /// İndeksi bir kez doldurur; indeks zaten doluysa etkisizdir. Banka o an ayakta değilse indeks
     /// boş kalır ve sonraki çağrı yeniden dener.
     /// </summary>
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    public async Task EnsureFinancingIndexBuiltAsync(CancellationToken cancellationToken = default)
     {
         if (_index.Count > 0) return;
-        await RefreshAsync(cancellationToken);
+        await RebuildFinancingIndexFromBankAsync(cancellationToken);
     }
 
     /// <summary>
@@ -60,7 +60,7 @@ public sealed class SemanticFinancingSearcher(
     /// vermezse mevcut indekse dokunulmaz.
     /// </summary>
     /// <returns>İndekslenen finansman seçeneği sayısı; banka okunamadığında sıfır.</returns>
-    public async Task<int> RefreshAsync(CancellationToken cancellationToken = default)
+    public async Task<int> RebuildFinancingIndexFromBankAsync(CancellationToken cancellationToken = default)
     {
         var response = await bank.AskBankAsync(BankApiPaths.FinancingOptions, new { type = (string?)null }, cancellationToken);
 
@@ -71,7 +71,7 @@ public sealed class SemanticFinancingSearcher(
             return 0;
         }
 
-        return await _index.ReplaceAsync(options.EnumerateArray().Select(ToSummary), cancellationToken);
+        return await _index.ReplaceAllEntriesAsync(options.EnumerateArray().Select(ToFinancingSummary), cancellationToken);
     }
 
     /// <summary>
@@ -80,18 +80,18 @@ public sealed class SemanticFinancingSearcher(
     /// </summary>
     /// <param name="intent">Müşterinin niyeti veya durumu; harcama profiliyle zenginleştirilmiş olabilir.</param>
     /// <param name="topK">Döndürülecek en fazla sonuç sayısı.</param>
-    public IReadOnlyList<(FinancingSummary Option, float Score)> Search(string intent, int topK = 2) =>
-        _index.Search(intent, topK);
+    public IReadOnlyList<(FinancingSummary Option, float Score)> SearchFinancingOptionsByIntent(string intent, int topK = 2) =>
+        _index.SearchByIntent(intent, topK);
 
-    private static string Describe(FinancingSummary option) =>
+    private static string BuildEmbeddingText(FinancingSummary option) =>
         $"Finansman: {option.Title}. Açıklama: {option.Description}. Tür: {option.Type}. " +
         $"Faiz: {option.InterestRate}. Vade: {option.MaxInstallments}";
 
-    private static FinancingSummary ToSummary(JsonElement option) => new(
-        Id: option.Text("id", string.Empty),
-        Title: option.Text("title", string.Empty),
-        Description: option.Text("description", string.Empty),
-        Type: option.Text("type", string.Empty),
-        InterestRate: option.Number("interestRate"),
-        MaxInstallments: (int)option.Number("maxInstallments"));
+    private static FinancingSummary ToFinancingSummary(JsonElement option) => new(
+        Id: option.ReadText("id", string.Empty),
+        Title: option.ReadText("title", string.Empty),
+        Description: option.ReadText("description", string.Empty),
+        Type: option.ReadText("type", string.Empty),
+        InterestRate: option.ReadDecimal("interestRate"),
+        MaxInstallments: (int)option.ReadDecimal("maxInstallments"));
 }

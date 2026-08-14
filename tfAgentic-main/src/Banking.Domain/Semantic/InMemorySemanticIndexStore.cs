@@ -11,11 +11,11 @@ public sealed class InMemorySemanticIndexStore : ISemanticIndexStore
     private readonly ConcurrentDictionary<string, IReadOnlyList<StoredVector>> _vectorsByIndexKey = new(StringComparer.Ordinal);
 
     /// <inheritdoc />
-    public ValueTask<IReadOnlyList<StoredVector>?> TryLoadAsync(string indexKey, CancellationToken cancellationToken) =>
+    public ValueTask<IReadOnlyList<StoredVector>?> TryLoadVectorsAsync(string indexKey, CancellationToken cancellationToken) =>
         ValueTask.FromResult(_vectorsByIndexKey.GetValueOrDefault(indexKey));
 
     /// <inheritdoc />
-    public ValueTask SaveAsync(string indexKey, IReadOnlyList<StoredVector> vectors, CancellationToken cancellationToken)
+    public ValueTask SaveVectorsAsync(string indexKey, IReadOnlyList<StoredVector> vectors, CancellationToken cancellationToken)
     {
         _vectorsByIndexKey[indexKey] = vectors;
         return ValueTask.CompletedTask;

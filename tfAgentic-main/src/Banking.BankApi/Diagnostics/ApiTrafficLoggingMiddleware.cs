@@ -22,12 +22,12 @@ public sealed class ApiTrafficLoggingMiddleware(RequestDelegate next, ILogger<Ap
         var request = context.Request;
 
         request.EnableBuffering();
-        var requestBody = await ReadAsync(request.Body);
+        var requestBody = await ReadStreamAsTextAsync(request.Body);
         request.Body.Position = 0;
 
         logger.LogInformation(
             "[{CallId}] İstek alındı → {Method} {Path}{QueryString} | Gövde: {Body}",
-            callId, request.Method, request.Path.Value, request.QueryString.Value, Describe(requestBody));
+            callId, request.Method, request.Path.Value, request.QueryString.Value, TruncateBodyForLog(requestBody));
 
         // Yanıt gövdesi okunabilmesi için belleğe alınır, sonra gerçek akışa aynen kopyalanır.
         var originalBody = context.Response.Body;
@@ -41,18 +41,18 @@ public sealed class ApiTrafficLoggingMiddleware(RequestDelegate next, ILogger<Ap
             await next(context);
 
             buffer.Position = 0;
-            var responseBody = await ReadAsync(buffer);
+            var responseBody = await ReadStreamAsTextAsync(buffer);
             buffer.Position = 0;
             await buffer.CopyToAsync(originalBody);
 
-            Log(context.Response.StatusCode, callId, request, startedAt, responseBody);
+            LogResponse(context.Response.StatusCode, callId, request, startedAt, responseBody);
         }
         catch (Exception exception)
         {
             logger.LogError(
                 exception,
                 "[{CallId}] İstek işlenemedi ✗ {Method} {Path} | {Elapsed:F0} ms | Gövde: {Body}",
-                callId, request.Method, request.Path.Value, Elapsed(startedAt), Describe(requestBody));
+                callId, request.Method, request.Path.Value, Elapsed(startedAt), TruncateBodyForLog(requestBody));
             throw;
         }
         finally
@@ -65,13 +65,13 @@ public sealed class ApiTrafficLoggingMiddleware(RequestDelegate next, ILogger<Ap
     /// Yanıtı durum koduna göre uygun seviyeye yazar: bankanın reddi (4xx/5xx) uyarıdır, çünkü
     /// kullanıcıya gösterilen gerekçe tam olarak burada oluşur.
     /// </summary>
-    private void Log(int statusCode, string callId, HttpRequest request, long startedAt, string responseBody)
+    private void LogResponse(int statusCode, string callId, HttpRequest request, long startedAt, string responseBody)
     {
         const string template =
             "[{CallId}] Yanıt döndü ← {Method} {Path} | {StatusCode} · {Elapsed:F0} ms | Gövde: {Body}";
 
         object?[] arguments =
-            [callId, request.Method, request.Path.Value, statusCode, Elapsed(startedAt), Describe(responseBody)];
+            [callId, request.Method, request.Path.Value, statusCode, Elapsed(startedAt), TruncateBodyForLog(responseBody)];
 
         if (statusCode >= 400)
             logger.LogWarning(template, arguments);
@@ -79,13 +79,13 @@ public sealed class ApiTrafficLoggingMiddleware(RequestDelegate next, ILogger<Ap
             logger.LogInformation(template, arguments);
     }
 
-    private static async Task<string> ReadAsync(Stream stream)
+    private static async Task<string> ReadStreamAsTextAsync(Stream stream)
     {
         using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, leaveOpen: true);
         return await reader.ReadToEndAsync();
     }
 
-    private static string Describe(string body)
+    private static string TruncateBodyForLog(string body)
     {
         if (string.IsNullOrWhiteSpace(body)) return "(gövde yok)";
 

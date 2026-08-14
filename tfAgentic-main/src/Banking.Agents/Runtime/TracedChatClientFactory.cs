@@ -23,7 +23,7 @@ public sealed class TracedChatClientFactory(AgentOptions options, TraceHub hub)
     /// çağırdığını gösterir hem de kullanılacak modeli seçer.
     /// </summary>
     /// <param name="label">İzlerde görünecek ajan adı (örn. <c>Orkestratör</c>).</param>
-    public IChatClient Create(string label)
+    public IChatClient CreateTracedChatClient(string label)
     {
         var model = options.ModelFor(label);
         var client = _clientsByModel.GetOrAdd(model, name => CreateChatClient(options, name));

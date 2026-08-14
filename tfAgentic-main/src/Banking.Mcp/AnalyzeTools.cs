@@ -140,7 +140,7 @@ public sealed class AnalyzeTools
                 r.Campaign.MinimumSpendAmount,
                 SimilarityScore = Math.Round(r.Score, 4)
             })
-        };
+        }.ToReadableJson();
     }
 
     [McpServerTool(Name = AnalyzeToolNames.GetCampaings)]

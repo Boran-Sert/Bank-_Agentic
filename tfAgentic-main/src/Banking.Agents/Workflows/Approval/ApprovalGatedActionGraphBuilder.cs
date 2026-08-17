@@ -18,7 +18,7 @@ public static class ApprovalGatedActionGraphBuilder
     /// </summary>
     /// <param name="action">Akışın kimliği ve banka hedefi.</param>
     /// <param name="slots">Onaya sunulmuş slot kümesi.</param>
-    /// <param name="actionActionGateway">Onay sonrası çalıştırılacak executor.</param>
+    /// <param name="actionGateway">Onay sonrası çalıştırılacak executor.</param>
     /// <param name="hub">İzleme kanalı.</param>
     /// <param name="requiresApproval">
     /// <c>false</c> verildiğinde onay kapısı kurulmaz ve eylem doğrudan çalışır. Para hareketi
@@ -27,12 +27,12 @@ public static class ApprovalGatedActionGraphBuilder
     public static Workflow BuildGraph(
         WorkflowActionDefinition action,
         IReadOnlyDictionary<string, object?> slots,
-        WorkflowActionGateway actionActionGateway,
+        WorkflowActionGateway actionGateway,
         TraceHub hub,
         bool requiresApproval = true)
     {
         var executorStep = new ApprovedBankActionStep(
-            $"{action.WorkflowName}-executor", action, slots, actionActionGateway, hub);
+            $"{action.WorkflowName}-executor", action, slots, actionGateway, hub);
 
         if (!requiresApproval)
         {
@@ -60,7 +60,7 @@ internal sealed class ApprovedBankActionStep(
     string id,
     WorkflowActionDefinition action,
     IReadOnlyDictionary<string, object?> slots,
-    WorkflowActionGateway actionActionGateway,
+    WorkflowActionGateway actionGateway,
     TraceHub hub)
     : Executor<bool, WorkflowOutcome>(id)
 {
@@ -69,6 +69,6 @@ internal sealed class ApprovedBankActionStep(
         bool approved, IWorkflowContext context, CancellationToken cancellationToken = default)
     {
         hub.PublishTraceEvent(TraceCategories.Approval, $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");
-        return await actionActionGateway.ExecuteBankActionForApprovalDecisionAsync(action, slots, approved, cancellationToken);
+        return await actionGateway.ExecuteBankActionForApprovalDecisionAsync(action, slots, approved, cancellationToken);
     }
 }

@@ -16,7 +16,7 @@ namespace Banking.Agents.Workflows.Engine;
 public sealed class WorkflowRegistry(
     WorkflowAgentFactory workflowAgentFactory,
     AmbientSessionAccessor sessionAccessor,
-    WorkflowActionGateway actionActionGateway,
+    WorkflowActionGateway actionGateway,
     Lazy<OrchestratorFallback> orchestratorFallback,
     TraceHub hub)
 {
@@ -112,6 +112,6 @@ public sealed class WorkflowRegistry(
 
         // Devretme kanalı geç çözülür (döngüsel bağımlılık)
         return new WorkflowProcessor(
-            session, registered.Action, workflowAgent, actionActionGateway, orchestratorFallback.Value, hub);
+            session, registered.Action, workflowAgent, actionGateway, orchestratorFallback.Value, hub);
     }
 }

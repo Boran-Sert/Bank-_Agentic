@@ -1,6 +1,6 @@
 // MAF Workflow human-in-the-loop onay gate'inin LLM olmadan ve banka sunucusu olmadan
 // deterministik testi.
-// Akış: GenericConfirmationView -> RequestPort (insan onayı) -> bool -> RestWorkflowExecutor -> WorkflowOutcome.
+// Akış: GenericConfirmationView -> RequestPort (insan onayı) -> bool -> WorkflowActionGateway -> WorkflowOutcome.
 //
 // Ölçtüğü şey: onay kapısı gerçekten bankaya istek attırıyor mu, ret gerçekten hiçbir istek
 // attırmıyor mu, ve aynı onay ikinci kez geldiğinde ikinci bir para hareketi oluyor mu.
@@ -47,7 +47,7 @@ async Task RunScenarioAsync(bool approve, int expectedRequestCount)
 
     var bank = new FakeBankApiClient();
     var hub = new TraceHub();
-    var executor = new RestWorkflowExecutor(bank, hub);
+    var executor = new WorkflowActionGateway(bank, hub);
 
     var outcome = await RunApprovalGraphAsync(executor, hub, approve);
 
@@ -69,7 +69,7 @@ async Task RunDoubleApprovalScenarioAsync()
 
     var bank = new FakeBankApiClient();
     var hub = new TraceHub();
-    var executor = new RestWorkflowExecutor(bank, hub);
+    var executor = new WorkflowActionGateway(bank, hub);
 
     var first = await RunApprovalGraphAsync(executor, hub, approve: true);
     var second = await RunApprovalGraphAsync(executor, hub, approve: true);
@@ -86,14 +86,14 @@ async Task RunDoubleApprovalScenarioAsync()
     Check(first?.UserMessage == second?.UserMessage, "aynı sonuç mesajı");
 }
 
-async Task<WorkflowOutcome?> RunApprovalGraphAsync(RestWorkflowExecutor executor, TraceHub hub, bool approve)
+async Task<WorkflowOutcome?> RunApprovalGraphAsync(WorkflowActionGateway executor, TraceHub hub, bool approve)
 {
     var view = executor.BuildConfirmationView(action, slots);
 
-    var wf = DeterministicActionWorkflow.BuildApprovalGraph(
+    var wf = ApprovalGatedActionGraphBuilder.BuildGraph(
         action: action,
         slots: slots,
-        actionExecutor: executor,
+        actionGateway: executor,
         hub: hub,
         requiresApproval: true);
 

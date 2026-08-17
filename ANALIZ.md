@@ -626,7 +626,7 @@ Tip bilgisinin modele ulaştığı tek kanal araç açıklamasıdır (`DescribeE
 **`CompleteSlotFillingAsync`** — parametreler tamamlandığında:
 
 ```csharp
-var confirmationView = actionActionGateway.BuildConfirmationView(action, slots);
+var confirmationView = actionGateway.BuildConfirmationView(action, slots);
 
 session.StoreProposedSlots(confirmationView.WorkflowName, slots);
 session.PendingConfirmation = confirmationView;

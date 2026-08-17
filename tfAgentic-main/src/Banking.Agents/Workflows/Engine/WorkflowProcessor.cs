@@ -32,7 +32,7 @@ public sealed class WorkflowProcessor(
     SessionContext session,
     WorkflowActionDefinition action,
     AIAgent workflowAgent,
-    WorkflowActionGateway actionActionGateway,
+    WorkflowActionGateway actionGateway,
     OrchestratorFallback orchestratorFallback,
     TraceHub hub)
 {
@@ -136,7 +136,7 @@ public sealed class WorkflowProcessor(
     private async Task<WorkflowStepResult> CompleteSlotFillingAsync(
         Dictionary<string, object?> slots, CancellationToken cancellationToken)
     {
-        var confirmationView = actionActionGateway.BuildConfirmationView(action, slots);
+        var confirmationView = actionGateway.BuildConfirmationView(action, slots);
 
         session.StoreProposedSlots(confirmationView.WorkflowName, slots);
         session.PendingConfirmation = confirmationView;
@@ -210,7 +210,7 @@ public sealed class WorkflowProcessor(
         var workflow = ApprovalGatedActionGraphBuilder.BuildGraph(
             action: action,
             slots: slots,
-            actionActionGateway: actionActionGateway,
+            actionGateway: actionGateway,
             hub: hub,
             requiresApproval: requiresApproval);
 

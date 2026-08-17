@@ -68,14 +68,15 @@ public sealed class GatewayService(
 
         if (responseWithToken.Text is null) return responseWithToken;
 
-        var sanitizedText = sanitizer.Sanitize(responseWithToken.Text);
+        var sanitizedText = sanitizer.Sanitize(responseWithToken.Text, sessionToken);
         return sanitizedText == responseWithToken.Text
             ? responseWithToken
             : responseWithToken with { Text = sanitizedText };
     }
 
     private static string NormalizeSessionToken(string? token) =>
-        string.IsNullOrWhiteSpace(token) ? $"gw-{Guid.NewGuid():N}"[..16] : token;
+        string.IsNullOrWhiteSpace(token) ? Guid.NewGuid().ToString("D") : token;
+
 
     private static string Truncate(string text, int maxLength) =>
         text.Length <= maxLength ? text : string.Concat(text.AsSpan(0, maxLength), "…");

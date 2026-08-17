@@ -139,27 +139,25 @@ public sealed class ResponseSanitizer
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant
     );
 
-    // --- Kategori 6: session token format sızıntısı ---
+    // --- Kategori 6: oturum jetonu sızıntısı ---
 
-    /// <summary>
-    /// Dahili oturum jetonu biçimlerini (<c>gw-…</c>, <c>cs-…</c>) yanıt metni içinde yakalar.
-    /// Eşleşmeler silinmez, <c>[GİZLİ]</c> ile maskelenir.
-    /// </summary>
-    private static readonly Regex SessionTokenPattern = new(
-        @"\b(?:gw|cs)-[a-f0-9]{6,32}\b",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant
-    );
+    /// <summary>Metinde yakalanan oturum jetonunun yerine yazılan maske.</summary>
+    private const string MaskedToken = "[GİZLİ]";
 
     /// <summary>
     /// Yanıt metnini altı güvenlik kategorisinde tarar ve tespit edilen iç bilgi sızıntılarını
     /// temizler. Sıra bağlayıcıdır: blok yapıları satır bazlı kalıplardan önce temizlenir.
     /// </summary>
     /// <param name="text">Taranacak ham yanıt metni.</param>
+    /// <param name="sessionToken">
+    /// Bu isteğin oturum jetonu; metinde geçtiği her yer maskelenir. Boş bırakıldığında jeton
+    /// taraması yapılmaz.
+    /// </param>
     /// <returns>
     /// Sızıntılardan arındırılmış yanıt metni. Girdi boşsa veya temizlik sonrası metin tamamen
     /// boşalırsa <see cref="FallbackMessage"/> döner.
     /// </returns>
-    public string Sanitize(string? text)
+    public string Sanitize(string? text, string? sessionToken = null)
     {
         if (string.IsNullOrWhiteSpace(text))
             return FallbackMessage;
@@ -174,7 +172,7 @@ public sealed class ResponseSanitizer
         sanitized = StripThinkingPatterns(sanitized, ref totalViolations);
         sanitized = StripSystemPromptLeaks(sanitized, ref totalViolations);
         sanitized = StripEndpoints(sanitized, ref totalViolations);
-        sanitized = MaskSessionTokens(sanitized, ref totalViolations);
+        sanitized = MaskSessionTokens(sanitized, sessionToken, ref totalViolations);
         sanitized = NormalizeWhitespace(sanitized);
 
         if (totalViolations > 0)
@@ -229,19 +227,35 @@ public sealed class ResponseSanitizer
         return StripSentencesContaining(text, EndpointPattern, "ENDPOINT", ref violations);
     }
 
-    /// <summary>Oturum jetonlarını <c>[GİZLİ]</c> ile maskeler. Cümlenin kalanı korunur.</summary>
-    private string MaskSessionTokens(string text, ref int violations)
+    /// <summary>
+    /// Aktif oturumun jetonunu maskeler; cümlenin kalanı korunur. Eşleşme biçime değil değere
+    /// bakar: jetonlar ön eksiz GUID olduğundan bir biçim kalıbı, bankanın döndürdüğü meşru
+    /// GUID'leri de maskelerdi.
+    /// </summary>
+    private string MaskSessionTokens(string text, string? sessionToken, ref int violations)
     {
-        var matches = SessionTokenPattern.Matches(text);
-        if (matches.Count == 0) return text;
+        if (string.IsNullOrWhiteSpace(sessionToken)) return text;
 
-        foreach (Match match in matches)
-        {
-            violations++;
-            LogViolation("SESSION_TOKEN", match.Value);
-        }
+        var occurrences = CountOccurrences(text, sessionToken);
+        if (occurrences == 0) return text;
 
-        return SessionTokenPattern.Replace(text, "[GİZLİ]");
+        violations += occurrences;
+        LogViolation("SESSION_TOKEN", sessionToken);
+
+        return text.Replace(sessionToken, MaskedToken, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Değerin metinde kaç kez geçtiğini sayar; örtüşmeyen eşleşmeler sayılır.</summary>
+    private static int CountOccurrences(string text, string value)
+    {
+        var count = 0;
+
+        for (var index = text.IndexOf(value, StringComparison.OrdinalIgnoreCase);
+             index >= 0;
+             index = text.IndexOf(value, index + value.Length, StringComparison.OrdinalIgnoreCase))
+            count++;
+
+        return count;
     }
 
     // --- Yardımcı metodlar ---

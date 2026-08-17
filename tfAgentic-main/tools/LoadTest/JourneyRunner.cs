@@ -351,7 +351,7 @@ public sealed class JourneyRunner(ApiClient api, LoadTestOptions options, MoneyL
         }
 
         var reply = call.Value;
-        if (leakScanner.Scan(reply.Text) is { } leak) journey.Add(Severity.Hard, "OUTPUT_LEAK", leak);
+        if (leakScanner.Scan(reply.Text, journey.Plan.SessionToken) is { } leak) journey.Add(Severity.Hard, "OUTPUT_LEAK", leak);
 
         var receipt = ReadReceipt(reply);
         if (receipt is null) return (JourneyStatus.NotConverged, $"onay sonrası makbuz yok: {Shorten(reply.Text)}");
@@ -385,7 +385,7 @@ public sealed class JourneyRunner(ApiClient api, LoadTestOptions options, MoneyL
                 continue;
             }
 
-            if (leakScanner.Scan(call.Value.Text) is { } leak) journey.Add(Severity.Hard, "OUTPUT_LEAK", leak);
+            if (leakScanner.Scan(call.Value.Text, journey.Plan.SessionToken) is { } leak) journey.Add(Severity.Hard, "OUTPUT_LEAK", leak);
             if (ReadReceipt(call.Value) is { } receipt) receipts.Add(receipt);
         }
 
@@ -445,7 +445,7 @@ public sealed class JourneyRunner(ApiClient api, LoadTestOptions options, MoneyL
             journey.Add(Severity.Hard, "SESSION_TOKEN",
                 $"{step}: yanıt '{reply.SessionToken}' jetonunu döndü, beklenen '{journey.Plan.SessionToken}'");
 
-        if (leakScanner.Scan(reply.Text) is { } leak)
+        if (leakScanner.Scan(reply.Text, journey.Plan.SessionToken) is { } leak)
             journey.Add(Severity.Hard, "OUTPUT_LEAK", $"{step}: {leak}");
 
         return reply;

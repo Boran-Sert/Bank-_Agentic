@@ -15,9 +15,9 @@ public sealed class LeakScanner
 {
     private readonly Regex? _toolNamePattern;
 
-    /// <summary>Dahili adres, uç nokta ve oturum jetonu kalıpları.</summary>
+    /// <summary>Dahili adres ve uç nokta kalıpları. Oturum jetonu biçimle değil değerle aranır.</summary>
     private static readonly Regex InfrastructurePattern = new(
-        @"(?:https?://(?:localhost|127\.0\.0\.1)[:\d]*|127\.0\.0\.1:\d+|localhost:\d+|/a2a/\w+|\bSelfBaseUrl\b|\bMcpUrl\b|\b(?:gw|cs)-[a-f0-9]{6,32}\b)",
+        @"(?:https?://(?:localhost|127\.0\.0\.1)[:\d]*|127\.0\.0\.1:\d+|localhost:\d+|/a2a/\w+|\bSelfBaseUrl\b|\bMcpUrl\b)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private LeakScanner(Regex? toolNamePattern) => _toolNamePattern = toolNamePattern;
@@ -52,8 +52,12 @@ public sealed class LeakScanner
     /// Metni tarar ve bulunan sızıntıyı döner.
     /// </summary>
     /// <param name="text">Kullanıcıya gösterilecek yanıt metni.</param>
+    /// <param name="sessionToken">
+    /// Bu yolculuğun oturum jetonu; metinde geçmesi sızıntıdır. Jetonlar ön eksiz olduğundan biçim
+    /// kalıbı değil değer aranır.
+    /// </param>
     /// <returns>Sızıntının kısa tanımı; sızıntı yoksa <c>null</c>.</returns>
-    public string? Scan(string? text)
+    public string? Scan(string? text, string? sessionToken = null)
     {
         if (_toolNamePattern is null || string.IsNullOrWhiteSpace(text)) return null;
 
@@ -61,7 +65,11 @@ public sealed class LeakScanner
             return $"dahili araç adı: '{toolMatch.Value}'";
 
         if (InfrastructurePattern.Match(text) is { Success: true } infrastructureMatch)
-            return $"dahili adres/jeton: '{infrastructureMatch.Value}'";
+            return $"dahili adres: '{infrastructureMatch.Value}'";
+
+        if (!string.IsNullOrWhiteSpace(sessionToken)
+            && text.Contains(sessionToken, StringComparison.OrdinalIgnoreCase))
+            return $"oturum jetonu: '{sessionToken}'";
 
         return null;
     }

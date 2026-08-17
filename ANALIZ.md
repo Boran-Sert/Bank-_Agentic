@@ -43,11 +43,11 @@ flowchart TB
     subgraph WF["Yol B — iş akışı motoru"]
         WR["WorkflowRegistry"]
         WAF["WorkflowAgentFactory"]
-        WE["WorkflowEngine"]
+        WE["WorkflowProcessor"]
         SLOT["SlotCompletenessEvaluator"]
         VAL["SchemaValidatedSlotWriter"]
         APP["ApprovalGatedActionGraphBuilder<br/>ApprovalIntentParser"]
-        EXE["WorkflowProcessor"]
+        EXE["WorkflowActionGateway"]
     end
 
     MCP["Banking.Mcp<br/>MCP araçları · ToolRegistry"]
@@ -82,7 +82,7 @@ sequenceDiagram
     participant A as AmbientSessionAccessor
     participant R as WorkflowOrOrchestratorRouter
     participant O as AgentRuntime (orkestratör)
-    participant E as WorkflowEngine
+    participant E as WorkflowProcessor
     participant M as GatewayResponseMapper + Sanitizer
 
     U->>G: POST /api/chat {text, sessionToken}
@@ -140,7 +140,7 @@ sequenceDiagram
 | Sınıf | Görevi |
 |---|---|
 | `WorkflowRegistry` | Akış kataloğu **ve** motor fabrikası. Tek kayıt yolu MAF deklaratif YAML/JSON'dur. |
-| `WorkflowEngine` | Tüm akışların tek motoru. Generic değildir, akışa özgü tip içermez, durum tutmaz; her istekte yeniden yaratılır. |
+| `WorkflowProcessor` | Tüm akışların tek motoru. Generic değildir, akışa özgü tip içermez, durum tutmaz; her istekte yeniden yaratılır. |
 | `WorkflowAgentFactory` | Akış ajanlarını kurar ve önbellekler; ajanın dört denetim aracını (`update_slot`, `propose_*`, `cancel_*`, `handoff_*`) üretir. |
 | `WorkflowAgentDefinition` (record) | Ajan adı ve araç adlarının **tek türetildiği** yer (`For(workflowName, …)`). |
 | `WorkflowAgentControlSignals` | Ajanın motora ilettiği sinyal sabitleri: `PROPOSAL_READY:`, `CANCELLED`, `HANDOFF_TO_ORCHESTRATOR`. |
@@ -151,7 +151,7 @@ sequenceDiagram
 | `ApprovalIntentParser` (static) | Onay yanıtını `Approved` / `Rejected` / `Unclear`'a çevirir. Önce olumsuzluk, sonra olumluluk aranır. |
 | `ApprovalGatedActionGraphBuilder` (static) | MAF grafiğini kurar: `RequestPort` onay kapısı → `ApprovedBankActionStep`. |
 | `ApprovedBankActionStep` (`Executor<bool, WorkflowOutcome>`) | Grafikteki tek yürütme düğümü; onay kararını girdi alır ve eylemi model müdahalesi olmadan çalıştırır. |
-| `WorkflowProcessor` | Sistemdeki **tek** executor. Onay ekranını kurar, onaylanırsa bankaya tek istek gönderir, yanıtı taşır. İstisna sızdırmaz. |
+| `WorkflowActionGateway` | Sistemdeki **tek** executor. Onay ekranını kurar, onaylanırsa bankaya tek istek gönderir, yanıtı taşır. İstisna sızdırmaz. |
 | `WorkflowActionDefinition` (record) | Akışın kimliği ve banka hedefi: `WorkflowName`, `MkCode`, `Method`, `Path`, `DisplayName`. `CallsBank` onay kapısının kurulup kurulmayacağını belirler. |
 | `WorkflowStepResult` (record) | Bir adımın gateway'e taşınan sonucu. Fabrikaları: `Ask`, `AwaitApproval`, `Completed`, `Ended`. |
 | `WorkflowOutcome` (record) | Tüm akışların ortak sonuç sözleşmesi. `UserMessage` zorunludur. Fabrikaları: `Success`, `RejectedByUser`, `Failure`. |
@@ -224,12 +224,12 @@ app.Run();
 
 | Nesne | Ömür | Ne zaman doğar |
 |---|---|---|
-| `AmbientSessionAccessor`, `ISessionStore`, `WorkflowRegistry`, `WorkflowAgentFactory`, `WorkflowProcessor`, `GatewayService`, `AgentRuntime`, `SpecialistCatalog` | **Singleton** | DI kaydında |
+| `AmbientSessionAccessor`, `ISessionStore`, `WorkflowRegistry`, `WorkflowAgentFactory`, `WorkflowActionGateway`, `GatewayService`, `AgentRuntime`, `SpecialistCatalog` | **Singleton** | DI kaydında |
 | Orkestratör ajanı (`ChatClientAgent`) | Singleton, sürüm bağımlı | İlk `EnsureReadyAsync`'te; yalnızca `SpecialistCatalog.Version` değişirse yeniden kurulur |
 | Uzman ajanları | `IMemoryCache`, kayan `AgentIdleTimeout` (20 dk) | İlk `GetSpecialistAsync` çağrısında; boşta kalırsa tahliye edilir, sonraki istekte yeniden kurulur |
 | Akış ajanları | `IMemoryCache`, aynı desen | İlk `GetOrCreateAsync`'te; talimat parmak izi veya uzman sürümü değişirse yeniden kurulur |
 | **`SessionContext` / `SessionLease`** | **İstek başına** | `GatewayService.ProcessUserRequestAsync` içinde |
-| **`WorkflowEngine`** | **İstek başına** | `WorkflowRegistry.CreateEngineAsync` çağrıldığında |
+| **`WorkflowProcessor`** | **İstek başına** | `WorkflowRegistry.CreateEngineAsync` çağrıldığında |
 | `SessionState` | Oturum başına, kayan TTL (30 dk) | İlk istekte üretilir, her scope kapanışında depoya yazılır |
 
 Motorun ve bağlamın istek başına yaratılması tasarım gereğidir: motor o isteğin `SessionContext`'ine bağlanır ve kendi durumunu tutmaz.
@@ -357,7 +357,7 @@ Scope'un verdiği üç garanti:
 
 `CloseSessionScopeAsync` yazma çağrısını `CancellationToken.None` ile yapar: **istek iptal edilse veya hata alsa da o ana kadarki ilerleme kaydedilir**.
 
-Kilit tablosu sınırsız büyümez: `AcquireLockHandle` bekleyen sayacını artırır, `ReleaseLockHandle` sıfıra düştüğünde kilidi sözlükten siler ve `Dispose` eder.Handle` bekleyen sayacını artırır, `ReleaseLockHandle` sıfıra düştüğünde kilidi sözlükten siler ve `Dispose` eder.
+Kilit tablosu sınırsız büyümez: `AcquireLockHandle` bekleyen sayacını artırır, `ReleaseLockHandle` sıfıra düştüğünde kilidi sözlükten siler ve `Dispose` eder.
 
 ### 3.4 Scope ne taşır, kimler görür
 
@@ -371,7 +371,7 @@ Scope bir nesne taşımaz — bir **ambient erişim hakkı** taşır. Aşağıda
 | `WorkflowRegistry.BuildEngineAsync` | `DeclareExpectedSlots` + motorun bağlanacağı bağlam |
 | `SchemaValidatedSlotWriter` (`update_slot`) | `SetSlot` |
 | `WorkflowAgentFactory` (`propose_*`, `cancel_*`, `handoff_*`) | `GetSlotCollectionStatus`, `StoreProposedSlots`, `RaiseAgentSignal` |
-| `WorkflowEngine` | Yapıcıya `SessionContext` olarak verilir (accessor'a değil, bağlamın kendisine bağlıdır) |
+| `WorkflowProcessor` | Yapıcıya `SessionContext` olarak verilir (accessor'a değil, bağlamın kendisine bağlıdır) |
 
 **Oturum kimliğinin araca parametre olarak verilmemesi bir güvenlik kararıdır.** `update_slot(key, value)` imzasında oturum argümanı yoktur; hangi oturuma yazılacağını modelin ürettiği bir metin belirleyemez.
 
@@ -475,7 +475,7 @@ return stepResult.Prompt ?? $"{workflowName} iş akışı başlatıldı.";
 
 Dikkat edilecek iki nokta:
 
-- **`BeginWorkflow` evreyi `slot_filling` değil `idle` yapar.** Evreyi `slot_filling`'e taşıyan `WorkflowEngine.StartWorkflowAndCollectFirstSlotsAsync`'tir. Yani "akış kayıtlı ama henüz ilk adım atılmadı" durumu evrede görünür.
+- **`BeginWorkflow` evreyi `slot_filling` değil `idle` yapar.** Evreyi `slot_filling`'e taşıyan `WorkflowProcessor.StartWorkflowAndCollectFirstSlotsAsync`'tir. Yani "akış kayıtlı ama henüz ilk adım atılmadı" durumu evrede görünür.
 - **Akışın ilk sorusu kullanıcıya orkestratörün ağzından ulaşır.** `start_workflow` bir araçtır; döndürdüğü metin model turuna araç sonucu olarak girer ve model onu kullanıcıya sunar. İkinci mesajdan itibaren yönlendirici orkestratörü baypas eder ve motor doğrudan çalışır.
 
 ### 4.4 Motor kurulumu — `WorkflowRegistry.BuildEngineAsync`
@@ -488,7 +488,7 @@ flowchart LR
     B["2 - WorkflowAgentDefinition.For(name, schema, modelOptions)<br/><i>ajan adı + araç adları türetilir</i>"]
     C["3 - DeclarativeWorkflowBuilder.BuildInstructions(...)<br/><i>talimat üretilir; araç adları [2]'den okunur</i>"]
     D["4 - WorkflowAgentFactory.GetOrCreateAsync(definition)<br/><i>önbellek: ad + talimat parmak izi + uzman sürümü</i>"]
-    E["5 - new WorkflowEngine(session, action, agent, executor, fallback, hub)"]
+    E["5 - new WorkflowProcessor(session, action, agent, executor, fallback, hub)"]
 
     A --> B
     B --> C
@@ -535,7 +535,7 @@ stateDiagram-v2
     Cancelled --> [*]
 ```
 
-`WorkflowEngine.AdvanceWorkflowStepAsync` tek genel metottur ve evreyi **oturumdan okur**; çağıranın evreyi bilmesi veya taşıması gerekmez:
+`WorkflowProcessor.AdvanceWorkflowStepAsync` tek genel metottur ve evreyi **oturumdan okur**; çağıranın evreyi bilmesi veya taşıması gerekmez:
 
 ```csharp
 session.Phase switch
@@ -584,9 +584,9 @@ flowchart TD
     C -->|hayır| H{"HANDOFF_TO_ORCHESTRATOR?"}
     H -->|evet| H1["orchestratorFallback(userMessage)<br/>→ Ask(yanıt + 'kaldığınız yerden devam')<br/><i>akış durumu korunur</i>"]
     H -->|hayır| P{"IsComplete ve ReadProposedSlots dolu mu?"}
-    P -->|evet| P1["ConcludeSlotFillingAsync"]
+    P -->|evet| P1["CompleteSlotFillingAsync"]
     P -->|hayır| T{"Metinde PROPOSAL_READY: var mı<br/>ve JSON ayrıştırılabiliyor mu?"}
-    T -->|evet| T1["StoreProposedSlots → ConcludeSlotFillingAsync"]
+    T -->|evet| T1["StoreProposedSlots → CompleteSlotFillingAsync"]
     T -->|hayır| Q["Ask(ajanın sorusu)"]
 ```
 
@@ -623,10 +623,10 @@ Tip bilgisinin modele ulaştığı tek kanal araç açıklamasıdır (`DescribeE
 
 ### 5.6 Onay kapısı (HITL)
 
-**`ConcludeSlotFillingAsync`** — parametreler tamamlandığında:
+**`CompleteSlotFillingAsync`** — parametreler tamamlandığında:
 
 ```csharp
-var confirmationView = actionExecutor.BuildConfirmationView(action, slots);
+var confirmationView = actionActionGateway.BuildConfirmationView(action, slots);
 
 session.StoreProposedSlots(confirmationView.WorkflowName, slots);
 session.PendingConfirmation = confirmationView;
@@ -662,11 +662,11 @@ return WorkflowStepResult.AwaitApproval(session.SessionId, confirmationView);
 ```mermaid
 sequenceDiagram
     autonumber
-    participant E as WorkflowEngine
+    participant E as WorkflowProcessor
     participant B as ApprovalGatedActionGraphBuilder
     participant W as MAF Workflow (InProcessExecution)
     participant X as ApprovedBankActionStep
-    participant K as WorkflowProcessor
+    participant K as WorkflowActionGateway
     participant BA as Banka
 
     E->>B: BuildGraph(action, slots, executor, hub, requiresApproval)
@@ -692,7 +692,7 @@ Grafik ve çalıştırma **aynı istek içindedir**; sunucuda askıda kalan bir 
 
 **Idempotency tek yerde hesaplanır.** `GenericConfirmationView.ComputeIdempotencyToken` akış adı + sıralı slotlardan SHA-256 üretir. Motor bu değeri oturuma yazarak ikinci onayı tanır; executor aynı değeri bankaya `Idempotency-Key` başlığı olarak gönderir. Oturum kilidiyle birlikte, onaya çift tıklama tam olarak bir para hareketi üretir.
 
-### 5.7 Eylem — `WorkflowProcessor`
+### 5.7 Eylem — `WorkflowActionGateway`
 
 Sistemdeki tek executor; durumsuz ve singleton. Akışın kimliği ve hedefi her çağrıda `WorkflowActionDefinition` ile gelir; yeni bir akış bu sınıfta değişiklik gerektirmez.
 
@@ -872,20 +872,20 @@ Yeni bir iş akışı eklemek bir metin dosyası yazmaktan ibarettir: C# record'
 
 | Metot | Sınıf | Ne yapar |
 |---|---|---|
-| `AdvanceWorkflowStepAsync(userMessage, ct)` | `WorkflowEngine` | Tek genel metot; evreyi oturumdan okur ve üç özel metottan birine dallanır |
-| `StartWorkflowAndCollectFirstSlotsAsync(msg, ct)` | `WorkflowEngine` | Evreyi `slot_filling` yapar; tetikleyen cümleyi ajana verir |
-| `CollectSlotsAsync(userMessage, ct)` | `WorkflowEngine` | Kullanıcı yanıtı + slot özeti + tur yönergesini ajana iletir |
-| `InterpretAgentOutputAsync(...)` | `WorkflowEngine` | Turu yorumlar: iptal → devretme → teklif → soru |
-| `ConcludeSlotFillingAsync(slots, ct)` | `WorkflowEngine` | Onay ekranını kurar, idempotency anahtarını hesaplar, kapıyı `CallsBank`'a göre kurar |
-| `ApplyApprovalDecisionAsync(userMessage, ct)` | `WorkflowEngine` | Onay kararını uygular; belirsiz yanıt onay sayılmaz, ikinci onay yeniden çalıştırmaz |
-| `RunActionGraphAsync(...)` | `WorkflowEngine` | MAF grafiğini kurar, kararı porta aynı istek içinde iletir, hata event'lerini ele alır |
-| `FinishWorkflow(outcome)` | `WorkflowEngine` | Sonucu adım sonucuna çevirir ve oturumu temizler |
-| `RunAgentTurnAsync(message, ct)` | `WorkflowEngine` | Geçmişi geri yükler, ajanı bir tur çalıştırır, geçmişi yazar |
+| `AdvanceWorkflowStepAsync(userMessage, ct)` | `WorkflowProcessor` | Tek genel metot; evreyi oturumdan okur ve üç özel metottan birine dallanır |
+| `StartWorkflowAndCollectFirstSlotsAsync(msg, ct)` | `WorkflowProcessor` | Evreyi `slot_filling` yapar; tetikleyen cümleyi ajana verir |
+| `CollectSlotsAsync(userMessage, ct)` | `WorkflowProcessor` | Kullanıcı yanıtı + slot özeti + tur yönergesini ajana iletir |
+| `InterpretAgentOutputAsync(...)` | `WorkflowProcessor` | Turu yorumlar: iptal → devretme → teklif → soru |
+| `CompleteSlotFillingAsync(slots, ct)` | `WorkflowProcessor` | Onay ekranını kurar, idempotency anahtarını hesaplar, kapıyı `CallsBank`'a göre kurar |
+| `ApplyApprovalDecisionAsync(userMessage, ct)` | `WorkflowProcessor` | Onay kararını uygular; belirsiz yanıt onay sayılmaz, ikinci onay yeniden çalıştırmaz |
+| `RunActionGraphAsync(...)` | `WorkflowProcessor` | MAF grafiğini kurar, kararı porta aynı istek içinde iletir, hata event'lerini ele alır |
+| `FinishWorkflow(outcome)` | `WorkflowProcessor` | Sonucu adım sonucuna çevirir ve oturumu temizler |
+| `RunAgentTurnAsync(message, ct)` | `WorkflowProcessor` | Geçmişi geri yükler, ajanı bir tur çalıştırır, geçmişi yazar |
 | `DetermineSlotCollectionStatus(values, expected)` | `SlotCompletenessEvaluator` | Dolu/eksik/opsiyonel ayrımı |
 | `WriteSlotIfSchemaAccepts(name, value)` | `SchemaValidatedSlotWriter` | Şemaya uyan değeri yazar; uymayanı reddeder ve gerekçeyi ajana döner |
 | `ParseApprovalAnswer(answer)` | `ApprovalIntentParser` | Onay yanıtını yorumlar; önce olumsuzluk aranır |
 | `BuildGraph(action, slots, executor, hub, requiresApproval)` | `ApprovalGatedActionGraphBuilder` | `RequestPort` → `ApprovedBankActionStep` grafiğini kurar |
-| `ExecuteBankActionForApprovalDecisionAsync(...)` | `WorkflowProcessor` | Onay varsa bankaya tek istek gönderir; istisna sızdırmaz |
+| `ExecuteBankActionForApprovalDecisionAsync(...)` | `WorkflowActionGateway` | Onay varsa bankaya tek istek gönderir; istisna sızdırmaz |
 | `ComputeIdempotencyToken(view)` | `GenericConfirmationView` | Akış adı + sıralı slotlardan SHA-256 |
 
 ---
@@ -902,7 +902,7 @@ sequenceDiagram
     participant R as Router
     participant O as Orkestratör
     participant WR as WorkflowRegistry
-    participant E as WorkflowEngine
+    participant E as WorkflowProcessor
     participant WA as card_paymentAsistani
     participant SP as Kart/Hesap uzmanı
     participant BA as Banka
@@ -915,7 +915,7 @@ sequenceDiagram
     O->>O: model → start_workflow("card-payment")
     O->>WR: BeginWorkflow → CreateEngineAsync
     WR->>WR: DeclareExpectedSlots(cardId, amount, sourceAccountId)
-    WR-->>E: WorkflowEngine
+    WR-->>E: WorkflowProcessor
     O->>E: AdvanceWorkflowStepAsync(initialMessage)
     E->>WA: kickoff + slot özeti + tur yönergesi
     WA->>SP: kart_uzmanina_sor (kart listesi)
@@ -934,7 +934,7 @@ sequenceDiagram
     WA->>WA: update_slot × 3 → şema kapısı → oturum
     WA->>WA: propose_card_payment()
     WA-->>E: PROPOSAL_READY: {...}
-    E->>E: ConcludeSlotFillingAsync · IdempotencyToken · Phase=awaiting_approval
+    E->>E: CompleteSlotFillingAsync · IdempotencyToken · Phase=awaiting_approval
     E-->>G: AwaitApproval(view)
     G-->>U: CONFIRM_PAYMENT + mkCode + slotlar
 
@@ -981,7 +981,7 @@ Akış hâlâ açıkken gelen ikinci onayda ise `ApplyApprovalDecisionAsync` iç
 
 | # | Katman | Nerede |
 |---|---|---|
-| 1 | HITL onay kapısı — para hareketi model tarafından tetiklenemez | `ApprovalGatedActionGraphBuilder`, `WorkflowEngine.ApplyApprovalDecisionAsync` |
+| 1 | HITL onay kapısı — para hareketi model tarafından tetiklenemez | `ApprovalGatedActionGraphBuilder`, `WorkflowProcessor.ApplyApprovalDecisionAsync` |
 | 2 | Idempotency — çift tıklama çift tahsilat üretmez | `GenericConfirmationView.ComputeIdempotencyToken` + oturum kilidi |
 | 3 | Çıktı bariyeri — tek çıkış noktasında deterministik temizlik | `ResponseSanitizer` ← `GatewayService.FinalizeResponse` |
 | 4 | Oturum izolasyonu — farklı oturum iç içe açılamaz; oturum kimliği hiçbir araca verilmez | `AmbientSessionAccessor` |

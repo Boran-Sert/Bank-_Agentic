@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using Banking.Agents.Runtime;
 using Banking.Agents.Sessions;
 using Banking.Agents.Specialists;
@@ -8,7 +6,6 @@ using Banking.Agents.Validation;
 using Banking.Agents.Workflows.Declarative;
 using Banking.Domain.Constants;
 using Banking.Domain.Serialization;
-using Banking.Mcp.Registry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Memory;

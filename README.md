@@ -24,7 +24,7 @@ Sistem, kullanıcı sorularını karşılayan bir **Orkestratör Ajan**, uzmanl�
          HesapUzmani    KrediKartiUzmani   AnalizUzmani     RequestPort (HITL Gate)
               │                │                │                  │
               └───────────────►├◄───────────────┘                  ▼
-                               ▼                          RestWorkflowExecutor
+                               ▼                          WorkflowProcessor
                          Banking.Mcp                              │
                         (ToolRegistry)                            │
                                │                                  │
@@ -151,8 +151,83 @@ dotnet run --project tools/LoadTest       # çalışan sunucuya karşı uçtan u
 
 ---
 
-## 6. Detaylı Mimari ve Tasarım Dokümanı
+## 6. Eklenmesi Planlanan Özellikler
+
+Aşağıdaki üç madde de mimaride **bilinçli olarak açık bırakılmış boşluklara** oturuyor: hiçbiri akışın yeniden yazılmasını gerektirmez, üçü de geriye dönük uyumludur — bugünkü YAML tanımları olduğu gibi çalışmaya devam eder.
+
+### Dağıtık oturum deposu (Redis) — tek DI satırıyla yatay ölçekleme
+
+Oturum durumu bugün bellek içinde tutuluyor (`InMemorySessionStore`, kayan TTL). Bu, tek süreçte kusursuz çalışır ama uygulama iki kopyaya çıktığında kullanıcının yarım kalmış ödemesi diğer kopyada görünmez.
+
+Çözüm **yeni bir mimari değil, var olan bir arayüzün ikinci uygulaması**: `ISessionStore` tam olarak bu gün için tasarlandı — metot imzaları ağ gecikmesini karşılamak üzere `ValueTask` döndürüyor ve tek çağıranı `AmbientSessionAccessor`. Uygulama kodunun hiçbir yeri oturum deposunu doğrudan çağırmadığı için değişecek yer **bir sınıf ve bir DI kaydından ibaret**.
+
+Bunun bu kadar ucuz olmasının nedeni oturum disiplininin baştan buna göre kurulmuş olması: durum istek başına **bir kez** okunur, scope kapanışında **bir kez** yazılır. Ara okuma/yazma olmadığı için Redis'e giden çağrı sayısı da istek başına ikidir — dağıtık depo, sohbet başına onlarca round-trip'e dönüşmez.
+
+Kazanım tabloya dökülürse:
+
+| Bugün | Redis ile |
+|---|---|
+| Tek süreç; ikinci kopya oturumu göremez | Kopya sayısı serbest, oturum ortak |
+| Yeniden başlatma yarım akışları düşürür | Akış pod yeniden başlasa da kaldığı yerden devam eder |
+| Yük dengeleyicide yapışkan oturum şart | **Yapışkan oturum gerekmez** |
+
+Son satır önemli: HITL onay grafiği zaten **tek bir HTTP isteği içinde** kurulup çalıştırılıyor, sunucuda askıda bekleyen bir çalıştırma bırakılmıyor. Yani mimari yapışkan oturuma bugün de ihtiyaç duymuyor; Redis bu resmi tamamlıyor.
+
+Aynı hamle ikinci bir seam'i de açıyor: `ISemanticIndexStore`. Vektör indeksleri de Redis'e alındığında N kopya aynı katalogu N kez gömmek yerine tek bir paylaşılan indeksi okur — açılış süresi ve gömme maliyeti kopya sayısıyla birlikte artmayı bırakır.
+
+### Kısıtlı seçim: "yalnızca bunlardan birini seçebilirsin"
+
+Bugün YAML şeması bir slot için tipi, zorunluluğu ve açıklamasını taşıyor. Taşımadığı şey **izin verilen değerler kümesi**. Yani "hesap türü" alanına modelin `vadeli`, `Vadeli Mevduat` ya da `tasarruf` yazmasını ayıran deterministik bir kural yok; alan `string` olduğu için üçü de geçerli.
+
+Planlanan ek, şema alanına bir değer listesi koymak:
+
+```yaml
+outputSchema:
+  type: object
+  properties:
+    hesapTuru:
+      type: string
+      required: true
+      description: Açılacak hesabın türü
+      allowedValues: [vadeli, vadesiz, altin]   # ← yeni
+```
+
+Bu tek satır sistemin **üç ayrı katmanında birden** karşılık buluyor ve asıl değeri bu:
+
+1. **Deterministik kapı.** Listede olmayan değer `SchemaValidatedSlotWriter` tarafından oturuma yazılmadan reddedilir — modelin talimata uyup uymamasından bağımsız olarak. Kategorik alanlarda uydurma yüzeyi sıfıra iner; yanlış bir "hesap türü" bankaya ulaşamaz.
+2. **Ajanın sorusu netleşir.** Beklenen değerler, tip bilgisinin bugün de aktığı kanaldan (`update_slot` araç açıklaması) modele ulaşır. Ajan "hesap türünü söyler misiniz?" yerine **"Vadeli mi, vadesiz mi, altın mı?"** diye sorar — tur sayısı düşer, kullanıcı ne yazacağını tahmin etmek zorunda kalmaz.
+3. **Arayüz gerçek bir seçim kutusuna dönüşür.** Hem onay ekranı hem de akış oluşturma formu listeyi olduğu gibi render eder.
+
+Formda da karşılığı olacak: parametre satırına "izin verilen değerler" girişi eklenir ve girilen liste üretilen YAML'a otomatik işlenir — akışı arayüzden tanımlayan kişinin YAML sözdizimi bilmesi gerekmez.
+
+### Tip sistemi: Yetersiz kalmakta
+
+Bugün doğrulama kapısı JSON'un kaba tiplerini ayırt ediyor: `string`, `number`, `boolean`, `object`, `array`. Bunun iki pratik sonucu var ve ikisi de bir fintech için fazla toleranslı:
+
+- **`integer` ile `number` arasında fark yok.** `taksitSayisi` alanı `integer` bildirilse bile `3.5` değeri kapıdan geçer.
+- **Tanınmayan tip = kısıtsız alan.** YAML'a bugün `decimal` ya da `guid` yazarsan hata almazsın — ama **hiçbir kısıt da uygulanmaz.** Arayüzün tip listesinde duran "Tarih" seçeneği de bu durumda: seçilebiliyor, henüz zorlanmıyor.
+
+Planlanan genişleme, tipi kaba bir JSON sınıfı olmaktan çıkarıp gerçek bir sözleşmeye dönüştürüyor:
+
+| Tip                 | Nerede işe yarar                             | Neyi engeller                                                            |
+|---------------------|----------------------------------------------|--------------------------------------------------------------------------|
+| `int`, `long`       | Taksit sayısı, vade ayı, adet                | Ondalıklı değerin tam sayı alanına yazılması                             |
+| `decimal`           | **Para tutarları**                           | İkili kayan noktanın yuvarlama hatası; tutarın `double` olarak taşınması |
+| `double` / `float`  | Oran, faiz, puan                             | Hassasiyet gerektirmeyen alanların gereksiz `decimal` maliyeti           |
+| `guid`              | `cardId`, `sourceAccountId` gibi kimlikler   | Biçimi bozuk kimliğin bankaya kadar gitmesi                              |
+| `date` / `datetime` | Vade tarihi, talimat günü                    | Serbest metin tarihin uca ulaşması                                       |
+| `özel beklenen`     | Backend tarafında beklenen özel veri tipleri | Backend ile uyumlu olmayan değerlerin reddedilmesi                       |
+
+En çok kazandıran ikisi:
+
+**`decimal` — para için doğru tip.** Tutar alanının `number` olması, değerin yol boyunca kayan noktalı sayıya dönüşmesini mümkün kılıyor; ikili kayan nokta ise `0.1 + 0.2` gibi basit toplamlarda bile tam sonuç vermez. Para alanını YAML'da `decimal` bildirmek, hem niyeti açıkça yazılı hâle getirir hem de kapının bunu **zorlamasını** sağlar — tutar bankaya giden gövdeye kadar hassasiyet kaybetmeden gider.
+
+**`guid` — hata bankaya gitmeden yakalanır.** Bugün biçimi bozuk bir kart kimliği ancak bankanın yanıtında hata olarak görünür: kullanıcı bir tur kaybeder, izlerde banka hatası birikir. Tip kapısı bunu **aynı turda** yakalar; ajan hatalı değeri reddeden mesajı alır ve kullanıcıya doğru alanı yeniden sorar. Kullanıcı bir banka hatası değil, bir soru görür.
+
+Doğrulamanın nerede yapıldığı değişmiyor — kural yine tek bir yerde, `SchemaValidatedSlotWriter` içinde duruyor; genişleyen tek şey tanınan tip kümesi. Ve bu genişleme bilinçli olarak **şema doğrulamasıyla sınırlı**: yetersiz bakiye, borcu aşan tutar ya da IBAN'ın gerçekten var olup olmadığı gibi bankacılık kuralları bankanın uçlarına ait kalmaya devam eder. Sistem bankanın kurallarını ikinci kez tanımlamaz.
+
+---
+
+## 7. Detaylı Mimari ve Tasarım Dokümanı
 
 Projenin tüm sınıf detayları, metot açıklamaları, kararları içeren eksiksiz Mermaid akış şeması ve uçtan uca senaryolar için [ANALIZ.md](ANALIZ.md) dokümanını inceleyebilirsiniz.
-</content>
-</invoke>

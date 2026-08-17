@@ -4,7 +4,7 @@ namespace Banking.Agents.Workflows.Declarative;
 /// Bir MAF deklaratif ajan tanımının (YAML veya JSON) tam C# karşılığı. Sistemdeki tek iş akışı
 /// kayıt biçimidir; bu tipe eklenmeyen bir YAML alanı çalışma zamanında okunmaz.
 /// </summary>
-public sealed class MicrosoftAgentDeclarativeDefinition
+public sealed class DeclarativeWorkflowDefinition
 {
     /// <summary>Tanımın türü (<c>kind</c>). Yürürlükteki tek desteklenen değer <c>Prompt</c>'tur.</summary>
     public string Kind { get; set; } = "Prompt";

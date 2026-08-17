@@ -16,7 +16,7 @@ namespace Banking.Agents.Workflows.Engine;
 public sealed class WorkflowRegistry(
     WorkflowAgentFactory workflowAgentFactory,
     AmbientSessionAccessor sessionAccessor,
-    RestWorkflowExecutor actionExecutor,
+    WorkflowActionGateway actionActionGateway,
     Lazy<OrchestratorFallback> orchestratorFallback,
     TraceHub hub)
 {
@@ -30,7 +30,7 @@ public sealed class WorkflowRegistry(
     private sealed record RegisteredWorkflow(
         WorkflowActionDefinition Action,
         IReadOnlyDictionary<string, DeclarativePropertyConfig>? SlotSchema,
-        MicrosoftAgentDeclarativeDefinition Definition);
+        DeclarativeWorkflowDefinition Definition);
 
     /// <summary>Akış adı → kayıt. Kayıtlar çalışma zamanında eklenebilir.</summary>
     private readonly ConcurrentDictionary<string, RegisteredWorkflow> _workflows =
@@ -52,7 +52,7 @@ public sealed class WorkflowRegistry(
     /// MAF deklaratif YAML/JSON tanımını çalışma zamanında kaydeder. Aynı ad ikinci kez
     /// gönderildiğinde kayıt üzerine yazılır; semantik indekste çift kayıt oluşmaz.
     /// </summary>
-    public void RegisterDeclarativeWorkflow(MicrosoftAgentDeclarativeDefinition definition)
+    public void RegisterDeclarativeWorkflow(DeclarativeWorkflowDefinition definition)
     {
         var workflowName = definition.Name.ToLowerInvariant();
 
@@ -76,7 +76,7 @@ public sealed class WorkflowRegistry(
 
     /// <summary>Adı verilen akış için bu isteğe ait motoru üretir.</summary>
     /// <exception cref="KeyNotFoundException">Verilen ad kayıtlı bir akışa karşılık gelmediğinde fırlatılır.</exception>
-    public async Task<WorkflowEngine> CreateEngineAsync(string workflowName)
+    public async Task<WorkflowProcessor> CreateEngineAsync(string workflowName)
     {
         if (_workflows.TryGetValue(workflowName, out var registered))
             return await BuildEngineAsync(registered);
@@ -90,7 +90,7 @@ public sealed class WorkflowRegistry(
     /// Kayıttan bu isteğe ait motoru kurar. Sıra bağlayıcıdır: önce şema oturuma tanıtılır, sonra
     /// ajan kimliği kurulur, en son motor bağlanır.
     /// </summary>
-    private async Task<WorkflowEngine> BuildEngineAsync(RegisteredWorkflow registered)
+    private async Task<WorkflowProcessor> BuildEngineAsync(RegisteredWorkflow registered)
     {
         var session = sessionAccessor.Current;
 
@@ -111,7 +111,7 @@ public sealed class WorkflowRegistry(
         var workflowAgent = await workflowAgentFactory.GetOrCreateAsync(agentDefinition);
 
         // Devretme kanalı geç çözülür (döngüsel bağımlılık)
-        return new WorkflowEngine(
-            session, registered.Action, workflowAgent, actionExecutor, orchestratorFallback.Value, hub);
+        return new WorkflowProcessor(
+            session, registered.Action, workflowAgent, actionActionGateway, orchestratorFallback.Value, hub);
     }
 }

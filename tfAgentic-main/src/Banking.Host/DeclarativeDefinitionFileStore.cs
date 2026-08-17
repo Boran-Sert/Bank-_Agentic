@@ -5,7 +5,7 @@ namespace Banking.Host;
 /// desteklenen uzantıları süzer, içeriği okur ve kaydederken adı doğrular. Ayrıştırma ve kayıt
 /// burada değildir; o adım tanım türüne göre değişir ve çağıranda kalır.
 /// </summary>
-public static class DeclarativeFileStore
+public static class DeclarativeDefinitionFileStore
 {
     private static readonly string[] SupportedExtensions = [".yaml", ".yml", ".json"];
 
@@ -26,7 +26,7 @@ public static class DeclarativeFileStore
     }
 
     /// <summary>İçeriğin JSON mu YAML mı olduğunu ilk anlamlı karakterden anlar.</summary>
-    public static bool IsJson(string content) => content.TrimStart().StartsWith('{');
+    public static bool IsJsonContent(string content) => content.TrimStart().StartsWith('{');
 
     /// <summary>
     /// Tanım adının dosya adı olarak kullanılmaya uygun olduğunu doğrular. Ad doğrudan dosya yoluna

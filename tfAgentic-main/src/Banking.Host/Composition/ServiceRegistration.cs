@@ -95,10 +95,10 @@ public static class ServiceRegistration
         // Gözlemci kaydı AddBankApiClient'tan sonradır; oradaki sessiz varsayılanın yerini alır
         builder.Services.AddSingleton<IBankApiCallObserver, TraceHubBankApiObserver>();
 
-        builder.Services.AddSingleton<RestWorkflowExecutor>();
+        builder.Services.AddSingleton<WorkflowActionGateway>();
 
         // --- Gateway ---
-        builder.Services.AddSingleton<FlowRouter>();
+        builder.Services.AddSingleton<WorkflowOrOrchestratorRouter>();
         builder.Services.AddSingleton<GatewayResponseMapper>();
         builder.Services.AddSingleton<GatewayService>();
         builder.Services.AddSingleton<ResponseSanitizer>();

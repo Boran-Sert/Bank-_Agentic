@@ -28,11 +28,11 @@ public delegate Task<string> OrchestratorFallback(string userMessage, Cancellati
 /// (<see cref="WorkflowActionDefinition.CallsBank"/>) ve eylem kullanıcı onaylarsa çalışır.</item>
 /// </list>
 /// </summary>
-public sealed class WorkflowEngine(
+public sealed class WorkflowProcessor(
     SessionContext session,
     WorkflowActionDefinition action,
     AIAgent workflowAgent,
-    RestWorkflowExecutor actionExecutor,
+    WorkflowActionGateway actionActionGateway,
     OrchestratorFallback orchestratorFallback,
     TraceHub hub)
 {
@@ -60,7 +60,7 @@ public sealed class WorkflowEngine(
     {
         session.Phase = WorkflowPhases.SlotFilling;
 
-        var slotSummary = session.GetSlotStatus().DescribeForAgentTurn();
+        var slotSummary = session.GetSlotCollectionStatus().DescribeForAgentTurn();
 
         var kickoffMessage = string.IsNullOrWhiteSpace(initialMessage)
             ? $"İşlemi başlatmak istiyorum. Lütfen eksik bilgileri sor.\n\n({slotSummary})"
@@ -80,7 +80,7 @@ public sealed class WorkflowEngine(
     private async Task<WorkflowStepResult> CollectSlotsAsync(string? userMessage, CancellationToken cancellationToken)
     {
         var answer = userMessage ?? string.Empty;
-        var slotSummary = session.GetSlotStatus().DescribeForAgentTurn();
+        var slotSummary = session.GetSlotCollectionStatus().DescribeForAgentTurn();
 
         var agentText = await RunAgentTurnAsync(
             $"{answer}\n\n({slotSummary})\n\n{AgentPrompts.SlotTurnDirective}", cancellationToken);
@@ -97,7 +97,7 @@ public sealed class WorkflowEngine(
         var agentSignal = session.ConsumeAgentSignal();
 
         // İptal
-        if (agentSignal == WorkflowAgentSignals.Cancelled)
+        if (agentSignal == WorkflowAgentControlSignals.Cancelled)
         {
             session.CancelWorkflow();
             hub.PublishTraceEvent(TraceCategories.Session, "Oturum iptal edildi → akıştan çıkıldı");
@@ -105,7 +105,7 @@ public sealed class WorkflowEngine(
         }
 
         // Konu dışı soru → orkestratöre devir
-        if (agentSignal == WorkflowAgentSignals.Handoff)
+        if (agentSignal == WorkflowAgentControlSignals.HandoffToOrchestrator)
         {
             hub.PublishTraceEvent(TraceCategories.Workflow, "Konu dışı soru algılandı → orkestratöre devredildi");
             var orchestratorReply = await orchestratorFallback(userMessage, cancellationToken);
@@ -115,14 +115,14 @@ public sealed class WorkflowEngine(
         }
 
         // Slotlar araç çağrılarıyla tamamlandı
-        if (session.GetSlotStatus().IsComplete && session.ReadProposedSlots() is { } completedSlots)
-            return await ConcludeSlotFillingAsync(completedSlots, cancellationToken);
+        if (session.GetSlotCollectionStatus().IsComplete && session.ReadProposedSlots() is { } completedSlots)
+            return await CompleteSlotFillingAsync(completedSlots, cancellationToken);
 
         // Ajan teklif JSON'ı üretti
-        if (Contains(agentText, WorkflowAgentSignals.ProposalReady) && TryParseProposal(agentText!) is { } proposedSlots)
+        if (Contains(agentText, WorkflowAgentControlSignals.ProposalReady) && TryParseProposal(agentText!) is { } proposedSlots)
         {
             session.StoreProposedSlots(action.WorkflowName, proposedSlots);
-            return await ConcludeSlotFillingAsync(proposedSlots, cancellationToken);
+            return await CompleteSlotFillingAsync(proposedSlots, cancellationToken);
         }
 
         // Eksik bilgi → ajanın sorusu kullanıcıya
@@ -133,10 +133,10 @@ public sealed class WorkflowEngine(
     // --- Evre 3: onay kapısı (HITL) ---
 
     /// <summary>Parametreler tamamlandığında akışı sonlandırma yoluna sokar.</summary>
-    private async Task<WorkflowStepResult> ConcludeSlotFillingAsync(
+    private async Task<WorkflowStepResult> CompleteSlotFillingAsync(
         Dictionary<string, object?> slots, CancellationToken cancellationToken)
     {
-        var confirmationView = actionExecutor.BuildConfirmationView(action, slots);
+        var confirmationView = actionActionGateway.BuildConfirmationView(action, slots);
 
         session.StoreProposedSlots(confirmationView.WorkflowName, slots);
         session.PendingConfirmation = confirmationView;
@@ -207,10 +207,10 @@ public sealed class WorkflowEngine(
     {
         var requiresApproval = action.CallsBank;
 
-        var workflow = DeterministicActionWorkflow.BuildApprovalGraph(
+        var workflow = ApprovalGatedActionGraphBuilder.BuildGraph(
             action: action,
             slots: slots,
-            actionExecutor: actionExecutor,
+            actionActionGateway: actionActionGateway,
             hub: hub,
             requiresApproval: requiresApproval);
 
@@ -293,8 +293,8 @@ public sealed class WorkflowEngine(
 
     private static Dictionary<string, object?>? TryParseProposal(string agentText)
     {
-        var jsonStartIndex = agentText.IndexOf(WorkflowAgentSignals.ProposalReady, StringComparison.Ordinal)
-                             + WorkflowAgentSignals.ProposalReady.Length;
+        var jsonStartIndex = agentText.IndexOf(WorkflowAgentControlSignals.ProposalReady, StringComparison.Ordinal)
+                             + WorkflowAgentControlSignals.ProposalReady.Length;
 
         try
         {

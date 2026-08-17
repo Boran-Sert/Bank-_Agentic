@@ -12,13 +12,13 @@ namespace Banking.Host.Composition;
 /// Uygulama açılışında yapılan hazırlıklar: semantik indekslerin doldurulması, diskteki deklaratif
 /// tanımların yüklenmesi ve ajan grafiğinin ön ısıtılması.
 /// </summary>
-public static class StartupLoader
+public static class ApplicationStartupTasks
 {
     /// <summary>Deklaratif iş akışı tanımlarının bulunduğu klasör.</summary>
-    public const string WorkflowsFolder = "declarative-agents";
+    public const string WorkflowDefinitionsFolderName = "declarative-agents";
 
     /// <summary>Deklaratif uzman tanımlarının bulunduğu klasör.</summary>
-    public const string SpecialistsFolder = "specialist-agents";
+    public const string SpecialistDefinitionsFolderName = "specialist-agents";
 
     /// <summary>
     /// Semantik indeksleri doldurur ve diskteki deklaratif tanımları kaydeder. Bozuk bir tanım
@@ -37,11 +37,11 @@ public static class StartupLoader
         var workflowRegistry = services.GetRequiredService<WorkflowRegistry>();
 
         foreach (var (filePath, content) in
-                 DeclarativeFileStore.ReadAllDefinitionFiles(app.Environment.ContentRootPath, WorkflowsFolder))
+                 DeclarativeDefinitionFileStore.ReadAllDefinitionFiles(app.Environment.ContentRootPath, WorkflowDefinitionsFolderName))
         {
             try
             {
-                var definition = DeclarativeFileStore.IsJson(content)
+                var definition = DeclarativeDefinitionFileStore.IsJsonContent(content)
                     ? DeclarativeWorkflowBuilder.ParseFromJson(content)
                     : DeclarativeWorkflowBuilder.ParseFromYaml(content);
 
@@ -60,11 +60,11 @@ public static class StartupLoader
         var specialistCatalog = services.GetRequiredService<SpecialistCatalog>();
 
         foreach (var (filePath, content) in
-                 DeclarativeFileStore.ReadAllDefinitionFiles(app.Environment.ContentRootPath, SpecialistsFolder))
+                 DeclarativeDefinitionFileStore.ReadAllDefinitionFiles(app.Environment.ContentRootPath, SpecialistDefinitionsFolderName))
         {
             try
             {
-                await specialistCatalog.RegisterDeclarativeSpecialistAsync(DeclarativeFileStore.IsJson(content)
+                await specialistCatalog.RegisterDeclarativeSpecialistAsync(DeclarativeDefinitionFileStore.IsJsonContent(content)
                     ? DeclarativeSpecialistBuilder.ParseFromJson(content)
                     : DeclarativeSpecialistBuilder.ParseFromYaml(content));
             }

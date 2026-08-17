@@ -8,13 +8,13 @@ namespace Banking.Gateway;
 
 /// <summary>
 /// Kullanıcı isteklerinin giriş noktası ve yanıtların tek çıkış noktası. Üç sorumluluğu vardır:
-/// oturum scope'unu açmak, isteği <see cref="FlowRouter"/>'a devretmek, dönen sonucu
+/// oturum scope'unu açmak, isteği <see cref="WorkflowOrOrchestratorRouter"/>'a devretmek, dönen sonucu
 /// <see cref="GatewayResponseMapper"/> ile UI protokolüne çevirip <see cref="ResponseSanitizer"/>'dan
 /// geçirmek. Oturum scope'u burada açılır ve burada kapanır; aradaki hiçbir katman oturum deposuna
 /// erişmez.
 /// </summary>
 public sealed class GatewayService(
-    FlowRouter router,
+    WorkflowOrOrchestratorRouter router,
     TraceHub hub,
     ILogger<GatewayService> logger,
     ResponseSanitizer sanitizer,
@@ -42,8 +42,8 @@ public sealed class GatewayService(
 
         try
         {
-            var flowResult = await router.RouteUserRequestAsync(request.Text, cancellationToken);
-            return FinalizeResponse(responseMapper.MapFlowResultToGatewayResponse(flowResult), sessionToken);
+            var routingResult = await router.RouteUserRequestAsync(request.Text, cancellationToken);
+            return FinalizeResponse(responseMapper.MapRoutingResultToGatewayResponse(routingResult), sessionToken);
         }
         catch (OperationCanceledException)
         {

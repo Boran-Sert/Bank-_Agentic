@@ -10,7 +10,7 @@ public static class TraceCategories
     public const string Gateway = "GATEWAY";
 
     /// <summary>İsteğin akış ile orkestratör arasındaki yönlendirme kararı.</summary>
-    public const string FlowRouter = "FLOWROUTER";
+    public const string Routing = "ROUTING";
 
     /// <summary>Uygulama yaşam döngüsü olayları.</summary>
     public const string System = "SYSTEM";

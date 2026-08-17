@@ -6,7 +6,7 @@ namespace Banking.Agents.Workflows.Slots;
 /// <param name="FilledSlots">Değeri girilmiş ve anlamlı olan slotlar.</param>
 /// <param name="MissingSlots">Henüz sorulmamış veya boş bırakılmış zorunlu slotlar.</param>
 /// <param name="OptionalSlots">Doldurulmamış, ancak zorunlu da olmayan slotlar.</param>
-public sealed record SlotStatus(
+public sealed record SlotCollectionStatus(
     IReadOnlyDictionary<string, object> FilledSlots,
     IReadOnlyList<string> MissingSlots,
     IReadOnlyList<string> OptionalSlots)
@@ -53,7 +53,7 @@ public sealed record SlotStatus(
 /// Toplanan ham değerler ile YAML şeması arasındaki saf karşılaştırma katmanı. Bağımlılığı, durumu
 /// ve yan etkisi yoktur; oturum yönetimi ve izleme <see cref="Sessions.SessionContext"/>'e aittir.
 /// </summary>
-internal static class SlotBinder
+internal static class SlotCompletenessEvaluator
 {
     /// <summary>
     /// Dolu, eksik ve opsiyonel slotları tespit eder.
@@ -63,7 +63,7 @@ internal static class SlotBinder
     /// Akışın YAML şeması. <c>null</c> veya boş olduğunda beklenen slot kümesi bilinmiyor demektir;
     /// bu durumda yalnızca toplanmış değerler dolu sayılır ve eksik slot raporlanmaz.
     /// </param>
-    public static SlotStatus DetermineSlotStatus(
+    public static SlotCollectionStatus DetermineSlotCollectionStatus(
         IReadOnlyDictionary<string, object?> slotValues,
         IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
     {
@@ -73,18 +73,18 @@ internal static class SlotBinder
 
         foreach (var slotName in ResolveSlotNames(slotValues, expectedSlots))
         {
-            if (slotValues.TryGetValue(slotName, out var value) && value is not null && !IsBlank(value))
+            if (slotValues.TryGetValue(slotName, out var value) && value is not null && !IsMeaninglessValue(value))
             {
                 filled[slotName] = value;
                 continue;
             }
 
             // Opsiyonel slot akışı bekletmez
-            if (IsRequired(slotName, expectedSlots)) missing.Add(slotName);
+            if (IsRequiredSlot(slotName, expectedSlots)) missing.Add(slotName);
             else optional.Add(slotName);
         }
 
-        return new SlotStatus(filled, missing, optional);
+        return new SlotCollectionStatus(filled, missing, optional);
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ internal static class SlotBinder
     /// Slotun zorunlu olup olmadığını belirler. Şemada tanımlı olmayan slot zorunlu sayılmaz; modelin
     /// fazladan yazdığı bir anahtar akışı bekletemez.
     /// </summary>
-    private static bool IsRequired(
+    private static bool IsRequiredSlot(
         string slotName, IReadOnlyDictionary<string, DeclarativePropertyConfig>? expectedSlots)
     {
         if (expectedSlots is null) return false;
@@ -127,7 +127,7 @@ internal static class SlotBinder
     /// <summary>
     /// Değerin var olduğu hâlde anlamsız olduğunu belirler: boş metin ya da sıfır veya negatif tutar.
     /// </summary>
-    private static bool IsBlank(object value) => value switch
+    private static bool IsMeaninglessValue(object value) => value switch
     {
         string text => string.IsNullOrWhiteSpace(text),
         decimal amount => amount <= 0m,

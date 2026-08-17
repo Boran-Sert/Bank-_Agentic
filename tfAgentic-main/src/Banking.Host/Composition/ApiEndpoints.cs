@@ -76,10 +76,10 @@ public static class ApiEndpoints
             if (string.IsNullOrWhiteSpace(content))
                 return Results.BadRequest(new { error = "İçerik boş olamaz. Lütfen Microsoft Agent Framework Declarative YAML veya JSON metni gönderin." });
 
-            MicrosoftAgentDeclarativeDefinition definition;
+            DeclarativeWorkflowDefinition definition;
             try
             {
-                definition = DeclarativeFileStore.IsJson(content)
+                definition = DeclarativeDefinitionFileStore.IsJsonContent(content)
                     ? DeclarativeWorkflowBuilder.ParseFromJson(content)
                     : DeclarativeWorkflowBuilder.ParseFromYaml(content);
             }
@@ -92,12 +92,12 @@ public static class ApiEndpoints
                 return Results.BadRequest(new { error = "Geçersiz MAF Declarative şeması. 'name' (veya 'Name') alanı zorunludur." });
 
             var workflowName = definition.Name.ToLowerInvariant();
-            if (!DeclarativeFileStore.IsValidDefinitionName(workflowName))
+            if (!DeclarativeDefinitionFileStore.IsValidDefinitionName(workflowName))
                 return Results.BadRequest(new { error = "'name' yalnızca harf, rakam, '-' ve '_' içerebilir." });
 
             try
             {
-                registry.RegisterDeclarativeWorkflow(definition);
+                registry.RegisterDeclarativeWorkflow(definition); 
             }
             catch (InvalidOperationException exception)
             {
@@ -105,8 +105,8 @@ public static class ApiEndpoints
                 return Results.BadRequest(new { error = exception.Message });
             }
 
-            var savedAs = await DeclarativeFileStore.SaveDefinitionFileAsync(
-                environment.ContentRootPath, StartupLoader.WorkflowsFolder, workflowName, content);
+            var savedAs = await DeclarativeDefinitionFileStore.SaveDefinitionFileAsync(
+                environment.ContentRootPath, ApplicationStartupTasks.WorkflowDefinitionsFolderName, workflowName, content);
 
             // Anında indeksleme
             searcher.AddOrUpdateWorkflow(new WorkflowMetadata(workflowName, definition.Description, definition.Instructions));
@@ -138,7 +138,7 @@ public static class ApiEndpoints
             SpecialistDefinition definition;
             try
             {
-                definition = DeclarativeFileStore.IsJson(content)
+                definition = DeclarativeDefinitionFileStore.IsJsonContent(content)
                     ? DeclarativeSpecialistBuilder.ParseFromJson(content)
                     : DeclarativeSpecialistBuilder.ParseFromYaml(content);
             }
@@ -148,7 +148,7 @@ public static class ApiEndpoints
             }
 
             var specialistName = (definition.Name ?? string.Empty).ToLowerInvariant();
-            if (!DeclarativeFileStore.IsValidDefinitionName(specialistName))
+            if (!DeclarativeDefinitionFileStore.IsValidDefinitionName(specialistName))
                 return Results.BadRequest(new { error = "'name' zorunludur ve yalnızca harf, rakam, '-' ve '_' içerebilir." });
 
             AgentCard card;
@@ -162,8 +162,8 @@ public static class ApiEndpoints
                 return Results.BadRequest(new { error = exception.Message });
             }
 
-            var savedAs = await DeclarativeFileStore.SaveDefinitionFileAsync(
-                environment.ContentRootPath, StartupLoader.SpecialistsFolder, specialistName, content);
+            var savedAs = await DeclarativeDefinitionFileStore.SaveDefinitionFileAsync(
+                environment.ContentRootPath, ApplicationStartupTasks.SpecialistDefinitionsFolderName, specialistName, content);
 
             hub.PublishTraceEvent(TraceCategories.Agent,
                 $"[UZMAN KAYDEDİLDİ] '{card.DisplayName}' çalışma zamanında eklendi ve diske kaydedildi",

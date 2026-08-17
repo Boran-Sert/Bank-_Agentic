@@ -17,9 +17,9 @@ public sealed class GatewayResponseMapper(
     TraceHub hub, MkCodeCatalog mkCodeCatalog, ILogger<GatewayResponseMapper> logger)
 {
     /// <summary>Yönlendirme sonucunu istemciye gönderilecek yanıta dönüştürür.</summary>
-    public GatewayResponse MapFlowResultToGatewayResponse(FlowExecutionResult flowResult) => flowResult switch
+    public GatewayResponse MapRoutingResultToGatewayResponse(RequestRoutingResult routingResult) => routingResult switch
     {
-        { ExecutionType: FlowExecutionType.WorkflowStep, WorkflowResult: { } workflowResult } =>
+        { ExecutionPath: RequestExecutionPath.WorkflowStep, WorkflowResult: { } workflowResult } =>
             MapWorkflowStep(workflowResult),
 
         { OrchestratorReply: { } orchestratorReply } =>

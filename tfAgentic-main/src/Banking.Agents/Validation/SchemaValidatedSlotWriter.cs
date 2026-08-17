@@ -68,7 +68,7 @@ public sealed class SchemaValidatedSlotWriter(
     /// </param>
     /// <param name="value">
     /// Ajanın gönderdiği ham değer. <c>null</c> bir tip hatası sayılmaz; eksiklik ayrı bir konudur
-    /// (bkz. <see cref="Workflows.Slots.SlotBinder"/>).
+    /// (bkz. <see cref="Workflows.Slots.SlotCompletenessEvaluator"/>).
     /// </param>
     /// <param name="expectedTypeDescription">Reddedilen değer için ajana bildirilecek beklenen tip.</param>
     private static bool MatchesDeclaredType(string? declaredType, object? value, out string expectedTypeDescription)

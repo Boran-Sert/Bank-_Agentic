@@ -98,15 +98,15 @@ public sealed class WorkflowAgentFactory(
     /// Akış ajanının araç kümesini kurar: uzman köprüleri ve motorun denetim araçları. Akış ajanı
     /// banka verisine doğrudan erişmez, her bilgiyi uzmanlara sorar; erişim kapsamı ilgili uzmanın
     /// araç listesiyle sınırlıdır. <c>update_slot</c>, <c>propose_*</c>, <c>cancel_*</c> ve
-    /// <c>handoff_*</c> banka aracı değil, ajanın <see cref="WorkflowEngine"/> ile haberleştiği tek
+    /// <c>handoff_*</c> banka aracı değil, ajanın <see cref="WorkflowProcessor"/> ile haberleştiği tek
     /// kanaldır.
     /// </summary>
     private List<AITool> BuildTools(WorkflowAgentDefinition definition)
     {
         var tools = new List<AITool>(specialistCatalog.BuildBridgeTools())
         {
-            BuildUpdateSlotTool(definition),
-            BuildProposeTool(definition),
+            BuildUpdateSlotTool(definition.SlotSchema, definition.SlotUpdateDescription),
+            BuildProposeTool(definition.ProposeToolName, definition.AgentName),
             BuildCancelTool(definition.CancelToolName),
             BuildHandoffTool(definition.HandoffToolName)
         };
@@ -119,16 +119,19 @@ public sealed class WorkflowAgentFactory(
     /// geçer; uymayan değer kaydedilmez. Bu kapı yalnızca şema uyumunu denetler, bankacılık kuralı
     /// uygulamaz.
     /// </summary>
-    private AITool BuildUpdateSlotTool(WorkflowAgentDefinition definition)
+    /// <param name="slotSchema">Akışın YAML slot şeması; değer bu tanıma göre kabul veya reddedilir.</param>
+    /// <param name="slotUpdateDescription">Aracın modele görünen açıklaması; beklenen tipler buna eklenir.</param>
+    private AITool BuildUpdateSlotTool(
+        IReadOnlyDictionary<string, DeclarativePropertyConfig>? slotSchema, string slotUpdateDescription)
     {
-        var slotWriter = new SchemaValidatedSlotWriter(sessionAccessor, hub, definition.SlotSchema);
+        var slotWriter = new SchemaValidatedSlotWriter(sessionAccessor, hub, slotSchema);
 
         var tool = AIFunctionFactory.Create(
             (string key, object value) => slotWriter.WriteSlotIfSchemaAccepts(key, value),
             new AIFunctionFactoryOptions
             {
                 Name = UpdateSlotToolName,
-                Description = definition.SlotUpdateDescription + DescribeExpectedTypes(definition.SlotSchema),
+                Description = slotUpdateDescription + DescribeExpectedTypes(slotSchema),
                 SerializerOptions = AgentJsonPolicy.ToolOptions
             });
 
@@ -155,15 +158,15 @@ public sealed class WorkflowAgentFactory(
     /// Teklif aracını kurar. Toplanan değerlerden onaya sunulacak slot kümesini oluşturur; eksik veya
     /// dönüştürülemeyen slot varsa teklif üretilmez ve ajana hangi slotun sorulacağı bildirilir.
     /// </summary>
-    private AITool BuildProposeTool(WorkflowAgentDefinition definition)
+    /// <param name="proposeToolName">Aracın modele görünen adı.</param>
+    /// <param name="agentName">Teklifin yazılacağı akışın adı; oturumda aktif akış yoksa bu ad kullanılır.</param>
+    private AITool BuildProposeTool(string proposeToolName, string agentName)
     {
-        var proposeToolName = definition.ProposeToolName;
-
         var tool = AIFunctionFactory.Create(
             () =>
             {
                 var session = sessionAccessor.Current;
-                var slotStatus = session.GetSlotStatus();
+                var slotStatus = session.GetSlotCollectionStatus();
 
                 if (!slotStatus.IsComplete)
                 {
@@ -173,10 +176,10 @@ public sealed class WorkflowAgentFactory(
 
                 var proposedSlots = slotStatus.ToProposedSlots();
 
-                session.StoreProposedSlots(session.ActiveWorkflowName ?? definition.AgentName, proposedSlots);
-                hub.PublishTraceEvent(TraceCategories.Approval, $"{definition.AgentName} parametreleri onaya hazır");
+                session.StoreProposedSlots(session.ActiveWorkflowName ?? agentName, proposedSlots);
+                hub.PublishTraceEvent(TraceCategories.Approval, $"{agentName} parametreleri onaya hazır");
 
-                return WorkflowAgentSignals.ProposalReady + proposedSlots.ToReadableJson();
+                return WorkflowAgentControlSignals.ProposalReady + proposedSlots.ToReadableJson();
             },
             new AIFunctionFactoryOptions
             {
@@ -191,7 +194,7 @@ public sealed class WorkflowAgentFactory(
     private AITool BuildCancelTool(string cancelToolName)
     {
         var tool = AIFunctionFactory.Create(
-            () => RaiseSignal(WorkflowAgentSignals.Cancelled),
+            () => RaiseSignal(WorkflowAgentControlSignals.Cancelled),
             new AIFunctionFactoryOptions
             {
                 Name = cancelToolName,
@@ -210,7 +213,7 @@ public sealed class WorkflowAgentFactory(
     private AITool BuildHandoffTool(string handoffToolName)
     {
         var tool = AIFunctionFactory.Create(
-            () => RaiseSignal(WorkflowAgentSignals.Handoff),
+            () => RaiseSignal(WorkflowAgentControlSignals.HandoffToOrchestrator),
             new AIFunctionFactoryOptions
             {
                 Name = handoffToolName,

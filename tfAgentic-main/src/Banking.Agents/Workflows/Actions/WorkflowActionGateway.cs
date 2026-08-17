@@ -13,7 +13,7 @@ namespace Banking.Agents.Workflows.Actions;
 /// <see cref="ExecuteBankActionForApprovalDecisionAsync"/> hiçbir koşulda istisna sızdırmaz — MAF grafiğinin içinde çalıştığı
 /// için başarısızlıklar <see cref="WorkflowOutcome.Failure"/> olarak döner.
 /// </summary>
-public sealed class RestWorkflowExecutor(IBankApiClient bank, TraceHub hub)
+public sealed class WorkflowActionGateway(IBankApiClient bank, TraceHub hub)
 {
     /// <summary>Toplanan slotlardan kullanıcıya gösterilecek onay ekranını üretir.</summary>
     /// <param name="action">Akışın kimliği ve ekran kodu.</param>

@@ -15,21 +15,21 @@ public static class DeclarativeWorkflowBuilder
 {
     /// <summary>YAML metnini deklaratif tanıma dönüştürür. Tanınmayan alanlar yok sayılır.</summary>
     /// <exception cref="InvalidOperationException">Metin geçerli bir tanıma çözümlenemediğinde fırlatılır.</exception>
-    public static MicrosoftAgentDeclarativeDefinition ParseFromYaml(string yamlContent)
+    public static DeclarativeWorkflowDefinition ParseFromYaml(string yamlContent)
     {
         var deserializer = new DeserializerBuilder()
             .WithNamingConvention(CamelCaseNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
             .Build();
 
-        return deserializer.Deserialize<MicrosoftAgentDeclarativeDefinition>(yamlContent)
+        return deserializer.Deserialize<DeclarativeWorkflowDefinition>(yamlContent)
                ?? throw new InvalidOperationException("Geçersiz Microsoft Agent Framework YAML şeması.");
     }
 
     /// <summary>JSON metnini deklaratif tanıma dönüştürür. Alan adları büyük/küçük harf duyarsızdır.</summary>
     /// <exception cref="InvalidOperationException">Metin geçerli bir tanıma çözümlenemediğinde fırlatılır.</exception>
-    public static MicrosoftAgentDeclarativeDefinition ParseFromJson(string jsonContent) =>
-        JsonSerializer.Deserialize<MicrosoftAgentDeclarativeDefinition>(
+    public static DeclarativeWorkflowDefinition ParseFromJson(string jsonContent) =>
+        JsonSerializer.Deserialize<DeclarativeWorkflowDefinition>(
             jsonContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
         ?? throw new InvalidOperationException("Geçersiz Microsoft Agent Framework JSON şeması.");
 
@@ -40,7 +40,7 @@ public static class DeclarativeWorkflowBuilder
     /// <param name="definition">Ayrıştırılmış YAML/JSON tanımı.</param>
     /// <param name="agentDefinition">Ajanın kimliği ve araç adları.</param>
     public static string BuildInstructions(
-        MicrosoftAgentDeclarativeDefinition definition, WorkflowAgentDefinition agentDefinition)
+        DeclarativeWorkflowDefinition definition, WorkflowAgentDefinition agentDefinition)
     {
         var agentName = string.IsNullOrWhiteSpace(definition.DisplayName) ? definition.Name : definition.DisplayName;
 

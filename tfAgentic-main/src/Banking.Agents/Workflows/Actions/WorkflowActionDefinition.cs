@@ -2,7 +2,7 @@ namespace Banking.Agents.Workflows.Actions;
 
 /// <summary>
 /// Bir akışın kimliğinin ve onay sonrası hedefinin veri hâli. Alanların tamamı YAML tanımından
-/// okunur; <see cref="RestWorkflowExecutor"/> akıştan akışa yalnızca bu kayıtla farklılaşır.
+/// okunur; <see cref="WorkflowActionGateway"/> akıştan akışa yalnızca bu kayıtla farklılaşır.
 /// </summary>
 /// <param name="WorkflowName">Akışın kanonik adı (YAML'daki <c>name</c>).</param>
 /// <param name="MkCode">Onay ekranını üreten UI ekran kodu; bilinmiyorsa <c>null</c>.</param>

@@ -11,28 +11,28 @@ namespace Banking.Agents.Workflows.Approval;
 /// oluşur: <c>RequestPort</c> onay kapısı ve ardından gelen eylem adımı. Para hareketi üreten hiçbir
 /// çağrı bu kapıdan geçmeden çalışmaz; model yalnızca onay ekranını hazırlar.
 /// </summary>
-public static class DeterministicActionWorkflow
+public static class ApprovalGatedActionGraphBuilder
 {
     /// <summary>
     /// Verilen akış tanımı ve slot kümesiyle MAF <see cref="Workflow"/> grafiğini kurar.
     /// </summary>
     /// <param name="action">Akışın kimliği ve banka hedefi.</param>
     /// <param name="slots">Onaya sunulmuş slot kümesi.</param>
-    /// <param name="actionExecutor">Onay sonrası çalıştırılacak executor.</param>
+    /// <param name="actionActionGateway">Onay sonrası çalıştırılacak executor.</param>
     /// <param name="hub">İzleme kanalı.</param>
     /// <param name="requiresApproval">
     /// <c>false</c> verildiğinde onay kapısı kurulmaz ve eylem doğrudan çalışır. Para hareketi
     /// içeren akışlarda daima <c>true</c> olmalıdır.
     /// </param>
-    public static Workflow BuildApprovalGraph(
+    public static Workflow BuildGraph(
         WorkflowActionDefinition action,
         IReadOnlyDictionary<string, object?> slots,
-        RestWorkflowExecutor actionExecutor,
+        WorkflowActionGateway actionActionGateway,
         TraceHub hub,
         bool requiresApproval = true)
     {
-        var executorStep = new DeterministicActionStep(
-            $"{action.WorkflowName}-executor", action, slots, actionExecutor, hub);
+        var executorStep = new ApprovedBankActionStep(
+            $"{action.WorkflowName}-executor", action, slots, actionActionGateway, hub);
 
         if (!requiresApproval)
         {
@@ -56,11 +56,11 @@ public static class DeterministicActionWorkflow
 /// Onay kararını girdi alıp eylemi model müdahalesi olmadan çalıştıran MAF adımı. Grafikteki tek
 /// yürütme düğümüdür.
 /// </summary>
-internal sealed class DeterministicActionStep(
+internal sealed class ApprovedBankActionStep(
     string id,
     WorkflowActionDefinition action,
     IReadOnlyDictionary<string, object?> slots,
-    RestWorkflowExecutor actionExecutor,
+    WorkflowActionGateway actionActionGateway,
     TraceHub hub)
     : Executor<bool, WorkflowOutcome>(id)
 {
@@ -69,6 +69,6 @@ internal sealed class DeterministicActionStep(
         bool approved, IWorkflowContext context, CancellationToken cancellationToken = default)
     {
         hub.PublishTraceEvent(TraceCategories.Approval, $"Workflow Adımı Çalıştırılıyor → Approved: {approved}");
-        return await actionExecutor.ExecuteBankActionForApprovalDecisionAsync(action, slots, approved, cancellationToken);
+        return await actionActionGateway.ExecuteBankActionForApprovalDecisionAsync(action, slots, approved, cancellationToken);
     }
 }

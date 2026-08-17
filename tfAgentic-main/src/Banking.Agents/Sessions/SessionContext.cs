@@ -78,7 +78,7 @@ public sealed class SessionContext
     /// İş akışı ajanının bir araç çağrısıyla bıraktığı denetim sinyalini (iptal veya devretme)
     /// kaydeder. Sinyal ajanın yanıt metninden okunmaz; kararı aracın kendisi oturuma yazar.
     /// </summary>
-    /// <param name="signal">Sinyal sabiti; geçerli değerler <see cref="Workflows.Engine.WorkflowAgentSignals"/> içindedir.</param>
+    /// <param name="signal">Sinyal sabiti; geçerli değerler <see cref="Workflows.Engine.WorkflowAgentControlSignals"/> içindedir.</param>
     public void RaiseAgentSignal(string signal)
     {
         State.PendingAgentSignal = signal;
@@ -108,9 +108,9 @@ public sealed class SessionContext
     }
 
     /// <summary>Akışın YAML şemasına göre dolu, eksik ve opsiyonel slotları hesaplar.</summary>
-    public SlotStatus GetSlotStatus()
+    public SlotCollectionStatus GetSlotCollectionStatus()
     {
-        var status = SlotBinder.DetermineSlotStatus(State.SlotValues, State.ExpectedSlots);
+        var status = SlotCompletenessEvaluator.DetermineSlotCollectionStatus(State.SlotValues, State.ExpectedSlots);
         _hub.PublishTraceEvent(TraceCategories.Slot,
             $"StateBag Durumu Sorgulandı → Dolu: {status.FilledSlots.Count}, Eksik: {status.MissingSlots.Count} | Tamamlandı: {status.IsComplete}");
 

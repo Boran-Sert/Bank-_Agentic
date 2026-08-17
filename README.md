@@ -231,3 +231,8 @@ Doğrulamanın nerede yapıldığı değişmiyor — kural yine tek bir yerde, `
 ## 7. Detaylı Mimari ve Tasarım Dokümanı
 
 Projenin tüm sınıf detayları, metot açıklamaları, kararları içeren eksiksiz Mermaid akış şeması ve uçtan uca senaryolar için [ANALIZ.md](ANALIZ.md) dokümanını inceleyebilirsiniz.
+
+> [!NOTE]
+> Sistem, local modellerle çalışabilecek şekilde de tasarlanmıştır (Ollama, vLLM vb.).
+
+---

@@ -147,8 +147,9 @@ dosyaydı — tak-çalıştır hedefiyle çelişiyordu.
 
 `TracingChatClient` artık her tamamlanan tur için ayrı bir `"{etiket} -> Token Maliyeti"` satırı
 yayınlıyor: model adı, girdi/çıktı/toplam token (sağlayıcı döndürdüyse) ve süre. Ölçülen baseline:
-basit soru = **4 tur, 6660 token, ~18 sn** (`llama3.2:latest`). Bu satır olmadan sonraki fazların
-etkisi kanıtlanamazdı.
+basit soru = **4 tur, 6660 token, ~18 sn**. Tur sayısı mimariden gelir ve modelden bağımsızdır; token
+ve süre değerleri ölçümün yapıldığı modele bağlıdır, model değiştiğinde yeniden ölçülmelidir. Bu satır
+olmadan sonraki fazların etkisi kanıtlanamazdı.
 
 #### FAZ 1 — Ajan ömrü: ihtiyaç anında kur, boşta kalanı bırak
 
@@ -215,15 +216,20 @@ işi tekrar yazmadan önce okunmalı.
 
 ### FAZ 7 — Çıkarım Katmanı (kod değişikliği yok)
 
-`OLLAMA_CONTEXT_LENGTH` ayarsız bırakıldığında Ollama modelin tam bağlamını (128k) KV cache için
-ayırıyor; ölçüldü (RTX 4060 8 GB, `gemma4:e4b`): modelin yalnızca **%34'ü VRAM'de**, kalanı CPU'ya
-taşıyor. 4k bağlamda model **%100 VRAM'de**. `OLLAMA_NUM_PARALLEL` aynı ayırmayı yuva sayısıyla
-çarpıyor — bir bağlam uzunluğunda sığan değer, daha büyük bağlamda açılışta OOM'a düşebiliyor;
-`context_length × num_parallel` GPU belleğine göre dengelenmeli. `ChatOptions.Reasoning.Effort`
-(`Microsoft.Extensions.AI`) yansımayla doğrulandı ve Ollama'nın OpenAI uyumlu ucu `reasoning_effort`
-parametresini hatasız kabul ediyor; ama tek örneklemde effort seviyesiyle çıktı uzunluğu arasında
-güvenilir bir korelasyon gözlenmedi — `TracedChatClientFactory`'ye bağlanmadan önce çok koşumlu bir
-ölçüm gerekir.
+Sistem tek tip arka uç görür: **OpenAI uyumlu bir endpoint.** `TracedChatClientFactory` yalnızca
+`Agents:Provider = openai` kabul ediyor; yerel servis edilen bir model (vLLM, SGLang, TensorRT-LLM)
+`Agents:Endpoint` + `Agents:Model` ile bağlanıyor — uygulama tarafında değişiklik yok.
+
+Çıkarım ayarları (KV cache boyutu, paralel yuva sayısı, prefix caching) model sunucusunun kendi
+yapılandırmasına aittir, bu depoda karşılığı yoktur. Sunucudan bağımsız tek kural:
+**KV bellek = paralel yuva × bağlam uzunluğu.** 128k bağlamla çok yuva açılamaz; bir bağlam
+uzunluğunda sığan yuva sayısı daha büyük bağlamda açılışta OOM'a düşer — gerçek ihtiyaç kadar bağlam
+(8–16k) + çok yuva doğru tercihtir.
+
+`ChatOptions.Reasoning.Effort` (`Microsoft.Extensions.AI`) yansımayla doğrulandı ve OpenAI uyumlu uçlar
+`reasoning_effort` parametresini hatasız kabul ediyor; ama tek örneklemde effort seviyesiyle çıktı
+uzunluğu arasında güvenilir bir korelasyon gözlenmedi — `TracedChatClientFactory`'ye bağlanmadan önce
+çok koşumlu bir ölçüm gerekir.
 
 ### FAZ 9 — Dokümantasyon (kısmi)
 

@@ -60,7 +60,7 @@ dotnet run --project tools/ApiDump
 
 There is no automated test project. `tools/WorkflowTest` is a manual console scenario runner that covers the deterministic HITL workflow end-to-end without an LLM; `tools/LoadTest` drives full journeys against a running host. When validating behavior, prefer running the host and hitting `/api/chat`, `/api/diag`, `/api/tools`, or extending `tools/WorkflowTest`.
 
-The LLM API key resolves in this order: User Secrets / `appsettings.json` (`Agents:ApiKey`) → `OPENAI_API_KEY` env var. `src/Banking.Host` has a `UserSecretsId` configured.
+The LLM API key resolves in this order: User Secrets / `appsettings.json` (`Agents:ApiKey`) → `OPENAI_API_KEY` env var. `src/Banking.Host` has a `UserSecretsId` configured. The backend is always an OpenAI-compatible endpoint: `Agents:Endpoint` (empty = `api.openai.com`) + `Agents:Model`. A local model server is configured through those two keys alone — there is no provider-specific code path, and a server that needs no auth runs with the key left blank.
 
 ## High-level architecture
 
@@ -181,9 +181,7 @@ Treat these as the security boundary of the system — be deliberate about any c
   - Done and verified on `dev`: FAZ 0 (token/turn measurement), FAZ 1 (lazy specialist/workflow-agent
     lifetime + idle eviction), FAZ 2 (mkCode catalog moved to the bank + `ISemanticIndexStore` seam),
     FAZ 3 (per-agent model map + top-10 mkCode candidates so the model picks, not the ranker), FAZ 7
-    (Ollama inference settings — see the note below; no code change, per the plan). **FAZ 7 does not
-    apply on this branch:** Ollama support was removed here — `TracedChatClientFactory` accepts only
-    `Agents:Provider = openai` and there is no Ollama-specific code left.
+    (inference layer — see the note below; no code change, per the plan).
   - **Tried and reverted:** FAZ 6.1 (conversation history trimming). Implemented and measured — only
     ~5% input-token reduction on an 8-turn conversation, because the orchestrator's tool results are
     already the specialist's summarized text, not raw bank payloads; removed as not worth the added
@@ -195,17 +193,16 @@ Treat these as the security boundary of the system — be deliberate about any c
   - `docs/PERFORMANS-VE-OLCEKLEME-PLANI.md` and `docs/UYGULAMA-TALIMATI.md` (the two documents
     FINAL-PLAN superseded) are already gone from the tree — nothing left to archive for that part of
     FAZ 9.3.
-  - **Ollama inference note (FAZ 7) — kept as a measurement record from `dev`; not actionable on this
-    branch, which runs OpenAI only.** `OLLAMA_CONTEXT_LENGTH` unset lets Ollama allocate the model's
-    full advertised context as KV cache — measured on this machine (RTX 4060 8 GB, `gemma4:e4b`) as
-    only 34% of the model resident in VRAM (66% offloaded to CPU) at the model's default 128k context,
-    vs. 100% resident at a 4k window. `OLLAMA_NUM_PARALLEL` multiplies that KV allocation — a value
-    that fits at one context length can OOM at startup with a larger one; balance
-    `context_length × num_parallel` against actual GPU memory, don't just copy the plan's example
-    values. `ChatOptions.Reasoning.Effort` (`Microsoft.Extensions.AI`) exists and Ollama's
-    OpenAI-compatible endpoint accepts `reasoning_effort` without erroring, but a single-sample probe
-    showed no reliable monotonic effect on completion length for `gemma4` — don't wire this into
-    `TracedChatClientFactory` without a proper multi-run measurement first.
+  - **Inference note (FAZ 7).** The system sees exactly one kind of backend: an OpenAI-compatible
+    endpoint. `TracedChatClientFactory` accepts only `Agents:Provider = openai`; a locally served model
+    (vLLM, SGLang, TensorRT-LLM, …) is reached with `Agents:Endpoint` + `Agents:Model` and needs no
+    code change. Server-side inference tuning (KV cache size, parallel slots, prefix caching) belongs
+    to that server's own configuration, not to this repo — the one rule that carries over is
+    **KV memory = parallel slots × context length**. `ChatOptions.Reasoning.Effort`
+    (`Microsoft.Extensions.AI`) exists and OpenAI-compatible endpoints accept `reasoning_effort`
+    without erroring, but a single-sample probe showed no reliable monotonic effect on completion
+    length — don't wire this into `TracedChatClientFactory` without a proper multi-run measurement
+    first.
 - `README.md` — architecture overview and MAF built-in API usage (Turkish).
 - `ANALIZ.md` — class-by-class architecture and end-to-end scenario walkthroughs with Mermaid diagrams (Turkish).
 - `docs/PROMPT-YAZIM-REHBERI.md` — how every agent instruction is written (the five-block pattern, shared rule constants, manual test cases) (Turkish). Read this before editing `Prompts/AgentPrompts.cs`.

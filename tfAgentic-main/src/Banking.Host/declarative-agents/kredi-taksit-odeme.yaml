@@ -1,0 +1,63 @@
+kind: Workflow
+name: kredi-taksit-odeme
+displayName: Kredi Taksit Ödeme
+description: >-
+  Kullanılan bir kredinin taksitlerinin ödenmesi veya kredinin erken kapatılması; finansman taksidi
+  yatırma.
+mkCode: FinanceList
+instructions: |
+  Bu akış sadece mevcut bir kredinin taksitinin ödenmesi veya erken kapatılması için kullanılır.
+  Yeni kredi başvurusu, kredi kartı borcu ödeme ve fatura ödeme bu akışın konusu değildir.
+
+  Kredi ve hesap kimliklerini kullanıcıya sorma; krediyi kredi uzmanına, hesabı hesap uzmanına
+  danışarak bul. Kullanıcı tarif ettiyse doğrudan eşle, tarif etmediyse kredileri ürün adı, kalan
+  borç ve taksit tutarıyla sunup seçmesini iste.
+
+  Ödeme şekli "Taksit" ise kaç taksit ödeneceğini sor; kullanıcı sayı söylemediyse tek taksit
+  ödenecek demektir ve alanı boş bırak. Ödeme şekli "Erken Kapama" ise kalan taksitlerin tamamı
+  kapatılır, taksit sayısını hiç sorma.
+  Ödenecek tutarı, kapama tutarını ve silinecek faizi sen hesaplama; bunları banka hesaplar.
+  Makbuz kanalı "E-posta" ise e-posta adresini sor; diğer kanallarda adresi hiç sorma.
+model:
+  options:
+    temperature: 0.1
+outputSchema:
+  type: object
+  properties:
+    loanId:
+      type: string
+      required: true
+      description: Taksidi ödenecek kredinin kimliği. Kredi uzmanından gelir; ürün adı bu alana yazılmaz.
+    sourceAccountId:
+      type: string
+      required: true
+      description: >-
+        Ödemenin çekileceği hesabın kimliği. Hesap uzmanından gelir; IBAN veya hesap adı bu alana
+        yazılmaz.
+    paymentType:
+      type: string
+      required: true
+      description: >-
+        Ödemenin şekli. Geçerli değerler Taksit, Erken Kapama. Erken kapamada kalan anapara tahsil
+        edilir ve ödenmemiş faiz silinir.
+    installmentCount:
+      type: number
+      required: false
+      description: >-
+        Kaç taksidin birlikte ödeneceği. Yalnızca ödeme şekli Taksit ise doldurulur; verilmezse tek
+        taksit ödenir.
+    receiptChannel:
+      type: string
+      required: true
+      description: Makbuzun gönderileceği kanal. Geçerli değerler SMS, E-posta, Yok.
+    receiptEmail:
+      type: string
+      required: false
+      description: Makbuzun gönderileceği e-posta adresi. Yalnızca makbuz kanalı E-posta ise doldurulur.
+    note:
+      type: string
+      required: false
+      description: İşleme iliştirilecek açıklama. Kullanıcı vermek istemezse boş bırakılır.
+action:
+  method: PUT
+  path: /api/loan-installment-payment

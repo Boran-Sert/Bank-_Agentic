@@ -1,179 +1,83 @@
-using System.Collections.Concurrent;
-using Banking.Agents;
-using Banking.Agents.Collection;
+using Banking.Agents.Sessions;
 using Banking.Agents.Tracing;
-using Banking.Domain.MkCodes;
+using Banking.Domain.Constants;
 using Banking.Gateway.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Banking.Gateway;
 
 /// <summary>
-/// MW ↔ .NET gateway orkestrasyon servisi.
+/// Kullanıcı isteklerinin giriş noktası ve yanıtların tek çıkış noktası. Üç sorumluluğu vardır:
+/// oturum scope'unu açmak, isteği <see cref="WorkflowOrOrchestratorRouter"/>'a devretmek, dönen sonucu
+/// <see cref="GatewayResponseMapper"/> ile UI protokolüne çevirip <see cref="ResponseSanitizer"/>'dan
+/// geçirmek. Oturum scope'u burada açılır ve burada kapanır; aradaki hiçbir katman oturum deposuna
+/// erişmez.
 /// </summary>
-public sealed class GatewayService
+public sealed class GatewayService(
+    WorkflowOrOrchestratorRouter router,
+    TraceHub hub,
+    ILogger<GatewayService> logger,
+    ResponseSanitizer sanitizer,
+    GatewayResponseMapper responseMapper,
+    AmbientSessionAccessor sessionAccessor)
 {
-    private readonly AgentRuntime _runtime;
-    private readonly CollectionSessionStore _collectionStore;
-    private readonly TraceHub _hub;
-    private readonly ILogger<GatewayService> _logger;
-
-    private readonly ConcurrentDictionary<string, GatewaySession> _sessions = new();
-
-    public GatewayService(
-        AgentRuntime runtime,
-        CollectionSessionStore collectionStore,
-        TraceHub hub,
-        ILogger<GatewayService> logger)
-    {
-        _runtime = runtime;
-        _collectionStore = collectionStore;
-        _hub = hub;
-        _logger = logger;
-    }
-
-    public async Task<GatewayResponse> ProcessAsync(GatewayRequest request, CancellationToken ct = default)
+    /// <summary>
+    /// Kullanıcı isteğini oturum scope'u içinde işler, yönlendirir ve sonucu UI protokolüne çevirir.
+    /// İptal ve beklenmeyen hatalar dâhil her yol kullanıcıya gösterilebilir bir yanıt döndürür.
+    /// </summary>
+    /// <param name="request">İstek gövdesi. Oturum jetonu boşsa yeni bir oturum başlatılır.</param>
+    /// <param name="cancellationToken">İptal jetonu. İptal hâlinde o ana kadarki oturum ilerlemesi yazılır.</param>
+    public async Task<GatewayResponse> ProcessUserRequestAsync(GatewayRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
 
         var sessionToken = NormalizeSessionToken(request.SessionToken);
-        var session = _sessions.GetOrAdd(sessionToken, _ => new GatewaySession());
-        session.Touch();
 
-        _hub.Publish("GATEWAY", $"İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
-        _logger.LogInformation("Gateway istek: session={SessionToken}, text={Text}", sessionToken, Truncate(request.Text, 100));
+        // Oturum scope'u
+        var lease = await sessionAccessor.OpenSessionScopeAsync(sessionToken, cancellationToken);
+        await using var session = lease.EnterAmbientScope();
+
+        hub.PublishTraceEvent(TraceCategories.Gateway, "İstek alındı", $"session={sessionToken} text=\"{Truncate(request.Text, 60)}\"");
+        logger.LogInformation("Gateway istek: session={SessionToken}, text={Text}", sessionToken, Truncate(request.Text, 100));
 
         try
         {
-            // ── Aktif collection oturumu varsa devam et ──
-            if (session.CollectionSessionId is not null)
-            {
-                _hub.Publish("GATEWAY", "Aktif tahsilat oturumu bulundu → devam ediliyor");
-                return await HandleCollectionResponseAsync(session, request, ct);
-            }
-
-            // ── Orkestratöre sor ──
-            var reply = await _runtime.AskAsync(request.Text, ct);
-
-            // Orkestratör tahsilat akışını tetiklediyse → Collection başlat
-            if (reply.StartCollection)
-            {
-                _hub.Publish("GATEWAY", "Orkestratör tahsilat niyeti algıladı → Collection akışı başlatılıyor");
-                _logger.LogInformation("Tahsilat akışı başlatılıyor: session={SessionToken}", sessionToken);
-                return await StartCollectionAsync(session, request, ct);
-            }
-
-            // Orkestratör ekran açma yönlendirmesi yaptıysa
-            if (!string.IsNullOrEmpty(reply.OpenScreenMkCode))
-            {
-                _hub.Publish("GATEWAY", $"Ekran yönlendirmesi algılandı → OPEN_SCREEN ({reply.OpenScreenMkCode})");
-                return GatewayResponse.AsOpenScreen(reply.OpenScreenMkCode);
-            }
-
-            // Normal sohbet/Q&A yanıtı (TEXT)
-            _hub.Publish("GATEWAY", "Metin yanıtı hazır → TEXT", $"len={reply.Reply.Length}");
-            return GatewayResponse.AsText(reply.Reply);
+            var routingResult = await router.RouteUserRequestAsync(request.Text, cancellationToken);
+            return FinalizeResponse(responseMapper.MapRoutingResultToGatewayResponse(routingResult), sessionToken);
         }
         catch (OperationCanceledException)
         {
-            _logger.LogWarning("Gateway isteği iptal edildi: session={SessionToken}", sessionToken);
-            return GatewayResponse.AsText("İstek zaman aşımına uğradı.");
+            logger.LogWarning("Gateway isteği iptal edildi: session={SessionToken}", sessionToken);
+            return FinalizeResponse(GatewayResponse.AsText("İstek zaman aşımına uğradı."), sessionToken);
         }
-        catch (Exception ex)
+        catch (Exception exception)
         {
-            _logger.LogError(ex, "Gateway hatası: session={SessionToken}", sessionToken);
-            _hub.Publish("GATEWAY", $"HATA: {ex.Message}");
-            return GatewayResponse.AsText("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin."); // Hata da TEXT olarak döner
+            logger.LogError(exception, "Gateway hatası: session={SessionToken}", sessionToken);
+            hub.PublishTraceEvent(TraceCategories.Gateway, $"HATA: {exception.Message}");
+            return FinalizeResponse(GatewayResponse.AsText("Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin."), sessionToken);
         }
     }
 
-    private async Task<GatewayResponse> StartCollectionAsync(
-        GatewaySession session, GatewayRequest request, CancellationToken ct)
+    /// <summary>
+    /// Yanıta oturum jetonunu ekler ve çıktı güvenlik bariyerinden geçirir. Tüm yanıtların tek çıkış
+    /// noktasıdır; temizlenmemiş hiçbir metin istemciye ulaşmaz.
+    /// </summary>
+    private GatewayResponse FinalizeResponse(GatewayResponse response, string sessionToken)
     {
-        session.ThemeValue = request.ThemeValue;
+        var responseWithToken = response with { SessionToken = sessionToken };
 
-        var result = await _collectionStore.StartAsync(request.Text);
-        session.CollectionSessionId = result.SessionId;
+        if (responseWithToken.Text is null) return responseWithToken;
 
-        _hub.Publish("GATEWAY", $"Collection oturumu başlatıldı: {result.SessionId}");
-        return MapCollectionResult(result, session);
+        var sanitizedText = sanitizer.Sanitize(responseWithToken.Text, sessionToken);
+        return sanitizedText == responseWithToken.Text
+            ? responseWithToken
+            : responseWithToken with { Text = sanitizedText };
     }
 
-    private async Task<GatewayResponse> HandleCollectionResponseAsync(
-        GatewaySession session, GatewayRequest request, CancellationToken ct)
-    {
-        if (session.CollectionSessionId is null)
-        {
-            _hub.Publish("GATEWAY", "Collection oturumu bulunamadı → TEXT");
-            return GatewayResponse.AsText("Aktif bir işlem oturumu bulunamadı.");
-        }
-
-        var result = await _collectionStore.RespondAsync(session.CollectionSessionId, request.Text);
-        return MapCollectionResult(result, session);
-    }
-
-    private GatewayResponse MapCollectionResult(
-        CollectStepResult result, GatewaySession session)
-    {
-        switch (result.Status)
-        {
-            case "question":
-                _hub.Publish("GATEWAY", "Slot-filling sorusu → TEXT");
-                return GatewayResponse.AsText(result.Prompt!);
-
-            case "confirmation":
-                _hub.Publish("GATEWAY", "Onay ekranı hazır → CONFIRM_PAYMENT");
-                return BuildConfirmationScreen(result.Confirmation!);
-
-            case "completed" when result.Receipt is not null:
-                _hub.Publish("GATEWAY", "Tahsilat tamamlandı → TEXT (makbuz)");
-                ClearCollectionSession(session);
-                return GatewayResponse.AsText($"Ödeme başarıyla tamamlandı.\nMakbuz No: {result.Receipt.ReceiptId}\nKalan Borç: {result.Receipt.RemainingDebt:N2} ₺");
-
-            case "cancelled":
-                _hub.Publish("GATEWAY", "Oturum iptal edildi → TEXT");
-                ClearCollectionSession(session);
-                return GatewayResponse.AsText(result.Prompt ?? "İşlem iptal edildi.");
-
-            default:
-                _hub.Publish("GATEWAY", $"Beklenmeyen durum: {result.Status} → TEXT");
-                ClearCollectionSession(session);
-                return GatewayResponse.AsText(result.Prompt ?? "Bir hata oluştu. Lütfen tekrar deneyin.");
-        }
-    }
-
-    private GatewayResponse BuildConfirmationScreen(ConfirmationView confirmation)
-    {
-        var mkCodeDef = MkCodesRegistry.Get("CreditCardPayment");
-        if (mkCodeDef is null)
-        {
-            _logger.LogError("CreditCardPayment mkCode tanımı bulunamadı");
-            return GatewayResponse.AsText("Ekran kodu tanımı bulunamadı.");
-        }
-
-        return GatewayResponse.AsConfirmPayment(
-            mkCodeValue: mkCodeDef.Value,
-            cardNumber: confirmation.CardMasked,
-            cardProductName: null, // Not available in ConfirmationView directly
-            amount: confirmation.Amount.ToString("F2"),
-            accountNo: confirmation.SourceAccountMasked
-        );
-    }
-
-    private void ClearCollectionSession(GatewaySession session)
-    {
-        session.CollectionSessionId = null;
-    }
+    private static string NormalizeSessionToken(string? token) =>
+        string.IsNullOrWhiteSpace(token) ? Guid.NewGuid().ToString("D") : token;
 
 
-    private static string NormalizeSessionToken(string? token)
-    {
-        if (!string.IsNullOrWhiteSpace(token))
-            return token;
-
-        return $"gw-{Guid.NewGuid():N}"[..16];
-    }
-
-    private static string Truncate(string s, int maxLength) =>
-        s.Length <= maxLength ? s : string.Concat(s.AsSpan(0, maxLength), "…");
+    private static string Truncate(string text, int maxLength) =>
+        text.Length <= maxLength ? text : string.Concat(text.AsSpan(0, maxLength), "…");
 }

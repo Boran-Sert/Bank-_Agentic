@@ -1,0 +1,887 @@
+{
+  "Banka_ekstra.json": {
+    "mtime": 1786080499.559,
+    "ast_hash": "4a4340c6b1b4959fc55e2e1106eab90e",
+    "semantic_hash": "4a4340c6b1b4959fc55e2e1106eab90e"
+  },
+  "BankingAgents.sln": {
+    "mtime": 1786365927.5274422,
+    "ast_hash": "1bd340b112857cb1d52d7499102fc123",
+    "semantic_hash": "1bd340b112857cb1d52d7499102fc123"
+  },
+  "src/Banking.Agents/Banking.Agents.csproj": {
+    "mtime": 1786016489.0698643,
+    "ast_hash": "9d774a1198fa65056f9e378c0fa9d925",
+    "semantic_hash": "9d774a1198fa65056f9e378c0fa9d925"
+  },
+  "src/Banking.Agents/ContextProviders/TopicContextProvider.cs": {
+    "mtime": 1786516406.441362,
+    "ast_hash": "2846c5e2df965e3b742090924f0f6204",
+    "semantic_hash": "2846c5e2df965e3b742090924f0f6204"
+  },
+  "src/Banking.Agents/Mcp/McpToolProvider.cs": {
+    "mtime": 1786516876.790664,
+    "ast_hash": "4811c750a641758d7eda65ba839ea597",
+    "semantic_hash": "4811c750a641758d7eda65ba839ea597"
+  },
+  "src/Banking.Agents/Prompts/AgentPrompts.cs": {
+    "mtime": 1786524861.548,
+    "ast_hash": "b238c402e13d2327fb028f56d5b80f71",
+    "semantic_hash": "b238c402e13d2327fb028f56d5b80f71"
+  },
+  "src/Banking.Agents/Runtime/AgentJsonPolicy.cs": {
+    "mtime": 1786530561.8235235,
+    "ast_hash": "419d7b4fc2918a69953b6f7ea54a1840",
+    "semantic_hash": "419d7b4fc2918a69953b6f7ea54a1840"
+  },
+  "src/Banking.Agents/Runtime/AgentOptions.cs": {
+    "mtime": 1786516175.3891795,
+    "ast_hash": "77df095070ca1cc7fe7db1df89eaa9b3",
+    "semantic_hash": "77df095070ca1cc7fe7db1df89eaa9b3"
+  },
+  "src/Banking.Agents/Runtime/AgentRuntime.cs": {
+    "mtime": 1786530566.1254673,
+    "ast_hash": "4e9814edb58accd326af767a55c7a17f",
+    "semantic_hash": "4e9814edb58accd326af767a55c7a17f"
+  },
+  "src/Banking.Agents/Runtime/NavigationTools.cs": {
+    "mtime": 1786530575.1585753,
+    "ast_hash": "35e660698bb6718a22310a948b37b78d",
+    "semantic_hash": "35e660698bb6718a22310a948b37b78d"
+  },
+  "src/Banking.Agents/Runtime/TracedChatClientFactory.cs": {
+    "mtime": 1786516237.812638,
+    "ast_hash": "78567da4a63a41451d60431cebff5693",
+    "semantic_hash": "78567da4a63a41451d60431cebff5693"
+  },
+  "src/Banking.Agents/Sessions/AgentConversationStore.cs": {
+    "mtime": 1786514913.446839,
+    "ast_hash": "c8f72af93586ef10393fc71113d97127",
+    "semantic_hash": "c8f72af93586ef10393fc71113d97127"
+  },
+  "src/Banking.Agents/Sessions/AmbientSessionAccessor.cs": {
+    "mtime": 1786514855.0221484,
+    "ast_hash": "285621423510203046fd126a9595ce51",
+    "semantic_hash": "285621423510203046fd126a9595ce51"
+  },
+  "src/Banking.Agents/Sessions/ISessionStore.cs": {
+    "mtime": 1786514930.2238858,
+    "ast_hash": "7bb12dd02947764fdcec27aa44573cb1",
+    "semantic_hash": "7bb12dd02947764fdcec27aa44573cb1"
+  },
+  "src/Banking.Agents/Sessions/InMemorySessionStore.cs": {
+    "mtime": 1786515068.5979834,
+    "ast_hash": "e6424d5497fb58ad4384dce442777935",
+    "semantic_hash": "e6424d5497fb58ad4384dce442777935"
+  },
+  "src/Banking.Agents/Sessions/SessionContext.cs": {
+    "mtime": 1786515073.6616588,
+    "ast_hash": "cc66a6db4af8f5ce097470a3a39fe067",
+    "semantic_hash": "cc66a6db4af8f5ce097470a3a39fe067"
+  },
+  "src/Banking.Agents/Sessions/SessionLease.cs": {
+    "mtime": 1786514882.0419662,
+    "ast_hash": "9ed10ba19fec48a8e983e77732318520",
+    "semantic_hash": "9ed10ba19fec48a8e983e77732318520"
+  },
+  "src/Banking.Agents/Sessions/SessionState.cs": {
+    "mtime": 1786514975.7280874,
+    "ast_hash": "568c2cef97d58aa21ddff1217d068ab8",
+    "semantic_hash": "568c2cef97d58aa21ddff1217d068ab8"
+  },
+  "src/Banking.Agents/Sessions/SessionStoreOptions.cs": {
+    "mtime": 1786514098.555338,
+    "ast_hash": "b551af010c2dd98442a59b7bc5427b8d",
+    "semantic_hash": "b551af010c2dd98442a59b7bc5427b8d"
+  },
+  "src/Banking.Agents/Specialists/AgentCard.cs": {
+    "mtime": 1786516217.3837786,
+    "ast_hash": "3a27d29a7ff44a47825cbd9a046ebe88",
+    "semantic_hash": "3a27d29a7ff44a47825cbd9a046ebe88"
+  },
+  "src/Banking.Agents/Specialists/AnalizUzmaniAgent.cs": {
+    "mtime": 1786516400.9760442,
+    "ast_hash": "98d3f62ba637c9c578a2b3a290742dfb",
+    "semantic_hash": "98d3f62ba637c9c578a2b3a290742dfb"
+  },
+  "src/Banking.Agents/Specialists/Declarative/DeclarativeSpecialistBuilder.cs": {
+    "mtime": 1786516288.823707,
+    "ast_hash": "2e28239e675117f0ed13aa02ba892aa7",
+    "semantic_hash": "2e28239e675117f0ed13aa02ba892aa7"
+  },
+  "src/Banking.Agents/Specialists/Declarative/SpecialistDefinition.cs": {
+    "mtime": 1786516311.0074468,
+    "ast_hash": "a720c3f1e2317ae423aa7c67527a45b4",
+    "semantic_hash": "a720c3f1e2317ae423aa7c67527a45b4"
+  },
+  "src/Banking.Agents/Specialists/HesapUzmaniAgent.cs": {
+    "mtime": 1786516391.9763367,
+    "ast_hash": "9f81973a7b6083978f1aa0eb0c9e7499",
+    "semantic_hash": "9f81973a7b6083978f1aa0eb0c9e7499"
+  },
+  "src/Banking.Agents/Specialists/KartUzmaniAgent.cs": {
+    "mtime": 1786516396.2395618,
+    "ast_hash": "44a028f1916c3c4a079ae23294138416",
+    "semantic_hash": "44a028f1916c3c4a079ae23294138416"
+  },
+  "src/Banking.Agents/Specialists/LazySpecialistAgent.cs": {
+    "mtime": 1786516199.6195092,
+    "ast_hash": "0ea88b2407042071f92892140e6216a2",
+    "semantic_hash": "0ea88b2407042071f92892140e6216a2"
+  },
+  "src/Banking.Agents/Specialists/SpecialistCatalog.cs": {
+    "mtime": 1786530579.2382872,
+    "ast_hash": "8483d77afe13503b301e101b8fe94a17",
+    "semantic_hash": "8483d77afe13503b301e101b8fe94a17"
+  },
+  "src/Banking.Agents/Specialists/SpecialistRoutingAgent.cs": {
+    "mtime": 1786516385.8005698,
+    "ast_hash": "2a20418e659b96c5b8292efe95a459e5",
+    "semantic_hash": "2a20418e659b96c5b8292efe95a459e5"
+  },
+  "src/Banking.Agents/Tracing/TraceHub.cs": {
+    "mtime": 1786530524.2679813,
+    "ast_hash": "0835a7f66d0c59bf8462aaa30fc74a24",
+    "semantic_hash": "0835a7f66d0c59bf8462aaa30fc74a24"
+  },
+  "src/Banking.Agents/Tracing/TraceHubBankApiObserver.cs": {
+    "mtime": 1786516838.0334442,
+    "ast_hash": "b31984cff80cf1106cd4571aa5526289",
+    "semantic_hash": "b31984cff80cf1106cd4571aa5526289"
+  },
+  "src/Banking.Agents/Tracing/TracingAIFunction.cs": {
+    "mtime": 1786530626.3092525,
+    "ast_hash": "5f74ae0d2ef08e23d75c78ad861c1810",
+    "semantic_hash": "5f74ae0d2ef08e23d75c78ad861c1810"
+  },
+  "src/Banking.Agents/Tracing/TracingChatClient.cs": {
+    "mtime": 1786516809.101661,
+    "ast_hash": "db2ad9cf2f107e0a2d5f45b458a70256",
+    "semantic_hash": "db2ad9cf2f107e0a2d5f45b458a70256"
+  },
+  "src/Banking.Agents/Validation/SchemaValidatedSlotWriter.cs": {
+    "mtime": 1786515019.0074248,
+    "ast_hash": "3e9c5066e2d7fccef8ace424d660ab9e",
+    "semantic_hash": "3e9c5066e2d7fccef8ace424d660ab9e"
+  },
+  "src/Banking.Agents/Workflows/Actions/RestWorkflowExecutor.cs": {
+    "mtime": 1786531187.6819525,
+    "ast_hash": "bb2524aabc94f22f4b44cff24448eed6",
+    "semantic_hash": "bb2524aabc94f22f4b44cff24448eed6"
+  },
+  "src/Banking.Agents/Workflows/Actions/WorkflowActionDefinition.cs": {
+    "mtime": 1786515555.0594597,
+    "ast_hash": "e322136e9d820d892acc0ca56051f4d6",
+    "semantic_hash": "e322136e9d820d892acc0ca56051f4d6"
+  },
+  "src/Banking.Agents/Workflows/Approval/ApprovalIntentParser.cs": {
+    "mtime": 1786515586.4270885,
+    "ast_hash": "7e7beb452eff5870800dc8f68fa860dd",
+    "semantic_hash": "7e7beb452eff5870800dc8f68fa860dd"
+  },
+  "src/Banking.Agents/Workflows/Approval/DeterministicActionWorkflow.cs": {
+    "mtime": 1786515603.9527788,
+    "ast_hash": "a5d6c681e0371bd22d06d528dcaa49f3",
+    "semantic_hash": "a5d6c681e0371bd22d06d528dcaa49f3"
+  },
+  "src/Banking.Agents/Workflows/Contracts/GenericConfirmationView.cs": {
+    "mtime": 1786515621.7326343,
+    "ast_hash": "1313daf62d8311667b76cde24c22e5e7",
+    "semantic_hash": "1313daf62d8311667b76cde24c22e5e7"
+  },
+  "src/Banking.Agents/Workflows/Contracts/WorkflowOutcome.cs": {
+    "mtime": 1786515640.8432531,
+    "ast_hash": "fcdb3ec3d0018af9e798b2bb2f85bca5",
+    "semantic_hash": "fcdb3ec3d0018af9e798b2bb2f85bca5"
+  },
+  "src/Banking.Agents/Workflows/Contracts/WorkflowStepResult.cs": {
+    "mtime": 1786090769.402217,
+    "ast_hash": "2ac8c70470b65baae2d2be287e36ec84",
+    "semantic_hash": "2ac8c70470b65baae2d2be287e36ec84"
+  },
+  "src/Banking.Agents/Workflows/Declarative/DeclarativeWorkflowBuilder.cs": {
+    "mtime": 1786515738.753173,
+    "ast_hash": "f34a78a35d508e1bf320b34f4fb18b6e",
+    "semantic_hash": "f34a78a35d508e1bf320b34f4fb18b6e"
+  },
+  "src/Banking.Agents/Workflows/Declarative/MicrosoftAgentDeclarativeDefinition.cs": {
+    "mtime": 1786515494.4284365,
+    "ast_hash": "3e4bb0f3924097755bfb997a19fd5209",
+    "semantic_hash": "3e4bb0f3924097755bfb997a19fd5209"
+  },
+  "src/Banking.Agents/Workflows/Engine/WorkflowAgentDefinition.cs": {
+    "mtime": 1786515714.5581033,
+    "ast_hash": "91bbc021a8c6345fd42ba4f18b87ad10",
+    "semantic_hash": "91bbc021a8c6345fd42ba4f18b87ad10"
+  },
+  "src/Banking.Agents/Workflows/Engine/WorkflowAgentFactory.cs": {
+    "mtime": 1786530638.7058403,
+    "ast_hash": "cb4d5be57862f7e2eaecc6eaf7ea0157",
+    "semantic_hash": "cb4d5be57862f7e2eaecc6eaf7ea0157"
+  },
+  "src/Banking.Agents/Workflows/Engine/WorkflowAgentSignals.cs": {
+    "mtime": 1786515702.7967992,
+    "ast_hash": "1cabc6ea115d9b82cb65cb45f1d430d9",
+    "semantic_hash": "1cabc6ea115d9b82cb65cb45f1d430d9"
+  },
+  "src/Banking.Agents/Workflows/Engine/WorkflowEngine.cs": {
+    "mtime": 1786515389.9229746,
+    "ast_hash": "509040955d9f91bfec77ac8127193d41",
+    "semantic_hash": "509040955d9f91bfec77ac8127193d41"
+  },
+  "src/Banking.Agents/Workflows/Engine/WorkflowRegistry.cs": {
+    "mtime": 1786515682.5105617,
+    "ast_hash": "c819eaef8e490abdb57774179b6c3831",
+    "semantic_hash": "c819eaef8e490abdb57774179b6c3831"
+  },
+  "src/Banking.Agents/Workflows/Slots/SlotBinder.cs": {
+    "mtime": 1786515774.8127847,
+    "ast_hash": "3e5a589e513fbd5ebb999e731f449edd",
+    "semantic_hash": "3e5a589e513fbd5ebb999e731f449edd"
+  },
+  "src/Banking.BankApi.Client/BankApiCallTrace.cs": {
+    "mtime": 1786513082.5552251,
+    "ast_hash": "268a6cc68b12eafcd29922eb02cbaf38",
+    "semantic_hash": "268a6cc68b12eafcd29922eb02cbaf38"
+  },
+  "src/Banking.BankApi.Client/BankApiClient.cs": {
+    "mtime": 1786513175.4632907,
+    "ast_hash": "100645ec47357a5e5abef1cf141f2fe6",
+    "semantic_hash": "100645ec47357a5e5abef1cf141f2fe6"
+  },
+  "src/Banking.BankApi.Client/BankApiClientServiceCollectionExtensions.cs": {
+    "mtime": 1786513148.1582222,
+    "ast_hash": "b6a09a7d2bbcb63d590191ff5a642e84",
+    "semantic_hash": "b6a09a7d2bbcb63d590191ff5a642e84"
+  },
+  "src/Banking.BankApi.Client/Banking.BankApi.Client.csproj": {
+    "mtime": 1786005290.7898774,
+    "ast_hash": "2ef7772df153effb82a569f6c35683b2",
+    "semantic_hash": "2ef7772df153effb82a569f6c35683b2"
+  },
+  "src/Banking.BankApi.Client/IBankApiClient.cs": {
+    "mtime": 1786513134.6668174,
+    "ast_hash": "a9dc8e109d47c9ba0005515cbbd10a34",
+    "semantic_hash": "a9dc8e109d47c9ba0005515cbbd10a34"
+  },
+  "src/Banking.BankApi/BankClock.cs": {
+    "mtime": 1786091900.0841842,
+    "ast_hash": "2cb5ce2bcb160d32bac0f2a2bc4b852c",
+    "semantic_hash": "2cb5ce2bcb160d32bac0f2a2bc4b852c"
+  },
+  "src/Banking.BankApi/Banking.BankApi.csproj": {
+    "mtime": 1786359525.1309814,
+    "ast_hash": "20eb816f1ad6edeb01073123abac37d5",
+    "semantic_hash": "20eb816f1ad6edeb01073123abac37d5"
+  },
+  "src/Banking.BankApi/Data/InMemoryBankStore.cs": {
+    "mtime": 1786532097.2057152,
+    "ast_hash": "1f8645aef6975e57508352d4cd5ec95c",
+    "semantic_hash": "1f8645aef6975e57508352d4cd5ec95c"
+  },
+  "src/Banking.BankApi/Data/mkcodes.json": {
+    "mtime": 1785840481.893986,
+    "ast_hash": "0841b5b8443efa25a0a2b4cd194f6575",
+    "semantic_hash": "0841b5b8443efa25a0a2b4cd194f6575"
+  },
+  "src/Banking.BankApi/Diagnostics/ApiTrafficLoggingMiddleware.cs": {
+    "mtime": 1786517914.292783,
+    "ast_hash": "ec6c80e05509c03f53dbfa9bb9b3c6e6",
+    "semantic_hash": "ec6c80e05509c03f53dbfa9bb9b3c6e6"
+  },
+  "src/Banking.BankApi/Endpoints/AccountEndpoints.cs": {
+    "mtime": 1786532472.769413,
+    "ast_hash": "04e440f6ee44b5fe6fd9f2b63a20f63d",
+    "semantic_hash": "04e440f6ee44b5fe6fd9f2b63a20f63d"
+  },
+  "src/Banking.BankApi/Endpoints/ApplicationEndpoints.cs": {
+    "mtime": 1786532557.5168598,
+    "ast_hash": "3c2a1e31f06e4e3446287364bc877c8e",
+    "semantic_hash": "3c2a1e31f06e4e3446287364bc877c8e"
+  },
+  "src/Banking.BankApi/Endpoints/BankResults.cs": {
+    "mtime": 1786532451.7963758,
+    "ast_hash": "a1ad854512cde04a49e1c9589c40a9ef",
+    "semantic_hash": "a1ad854512cde04a49e1c9589c40a9ef"
+  },
+  "src/Banking.BankApi/Endpoints/BeneficiaryEndpoints.cs": {
+    "mtime": 1786532524.5294235,
+    "ast_hash": "97ad401afa477544438195dbf2957bc0",
+    "semantic_hash": "97ad401afa477544438195dbf2957bc0"
+  },
+  "src/Banking.BankApi/Endpoints/BillEndpoints.cs": {
+    "mtime": 1786532506.312599,
+    "ast_hash": "4a5ffcd5ccd0f7f62e867ca8f85dbf66",
+    "semantic_hash": "4a5ffcd5ccd0f7f62e867ca8f85dbf66"
+  },
+  "src/Banking.BankApi/Endpoints/CardEndpoints.cs": {
+    "mtime": 1786533154.5167556,
+    "ast_hash": "3098f7cb7a065857dcfeb01658f6042e",
+    "semantic_hash": "3098f7cb7a065857dcfeb01658f6042e"
+  },
+  "src/Banking.BankApi/Endpoints/CatalogEndpoints.cs": {
+    "mtime": 1786532588.7783825,
+    "ast_hash": "c2ec5ad30e77bd3f21c60487a7b19b9b",
+    "semantic_hash": "c2ec5ad30e77bd3f21c60487a7b19b9b"
+  },
+  "src/Banking.BankApi/Endpoints/CustomerEndpoints.cs": {
+    "mtime": 1786532461.8969183,
+    "ast_hash": "7d077fc2429399a51b6eada1c30c0589",
+    "semantic_hash": "7d077fc2429399a51b6eada1c30c0589"
+  },
+  "src/Banking.BankApi/Endpoints/InsuranceEndpoints.cs": {
+    "mtime": 1786532544.1723547,
+    "ast_hash": "50edd78d78b97cfa1ee761d3f710faa2",
+    "semantic_hash": "50edd78d78b97cfa1ee761d3f710faa2"
+  },
+  "src/Banking.BankApi/Endpoints/InvestmentEndpoints.cs": {
+    "mtime": 1786532536.349929,
+    "ast_hash": "17f0752e782053c7af9f0861aee3dd41",
+    "semantic_hash": "17f0752e782053c7af9f0861aee3dd41"
+  },
+  "src/Banking.BankApi/Endpoints/LoanEndpoints.cs": {
+    "mtime": 1786532496.739543,
+    "ast_hash": "c0da43ee21d4f34ad4fcc42a0391292c",
+    "semantic_hash": "c0da43ee21d4f34ad4fcc42a0391292c"
+  },
+  "src/Banking.BankApi/Endpoints/MoneyEndpoints.cs": {
+    "mtime": 1786532598.0636916,
+    "ast_hash": "2614565c1a79b5b1669c00e780b44226",
+    "semantic_hash": "2614565c1a79b5b1669c00e780b44226"
+  },
+  "src/Banking.BankApi/Endpoints/StandingOrderEndpoints.cs": {
+    "mtime": 1786532515.7219872,
+    "ast_hash": "0943f166ec3ccc34e174c3e0384ed019",
+    "semantic_hash": "0943f166ec3ccc34e174c3e0384ed019"
+  },
+  "src/Banking.BankApi/Endpoints/StatementEndpoints.cs": {
+    "mtime": 1786532579.525143,
+    "ast_hash": "c8d50f2425365c5bfc238f2209add26b",
+    "semantic_hash": "c8d50f2425365c5bfc238f2209add26b"
+  },
+  "src/Banking.BankApi/Models/ApiRequests.cs": {
+    "mtime": 1786533149.00324,
+    "ast_hash": "550d195fab47fd06583c6a8c1648d8c0",
+    "semantic_hash": "550d195fab47fd06583c6a8c1648d8c0"
+  },
+  "src/Banking.BankApi/Models/BankingModels.cs": {
+    "mtime": 1786533110.5592704,
+    "ast_hash": "87c862e0131521dc73d84eb7f4eb41a0",
+    "semantic_hash": "87c862e0131521dc73d84eb7f4eb41a0"
+  },
+  "src/Banking.BankApi/Models/CustomerPortfolioModels.cs": {
+    "mtime": 1786533115.3587878,
+    "ast_hash": "cce1c7d6b75f92c50ce3306f2e9dfd9f",
+    "semantic_hash": "cce1c7d6b75f92c50ce3306f2e9dfd9f"
+  },
+  "src/Banking.BankApi/Program.cs": {
+    "mtime": 1786532753.2107801,
+    "ast_hash": "6b6cf74a6602ded31e32ae3d904659bb",
+    "semantic_hash": "6b6cf74a6602ded31e32ae3d904659bb"
+  },
+  "src/Banking.BankApi/Properties/launchSettings.json": {
+    "mtime": 1785933494.2824972,
+    "ast_hash": "b147ceaab91bc50444715446d77451e8",
+    "semantic_hash": "b147ceaab91bc50444715446d77451e8"
+  },
+  "src/Banking.BankApi/Services/AccountService.cs": {
+    "mtime": 1786517889.6205792,
+    "ast_hash": "28cebef13510532edf13e79df4600c09",
+    "semantic_hash": "28cebef13510532edf13e79df4600c09"
+  },
+  "src/Banking.BankApi/Services/AnalyzeService.cs": {
+    "mtime": 1785841759.2629948,
+    "ast_hash": "396c84f271435e302284e280a49b9e4b",
+    "semantic_hash": "396c84f271435e302284e280a49b9e4b"
+  },
+  "src/Banking.BankApi/Services/ApplicationService.cs": {
+    "mtime": 1786532338.7097795,
+    "ast_hash": "6a8e57fb6624f63ee96d9cd8a57afc3c",
+    "semantic_hash": "6a8e57fb6624f63ee96d9cd8a57afc3c"
+  },
+  "src/Banking.BankApi/Services/BeneficiaryService.cs": {
+    "mtime": 1786532221.6062942,
+    "ast_hash": "0774b3c77242e76640bbcc8fd4010329",
+    "semantic_hash": "0774b3c77242e76640bbcc8fd4010329"
+  },
+  "src/Banking.BankApi/Services/BillService.cs": {
+    "mtime": 1786532176.276522,
+    "ast_hash": "1c65d5fb074668e8be034c1499071e5c",
+    "semantic_hash": "1c65d5fb074668e8be034c1499071e5c"
+  },
+  "src/Banking.BankApi/Services/CampaignCatalogService.cs": {
+    "mtime": 1786517921.2841184,
+    "ast_hash": "ccc8f0f6722773db021b056910b023cb",
+    "semantic_hash": "ccc8f0f6722773db021b056910b023cb"
+  },
+  "src/Banking.BankApi/Services/CardOperationsService.cs": {
+    "mtime": 1786533140.8686357,
+    "ast_hash": "5a480b3765ceff9488c2decefe22a916",
+    "semantic_hash": "5a480b3765ceff9488c2decefe22a916"
+  },
+  "src/Banking.BankApi/Services/CardService.cs": {
+    "mtime": 1786532727.610976,
+    "ast_hash": "e912325b3ee75632be8fb96c62140df2",
+    "semantic_hash": "e912325b3ee75632be8fb96c62140df2"
+  },
+  "src/Banking.BankApi/Services/CollectionService.cs": {
+    "mtime": 1786517951.3909626,
+    "ast_hash": "7032c85d86aec6576971677a20fbf877",
+    "semantic_hash": "7032c85d86aec6576971677a20fbf877"
+  },
+  "src/Banking.BankApi/Services/CustomerService.cs": {
+    "mtime": 1786532114.9135172,
+    "ast_hash": "10272ec1af4bd543123eb34ad3aff2c5",
+    "semantic_hash": "10272ec1af4bd543123eb34ad3aff2c5"
+  },
+  "src/Banking.BankApi/Services/FinancingCatalogService.cs": {
+    "mtime": 1786517927.7559233,
+    "ast_hash": "259fb6fd8f41a098fdd34d10736bf8d9",
+    "semantic_hash": "259fb6fd8f41a098fdd34d10736bf8d9"
+  },
+  "src/Banking.BankApi/Services/InsuranceService.cs": {
+    "mtime": 1786532276.7052617,
+    "ast_hash": "da56691a37c1ed4a6a1349a4b788f5a3",
+    "semantic_hash": "da56691a37c1ed4a6a1349a4b788f5a3"
+  },
+  "src/Banking.BankApi/Services/InvestmentService.cs": {
+    "mtime": 1786533179.7263067,
+    "ast_hash": "6dd817563203851af298cbbbf1503b5d",
+    "semantic_hash": "6dd817563203851af298cbbbf1503b5d"
+  },
+  "src/Banking.BankApi/Services/LoanService.cs": {
+    "mtime": 1786532146.4637556,
+    "ast_hash": "b6357158ed4cc1cdbaf8c9a49b4404ff",
+    "semantic_hash": "b6357158ed4cc1cdbaf8c9a49b4404ff"
+  },
+  "src/Banking.BankApi/Services/MkCodeCatalogService.cs": {
+    "mtime": 1786518071.695043,
+    "ast_hash": "2fe212057fe05531e82bf35692ee1772",
+    "semantic_hash": "2fe212057fe05531e82bf35692ee1772"
+  },
+  "src/Banking.BankApi/Services/StandingOrderService.cs": {
+    "mtime": 1786532202.343124,
+    "ast_hash": "b3f02be0bbdaaab932ef4553b408a26d",
+    "semantic_hash": "b3f02be0bbdaaab932ef4553b408a26d"
+  },
+  "src/Banking.BankApi/Services/TransferService.cs": {
+    "mtime": 1786517990.0517056,
+    "ast_hash": "138ab8539525ff56f1eff06d81529f5a",
+    "semantic_hash": "138ab8539525ff56f1eff06d81529f5a"
+  },
+  "src/Banking.BankApi/Validation/BankValidationResult.cs": {
+    "mtime": 1786532382.789476,
+    "ast_hash": "1bb03cf2952f961ee7a1941ddf2af4df",
+    "semantic_hash": "1bb03cf2952f961ee7a1941ddf2af4df"
+  },
+  "src/Banking.BankApi/Validation/TurkishIbanValidator.cs": {
+    "mtime": 1786518005.7755356,
+    "ast_hash": "277aae3731285e9d5d156e5922e999d1",
+    "semantic_hash": "277aae3731285e9d5d156e5922e999d1"
+  },
+  "src/Banking.BankApi/appsettings.Development.json": {
+    "mtime": 1785933494.26869,
+    "ast_hash": "804b473502a4c415cf75db61c56c32aa",
+    "semantic_hash": "804b473502a4c415cf75db61c56c32aa"
+  },
+  "src/Banking.BankApi/appsettings.json": {
+    "mtime": 1785933494.2696927,
+    "ast_hash": "f7e65dde4e5533740a0d57ac9355c0e8",
+    "semantic_hash": "f7e65dde4e5533740a0d57ac9355c0e8"
+  },
+  "src/Banking.Domain/Banking.Domain.csproj": {
+    "mtime": 1786343174.0604348,
+    "ast_hash": "10e1c1acc1eccca1c77e900ea3af45f1",
+    "semantic_hash": "10e1c1acc1eccca1c77e900ea3af45f1"
+  },
+  "src/Banking.Domain/Constants/AgentConstants.cs": {
+    "mtime": 1786512635.7397497,
+    "ast_hash": "e1c431c649e0bbf4cbf40c739cddca32",
+    "semantic_hash": "e1c431c649e0bbf4cbf40c739cddca32"
+  },
+  "src/Banking.Domain/Constants/ToolNames.cs": {
+    "mtime": 1786512560.4890707,
+    "ast_hash": "cab9dcbbff6cb23b1b237a02ccb7bf15",
+    "semantic_hash": "cab9dcbbff6cb23b1b237a02ccb7bf15"
+  },
+  "src/Banking.Domain/Constants/TraceCategories.cs": {
+    "mtime": 1786512531.702663,
+    "ast_hash": "b5cad2eaed556b4b593fb6172b79ac4a",
+    "semantic_hash": "b5cad2eaed556b4b593fb6172b79ac4a"
+  },
+  "src/Banking.Domain/Constants/WorkflowPhases.cs": {
+    "mtime": 1786091644.8938003,
+    "ast_hash": "24cbb00efd7344a876401db3a57a2c17",
+    "semantic_hash": "24cbb00efd7344a876401db3a57a2c17"
+  },
+  "src/Banking.Domain/Constants/WorkflowStatuses.cs": {
+    "mtime": 1786091650.55985,
+    "ast_hash": "d683fa75509af41c9df94c44cdee914c",
+    "semantic_hash": "d683fa75509af41c9df94c44cdee914c"
+  },
+  "src/Banking.Domain/MkCodes/MkCodeDefinition.cs": {
+    "mtime": 1786512588.1101484,
+    "ast_hash": "8ab06de12361055baa8feb5d58e2d459",
+    "semantic_hash": "8ab06de12361055baa8feb5d58e2d459"
+  },
+  "src/Banking.Domain/Semantic/ISemanticIndexStore.cs": {
+    "mtime": 1786512493.2454484,
+    "ast_hash": "3f5917e62eefb7094255dacb8ea6f718",
+    "semantic_hash": "3f5917e62eefb7094255dacb8ea6f718"
+  },
+  "src/Banking.Domain/Semantic/InMemorySemanticIndexStore.cs": {
+    "mtime": 1786512503.659235,
+    "ast_hash": "46866094b7bba76871df97379b0aedb9",
+    "semantic_hash": "46866094b7bba76871df97379b0aedb9"
+  },
+  "src/Banking.Domain/Semantic/SemanticIndex.cs": {
+    "mtime": 1786512465.0733714,
+    "ast_hash": "177073ef33b69e0008d4f4dda71307de",
+    "semantic_hash": "177073ef33b69e0008d4f4dda71307de"
+  },
+  "src/Banking.Domain/Serialization/JsonPolicy.cs": {
+    "mtime": 1786530609.628,
+    "ast_hash": "ce0a7ea15bf92c2b68a820733005b749",
+    "semantic_hash": "ce0a7ea15bf92c2b68a820733005b749"
+  },
+  "src/Banking.Domain/Workflows/SemanticWorkflowSearcher.cs": {
+    "mtime": 1786512523.4976053,
+    "ast_hash": "36b27e3b0feb0465ce231ef41e0074da",
+    "semantic_hash": "36b27e3b0feb0465ce231ef41e0074da"
+  },
+  "src/Banking.Domain/Workflows/WorkflowMetadata.cs": {
+    "mtime": 1786512595.4797738,
+    "ast_hash": "e85ad6026c9f2d2c8dbcebbc57f92a6d",
+    "semantic_hash": "e85ad6026c9f2d2c8dbcebbc57f92a6d"
+  },
+  "src/Banking.Gateway/Banking.Gateway.csproj": {
+    "mtime": 1785915416.3337712,
+    "ast_hash": "4443129d95870254de1946616c2df992",
+    "semantic_hash": "4443129d95870254de1946616c2df992"
+  },
+  "src/Banking.Gateway/FlowRouter.cs": {
+    "mtime": 1786517342.1603925,
+    "ast_hash": "b5c989733c7f134e35f20e6489330e15",
+    "semantic_hash": "b5c989733c7f134e35f20e6489330e15"
+  },
+  "src/Banking.Gateway/GatewayResponseMapper.cs": {
+    "mtime": 1786517307.5999095,
+    "ast_hash": "ee8b38d0650555a13b7dc8e57d083678",
+    "semantic_hash": "ee8b38d0650555a13b7dc8e57d083678"
+  },
+  "src/Banking.Gateway/GatewayService.cs": {
+    "mtime": 1786517288.3768654,
+    "ast_hash": "9ac7aa8f200cb3285a78e87591ddcb30",
+    "semantic_hash": "9ac7aa8f200cb3285a78e87591ddcb30"
+  },
+  "src/Banking.Gateway/Models/GatewayRequest.cs": {
+    "mtime": 1786517352.5491452,
+    "ast_hash": "4cc367599450cf1804d242bb80410112",
+    "semantic_hash": "4cc367599450cf1804d242bb80410112"
+  },
+  "src/Banking.Gateway/Models/GatewayResponse.cs": {
+    "mtime": 1786517367.976355,
+    "ast_hash": "587addd2f986f98d2f6e7f63ba7580c0",
+    "semantic_hash": "587addd2f986f98d2f6e7f63ba7580c0"
+  },
+  "src/Banking.Gateway/Models/GatewayResponseType.cs": {
+    "mtime": 1786517380.2299788,
+    "ast_hash": "2832bad9f30e55b2818ff561a2d15c87",
+    "semantic_hash": "2832bad9f30e55b2818ff561a2d15c87"
+  },
+  "src/Banking.Gateway/ResponseSanitizer.cs": {
+    "mtime": 1786517318.9149969,
+    "ast_hash": "e111301a0be07ddef45f7aa1b4611f3d",
+    "semantic_hash": "e111301a0be07ddef45f7aa1b4611f3d"
+  },
+  "src/Banking.Host/Banking.Host.csproj": {
+    "mtime": 1786343315.7291758,
+    "ast_hash": "65123fb25ea6f07b599e0afca3965722",
+    "semantic_hash": "65123fb25ea6f07b599e0afca3965722"
+  },
+  "src/Banking.Host/Composition/ApiEndpoints.cs": {
+    "mtime": 1786517643.4140797,
+    "ast_hash": "100796888a9ad08db6a0047ce181ec91",
+    "semantic_hash": "100796888a9ad08db6a0047ce181ec91"
+  },
+  "src/Banking.Host/Composition/ServiceRegistration.cs": {
+    "mtime": 1786530533.463588,
+    "ast_hash": "8943b283c050bac5927dc6d2a92e34c3",
+    "semantic_hash": "8943b283c050bac5927dc6d2a92e34c3"
+  },
+  "src/Banking.Host/Composition/StartupLoader.cs": {
+    "mtime": 1786517703.3702497,
+    "ast_hash": "ea3c341481e6bfba139528009f6a9ed1",
+    "semantic_hash": "ea3c341481e6bfba139528009f6a9ed1"
+  },
+  "src/Banking.Host/DeclarativeFileStore.cs": {
+    "mtime": 1786517733.0097272,
+    "ast_hash": "0b58eae772069ac8ef0bb76598ea9fa6",
+    "semantic_hash": "0b58eae772069ac8ef0bb76598ea9fa6"
+  },
+  "src/Banking.Host/Program.cs": {
+    "mtime": 1786517664.9747446,
+    "ast_hash": "0b5d6036222181b5b708ad8f5abd0977",
+    "semantic_hash": "0b5d6036222181b5b708ad8f5abd0977"
+  },
+  "src/Banking.Host/Properties/launchSettings.json": {
+    "mtime": 1784892861.5514915,
+    "ast_hash": "e8d4a41eab5ac638caae54ccbb6129b4",
+    "semantic_hash": "e8d4a41eab5ac638caae54ccbb6129b4"
+  },
+  "src/Banking.Host/appsettings.Development.json": {
+    "mtime": 1785234375.8879223,
+    "ast_hash": "804b473502a4c415cf75db61c56c32aa",
+    "semantic_hash": "804b473502a4c415cf75db61c56c32aa"
+  },
+  "src/Banking.Host/appsettings.json": {
+    "mtime": 1786365845.964,
+    "ast_hash": "219d9bb43c1ab4b0d892da2909c34c95",
+    "semantic_hash": "219d9bb43c1ab4b0d892da2909c34c95"
+  },
+  "src/Banking.Mcp/AccountsTools.cs": {
+    "mtime": 1786513798.6434078,
+    "ast_hash": "58ce5e92b4de15f165b5943f4cdfa800",
+    "semantic_hash": "58ce5e92b4de15f165b5943f4cdfa800"
+  },
+  "src/Banking.Mcp/AnalyzeTools.cs": {
+    "mtime": 1786513773.2063093,
+    "ast_hash": "ec111b2a44f58e74f9fd9ecb677eceff",
+    "semantic_hash": "ec111b2a44f58e74f9fd9ecb677eceff"
+  },
+  "src/Banking.Mcp/BankApiToolGateway.cs": {
+    "mtime": 1786513724.6518333,
+    "ast_hash": "256e7b6af035c3b7554809b8a4f01d0a",
+    "semantic_hash": "256e7b6af035c3b7554809b8a4f01d0a"
+  },
+  "src/Banking.Mcp/Banking.Mcp.csproj": {
+    "mtime": 1786093610.777742,
+    "ast_hash": "59accad3cbc6f590e8d824e18c05d475",
+    "semantic_hash": "59accad3cbc6f590e8d824e18c05d475"
+  },
+  "src/Banking.Mcp/CardsTools.cs": {
+    "mtime": 1786513832.953786,
+    "ast_hash": "1ca3826cb82cde75de9f9b4b8286caf9",
+    "semantic_hash": "1ca3826cb82cde75de9f9b4b8286caf9"
+  },
+  "src/Banking.Mcp/Constants/AccountToolNames.cs": {
+    "mtime": 1785841759.3732731,
+    "ast_hash": "5a693d73d2ebeb2390b32a1eb233e065",
+    "semantic_hash": "5a693d73d2ebeb2390b32a1eb233e065"
+  },
+  "src/Banking.Mcp/Constants/AnalyzeToolNames.cs": {
+    "mtime": 1785915416.3448448,
+    "ast_hash": "3e0eeb07971d9575727fb51ad4b01aef",
+    "semantic_hash": "3e0eeb07971d9575727fb51ad4b01aef"
+  },
+  "src/Banking.Mcp/Constants/BankApiPaths.cs": {
+    "mtime": 1786513757.319501,
+    "ast_hash": "db68ed4832efdabf107fa1c5039d384d",
+    "semantic_hash": "db68ed4832efdabf107fa1c5039d384d"
+  },
+  "src/Banking.Mcp/Constants/CardToolNames.cs": {
+    "mtime": 1785841759.3842723,
+    "ast_hash": "27beca9eeb2abf873004f02a4152a483",
+    "semantic_hash": "27beca9eeb2abf873004f02a4152a483"
+  },
+  "src/Banking.Mcp/CustomerContext.cs": {
+    "mtime": 1786513735.949908,
+    "ast_hash": "2733ffe76a6099277850ef8071f2e6d0",
+    "semantic_hash": "2733ffe76a6099277850ef8071f2e6d0"
+  },
+  "src/Banking.Mcp/Registry/ToolDefinition.cs": {
+    "mtime": 1786343835.4994547,
+    "ast_hash": "0066c8350e6be140bab4c9b0038baaaf",
+    "semantic_hash": "0066c8350e6be140bab4c9b0038baaaf"
+  },
+  "src/Banking.Mcp/Registry/ToolGroupAttribute.cs": {
+    "mtime": 1785915416.3458424,
+    "ast_hash": "4aabb2bc9850b72a7234948ed7a5c1d3",
+    "semantic_hash": "4aabb2bc9850b72a7234948ed7a5c1d3"
+  },
+  "src/Banking.Mcp/Registry/ToolRegistry.cs": {
+    "mtime": 1786513697.5615256,
+    "ast_hash": "986c1137974dacc17042aa06dff3335e",
+    "semantic_hash": "986c1137974dacc17042aa06dff3335e"
+  },
+  "src/Banking.Mcp/Semantic/CampaignSyncService.cs": {
+    "mtime": 1786513665.9340346,
+    "ast_hash": "09adc20e1f848539c712056bbd887c50",
+    "semantic_hash": "09adc20e1f848539c712056bbd887c50"
+  },
+  "src/Banking.Mcp/Semantic/MkCodeCatalog.cs": {
+    "mtime": 1786513634.0441768,
+    "ast_hash": "64fc7a2be1d1de017a3caa90b7a3b04e",
+    "semantic_hash": "64fc7a2be1d1de017a3caa90b7a3b04e"
+  },
+  "src/Banking.Mcp/Semantic/SemanticCampaignSearcher.cs": {
+    "mtime": 1786513542.0941787,
+    "ast_hash": "ba6c25e9f40882026f70002b3891c33d",
+    "semantic_hash": "ba6c25e9f40882026f70002b3891c33d"
+  },
+  "src/Banking.Mcp/Semantic/SemanticFinancingSearcher.cs": {
+    "mtime": 1786513656.2828908,
+    "ast_hash": "7fabe41767d3dd26ea66f316291f440c",
+    "semantic_hash": "7fabe41767d3dd26ea66f316291f440c"
+  },
+  "src/Banking.Mcp/Semantic/SemanticMkCodeSearcher.cs": {
+    "mtime": 1786513596.9577696,
+    "ast_hash": "e1fae6d282302cadfb76c75e8bd8c308",
+    "semantic_hash": "e1fae6d282302cadfb76c75e8bd8c308"
+  },
+  "tools/ApiDump/ApiDump.csproj": {
+    "mtime": 1784892861.5910242,
+    "ast_hash": "51a3b069ac24343a4e13b19ff06a788b",
+    "semantic_hash": "51a3b069ac24343a4e13b19ff06a788b"
+  },
+  "tools/ApiDump/Program.cs": {
+    "mtime": 1785841726.6460538,
+    "ast_hash": "bf3fdf432b6ae588b33d1821e4fb3211",
+    "semantic_hash": "bf3fdf432b6ae588b33d1821e4fb3211"
+  },
+  "tools/LoadTest/ApiClient.cs": {
+    "mtime": 1786185644.555282,
+    "ast_hash": "31fcfa1d229f876b1e786d24b6f196d5",
+    "semantic_hash": "31fcfa1d229f876b1e786d24b6f196d5"
+  },
+  "tools/LoadTest/BankSnapshot.cs": {
+    "mtime": 1786185762.3931532,
+    "ast_hash": "faf70e24a538fb8689bf5d79aa636fcf",
+    "semantic_hash": "faf70e24a538fb8689bf5d79aa636fcf"
+  },
+  "tools/LoadTest/Invariants.cs": {
+    "mtime": 1786186035.1325176,
+    "ast_hash": "41da9fa3391a9615153453de7cac1d1f",
+    "semantic_hash": "41da9fa3391a9615153453de7cac1d1f"
+  },
+  "tools/LoadTest/JourneyResult.cs": {
+    "mtime": 1786185710.1485336,
+    "ast_hash": "28d66f2b8a845426b245971ab61746f2",
+    "semantic_hash": "28d66f2b8a845426b245971ab61746f2"
+  },
+  "tools/LoadTest/JourneyRunner.cs": {
+    "mtime": 1786185971.1790564,
+    "ast_hash": "08c8c01644570237e188499d7df1df8c",
+    "semantic_hash": "08c8c01644570237e188499d7df1df8c"
+  },
+  "tools/LoadTest/LeakScanner.cs": {
+    "mtime": 1786185833.0744958,
+    "ast_hash": "b3b3b0bcafda6c688035671eb5b313bb",
+    "semantic_hash": "b3b3b0bcafda6c688035671eb5b313bb"
+  },
+  "tools/LoadTest/LoadTest.csproj": {
+    "mtime": 1786185439.4900684,
+    "ast_hash": "ac0209c1fa2f18f5c67d0b156b5ac1b7",
+    "semantic_hash": "ac0209c1fa2f18f5c67d0b156b5ac1b7"
+  },
+  "tools/LoadTest/LoadTestOptions.cs": {
+    "mtime": 1786185507.6362975,
+    "ast_hash": "f545860aa38adf9c3862adfb1e58ea15",
+    "semantic_hash": "f545860aa38adf9c3862adfb1e58ea15"
+  },
+  "tools/LoadTest/MetricsCollector.cs": {
+    "mtime": 1786185672.161507,
+    "ast_hash": "d24f62a85067828084e7999342f579c8",
+    "semantic_hash": "d24f62a85067828084e7999342f579c8"
+  },
+  "tools/LoadTest/Program.cs": {
+    "mtime": 1786186211.4384513,
+    "ast_hash": "a217937a717d13f2b7247052fac935d9",
+    "semantic_hash": "a217937a717d13f2b7247052fac935d9"
+  },
+  "tools/LoadTest/ReportWriter.cs": {
+    "mtime": 1786186106.5021312,
+    "ast_hash": "f2d45cef57f0a313da61e72f1a6729e8",
+    "semantic_hash": "f2d45cef57f0a313da61e72f1a6729e8"
+  },
+  "tools/LoadTest/ScenarioCatalog.cs": {
+    "mtime": 1786185548.183348,
+    "ast_hash": "8541be6b6c06ba392f73eb93193a4c2d",
+    "semantic_hash": "8541be6b6c06ba392f73eb93193a4c2d"
+  },
+  "tools/WorkflowTest/FakeBankApiClient.cs": {
+    "mtime": 1786092060.3496025,
+    "ast_hash": "dd2028b6f1285359fa4828dd4c6114db",
+    "semantic_hash": "dd2028b6f1285359fa4828dd4c6114db"
+  },
+  "tools/WorkflowTest/Program.cs": {
+    "mtime": 1786006263.6772096,
+    "ast_hash": "d9643fa8c3a69dbeb3b91f2be59b17f5",
+    "semantic_hash": "d9643fa8c3a69dbeb3b91f2be59b17f5"
+  },
+  "tools/WorkflowTest/WorkflowTest.csproj": {
+    "mtime": 1784892861.6074007,
+    "ast_hash": "ec5c0b60bd4b0f290cf444b8063ec08a",
+    "semantic_hash": "ec5c0b60bd4b0f290cf444b8063ec08a"
+  },
+  "ANALIZ.md": {
+    "mtime": 1786601101.7411177,
+    "ast_hash": "cb9aff033eca9c4c9a5d035a2537f7eb",
+    "semantic_hash": "cb9aff033eca9c4c9a5d035a2537f7eb"
+  },
+  "README.md": {
+    "mtime": 1786365668.7884264,
+    "ast_hash": "f2a134d93343c14adc8c19162e5ee943",
+    "semantic_hash": "f2a134d93343c14adc8c19162e5ee943"
+  },
+  "docs/DOKUMANTASYON-STANDARDI.md": {
+    "mtime": 1786514740.8367157,
+    "ast_hash": "575119d4f7a58b3252d5b7a8790beef8",
+    "semantic_hash": "575119d4f7a58b3252d5b7a8790beef8"
+  },
+  "docs/FINAL-PLAN.md": {
+    "mtime": 1786603149.7333882,
+    "ast_hash": "766a473079887324fb1e0bacbb2fb5ba",
+    "semantic_hash": "766a473079887324fb1e0bacbb2fb5ba"
+  },
+  "docs/MAF-API-NOTES.md": {
+    "mtime": 1786603149.754531,
+    "ast_hash": "72b2368e76055b809a3dbd21b7a682b8",
+    "semantic_hash": "72b2368e76055b809a3dbd21b7a682b8"
+  },
+  "docs/PROMPT-YAZIM-REHBERI.md": {
+    "mtime": 1786100013.0542989,
+    "ast_hash": "d5d82db387701cdb1b2011449a32759d",
+    "semantic_hash": "d5d82db387701cdb1b2011449a32759d"
+  },
+  "src/Banking.Host/declarative-agents/card-payment.yaml": {
+    "mtime": 1786523927.6593974,
+    "ast_hash": "04da0af39744f05f953254ff6bb6efec",
+    "semantic_hash": "04da0af39744f05f953254ff6bb6efec"
+  },
+  "src/Banking.Host/declarative-agents/kredi-karti-basvuru.yaml": {
+    "mtime": 1786525771.4219656,
+    "ast_hash": "63161e248916397ff349bfccd7a2f162",
+    "semantic_hash": "63161e248916397ff349bfccd7a2f162"
+  },
+  "src/Banking.Host/declarative-agents/limit-artirim.yaml": {
+    "mtime": 1786523927.6593974,
+    "ast_hash": "a8258d592760c32035a73c7087cc5030",
+    "semantic_hash": "a8258d592760c32035a73c7087cc5030"
+  },
+  "src/Banking.Host/declarative-agents/money-transfer.yaml": {
+    "mtime": 1786523927.660398,
+    "ast_hash": "ce34648ea887921bcad32313e26871ca",
+    "semantic_hash": "ce34648ea887921bcad32313e26871ca"
+  },
+  "src/Banking.Host/declarative-agents/otomatik-odeme-talimati.yaml": {
+    "mtime": 1786523927.6614,
+    "ast_hash": "ca3e0158c45175b805128294cb90499d",
+    "semantic_hash": "ca3e0158c45175b805128294cb90499d"
+  },
+  "src/Banking.Host/specialist-agents/finans.yaml": {
+    "mtime": 1786453850.173,
+    "ast_hash": "7826aed5b8b3ee33ace2ca5ee2371b69",
+    "semantic_hash": "7826aed5b8b3ee33ace2ca5ee2371b69"
+  },
+  "src/Banking.Host/specialist-agents/kampanya.yaml": {
+    "mtime": 1786017331.724651,
+    "ast_hash": "362878c49216248fd6d504e985a3a79e",
+    "semantic_hash": "362878c49216248fd6d504e985a3a79e"
+  },
+  "tools/LoadTest/README.md": {
+    "mtime": 1786186318.319589,
+    "ast_hash": "fb7e17182a4b7f1a24a5e0630f83ea47",
+    "semantic_hash": "fb7e17182a4b7f1a24a5e0630f83ea47"
+  }
+}

@@ -1,24 +1,101 @@
-// MAF Workflow human-in-the-loop onay gate'inin LLM olmadan deterministik testi.
-// Akış: ConfirmationView -> RequestPort (insan onayı) -> bool -> ChargeExecutor -> makbuz.
-using Banking.Agents.Collection;
-using Banking.Domain;
-using Banking.Domain.Data;
-using Banking.Domain.Models;
-using Banking.Domain.Services;
+// MAF Workflow human-in-the-loop onay gate'inin LLM olmadan ve banka sunucusu olmadan
+// deterministik testi.
+// Akış: GenericConfirmationView -> RequestPort (insan onayı) -> bool -> WorkflowActionGateway -> WorkflowOutcome.
+//
+// Ölçtüğü şey: onay kapısı gerçekten bankaya istek attırıyor mu, ret gerçekten hiçbir istek
+// attırmıyor mu, ve aynı onay ikinci kez geldiğinde ikinci bir para hareketi oluyor mu.
+//
+// Slot record'u YOKTUR: parametreler YAML'da olduğu gibi düz bir sözlüktür.
+using Banking.Agents.Tracing;
+using Banking.Agents.Workflows;
+using Banking.Agents.Workflows.Actions;
+using Banking.Agents.Workflows.Approval;
 using Microsoft.Agents.AI.Workflows;
+using WorkflowTest;
 
-var slots = new PaymentSlots("CARD-2002", 5000m, "ACC-1001", BankClock.Today);
+// declarative-agents/card-payment.yaml'daki action bloğunun karşılığı.
+var action = new WorkflowActionDefinition(
+    WorkflowName: "card-payment",
+    MkCode: "CreditCardPayment",
+    Method: HttpMethod.Put,
+    Path: "/api/card-payment",
+    DisplayName: "Kredi Kartı Borç Ödeme");
 
-async Task RunScenarioAsync(bool approve)
+// YAML'daki outputSchema alanlarının dolmuş hâli.
+var slots = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+{
+    ["cardId"] = "CARD-2002",
+    ["amount"] = 5000m,
+    ["sourceAccountId"] = "ACC-1001"
+};
+
+var failures = 0;
+
+await RunScenarioAsync(approve: true, expectedRequestCount: 1);
+await RunScenarioAsync(approve: false, expectedRequestCount: 0);
+await RunDoubleApprovalScenarioAsync();
+
+Console.WriteLine(failures == 0
+    ? "\nTÜM SENARYOLAR GEÇTİ."
+    : $"\n{failures} SENARYO BAŞARISIZ.");
+
+return failures;
+
+async Task RunScenarioAsync(bool approve, int expectedRequestCount)
 {
     Console.WriteLine($"\n=== SENARYO: kullanıcı {(approve ? "ONAYLAR" : "REDDEDER")} ===");
-    var store = new InMemoryBankStore();
-    var card = store.GetCard("CARD-2002")!;
-    Console.WriteLine($"  Başlangıç → borç {card.CurrentDebt:N2} ₺, hesap bakiye {store.GetAccount("ACC-1001")!.Balance:N2} ₺");
 
-    var view = new ConfirmationView("**** **** **** 8830", card.CurrentDebt, 5000m, Partial: true, "…3344",
-        BankClock.Today.ToString("dd.MM.yyyy"));
-    var wf = PaymentApprovalWorkflow.Build(new CollectionService(store), slots);
+    var bank = new FakeBankApiClient();
+    var hub = new TraceHub();
+    var executor = new WorkflowActionGateway(bank, hub);
+
+    var outcome = await RunApprovalGraphAsync(executor, hub, approve);
+
+    Console.WriteLine($"  >>> SONUÇ [{outcome?.Status}] {outcome?.UserMessage}");
+    Console.WriteLine($"  Bankaya giden istek sayısı: {bank.SentRequests.Count} (beklenen {expectedRequestCount})");
+
+    foreach (var (method, path, body, idempotencyKey) in bank.SentRequests)
+    {
+        var keys = body is IReadOnlyDictionary<string, object?> fields ? string.Join(", ", fields.Keys) : "-";
+        Console.WriteLine($"    → {method} {path} · gövde anahtarları: [{keys}] · Idempotency-Key: {idempotencyKey?[..12]}…");
+    }
+
+    Check(bank.SentRequests.Count == expectedRequestCount, "istek sayısı");
+}
+
+async Task RunDoubleApprovalScenarioAsync()
+{
+    Console.WriteLine("\n=== SENARYO: aynı onay İKİ KEZ (çift tıklama) ===");
+
+    var bank = new FakeBankApiClient();
+    var hub = new TraceHub();
+    var executor = new WorkflowActionGateway(bank, hub);
+
+    var first = await RunApprovalGraphAsync(executor, hub, approve: true);
+    var second = await RunApprovalGraphAsync(executor, hub, approve: true);
+
+    // Makbuz numarası bu branch'te sonuca taşınmıyor; çift tıklamanın kanıtı
+    // tek idempotency anahtarı ve iki turda birebir aynı sonuç mesajıdır.
+    Console.WriteLine($"  1. sonuç: {first?.UserMessage}");
+    Console.WriteLine($"  2. sonuç: {second?.UserMessage}");
+
+    var keys = bank.SentRequests.Select(request => request.IdempotencyKey).Distinct().ToList();
+    Console.WriteLine($"  Farklı idempotency anahtarı sayısı: {keys.Count} (beklenen 1)");
+
+    Check(keys.Count == 1, "idempotency anahtarı tekliği");
+    Check(first?.UserMessage == second?.UserMessage, "aynı sonuç mesajı");
+}
+
+async Task<WorkflowOutcome?> RunApprovalGraphAsync(WorkflowActionGateway executor, TraceHub hub, bool approve)
+{
+    var view = executor.BuildConfirmationView(action, slots);
+
+    var wf = ApprovalGatedActionGraphBuilder.BuildGraph(
+        action: action,
+        slots: slots,
+        actionGateway: executor,
+        hub: hub,
+        requiresApproval: true);
 
     var run = await InProcessExecution.RunStreamingAsync(wf, view);
     var events = run.WatchStreamAsync().GetAsyncEnumerator();
@@ -26,43 +103,43 @@ async Task RunScenarioAsync(bool approve)
     ExternalRequest? pending = null;
     while (await events.MoveNextAsync())
     {
-        Console.WriteLine($"  [event] {events.Current.GetType().Name}");
-        if (events.Current is RequestInfoEvent rie)
+        if (events.Current is RequestInfoEvent requestInfo)
         {
-            pending = rie.Request;
+            pending = requestInfo.Request;
             Console.WriteLine("  >>> HITL DURAKLADI: kullanıcıdan onay isteniyor (onay ekranı gösterilir).");
             break;
         }
     }
-    if (pending is null) { Console.WriteLine("  HATA: onay isteği gelmedi."); return; }
+
+    if (pending is null)
+    {
+        Console.WriteLine("  HATA: onay isteği gelmedi.");
+        failures++;
+        return null;
+    }
 
     await run.SendResponseAsync(pending.CreateResponse(approve));
 
     while (await events.MoveNextAsync())
     {
-        Console.WriteLine($"  [event] {events.Current.GetType().Name}");
-        if (events.Current is WorkflowOutputEvent o && o.Is<PaymentOutcome>())
+        if (events.Current is WorkflowOutputEvent output && output.Is<WorkflowOutcome>())
+            return output.As<WorkflowOutcome>();
+
+        if (events.Current is ExecutorFailedEvent executorFailed)
+            Console.WriteLine($"  !! EXECUTOR FAIL: {executorFailed.Data}");
+
+        if (events.Current is WorkflowErrorEvent workflowError)
         {
-            var outcome = o.As<PaymentOutcome>()!;
-            if (outcome.Receipt is { } r)
-                Console.WriteLine($"  >>> MAKBUZ: {r.ReceiptId} | ödenen {r.Amount:N2} ₺ | kalan borç {r.RemainingDebt:N2} ₺");
-            else if (outcome.Cancelled is { } x)
-                Console.WriteLine($"  >>> İPTAL: {x.Reason}");
-            break;
-        }
-        if (events.Current is ExecutorFailedEvent ef)
-            Console.WriteLine($"  !! EXECUTOR FAIL: {ef.Data}");
-        if (events.Current is WorkflowErrorEvent we)
-        {
-            Console.WriteLine($"  !! WORKFLOW ERROR: {we.Exception?.GetType().Name}: {we.Exception?.Message}");
+            Console.WriteLine($"  !! WORKFLOW ERROR: {workflowError.Exception?.Message}");
             break;
         }
     }
 
-    var c = store.GetCard("CARD-2002")!;
-    Console.WriteLine($"  SONUÇ → borç {c.CurrentDebt:N2} ₺, hesap bakiye {store.GetAccount("ACC-1001")!.Balance:N2} ₺");
+    return null;
 }
 
-await RunScenarioAsync(approve: true);
-await RunScenarioAsync(approve: false);
-Console.WriteLine("\nBeklenen → ONAY: borç 3.900 / bakiye 43.750 ; RED: borç 8.900 / bakiye 48.750 (değişmez).");
+void Check(bool condition, string label)
+{
+    Console.WriteLine(condition ? $"  OK   {label}" : $"  FAIL {label}");
+    if (!condition) failures++;
+}

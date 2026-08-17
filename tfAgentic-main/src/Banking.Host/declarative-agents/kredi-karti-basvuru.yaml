@@ -1,0 +1,120 @@
+kind: Workflow
+name: kredi-karti-basvuru
+displayName: Kredi Kartı Başvurusu
+description: Kullanıcı yeni bir kredi kartı başvurusu yapmak istediğinde.
+mkCode: NewCreditCardApplication
+instructions: |
+  Bu akış sadece yeni kredi kartı başvurusu almak için kullanılır. Mevcut kartın limit artırımı,
+  kart borcu ödeme ve kredi başvurusu bu akışın konusu değildir.
+
+  Uzun bir form topluyorsun; soruları anlam gruplarına ayırarak sor, tek mesajda hepsini birden
+  sıralama. Sırasıyla şu grupları netleştir:
+  1) Çalışma ve gelir bilgisi: çalışma şekli, meslek, ünvan, işyeri, iş telefonu, işe giriş tarihi,
+     eğitim durumu, bakmakla yükümlü olunan kişi sayısı, net gelir ve ek gelir.
+  2) Kart tercihleri: ürün tercihi, talep edilen limit, hesap kesim günü.
+  3) Teslimat ve iletişim: kartın nereye teslim edileceği, e-ekstre adresi.
+  4) Ek ürünler ve izin: ek kart, kart sigortası, veri işleme izni.
+
+  Teslimat kanalı "Adres" ise teslimat adresini, "Şube" ise şube kodunu sor; diğerini hiç sorma.
+  Ek kart isteniyorsa ek kart hamilinin adını sor; istenmiyorsa bu alanı hiç sorma.
+  Talep edilen limit kullanıcının kendi isteğidir ve tavan değildir; kullanıcı bir tutar
+  söylemediyse bu alanı boş bırak, kendin bir rakam yazma.
+  Onay veya izin gerektiren alanlarda kullanıcının açık cevabını bekle; sessizliği onay sayma.
+  Tahsis edilecek limiti sen belirleme; kararı ve limiti banka verir.
+model:
+  options:
+    temperature: 0.1
+outputSchema:
+  type: object
+  properties:
+    workType:
+      type: string
+      required: true
+      description: Kullanıcının çalışma şekli (Kamu, Özel, Serbest, Emekli).
+    job:
+      type: string
+      required: true
+      description: Kullanıcının mesleği.
+    rank:
+      type: string
+      required: true
+      description: Meslekteki ünvanı (uzman, yardımcı, yönetici gibi).
+    eduBackground:
+      type: string
+      required: true
+      description: Eğitim durumu (Lise, Ön Lisans, Lisans, Yüksek Lisans, Doktora).
+    firstWorkDay:
+      type: string
+      required: true
+      description: İlk işe başladığı tarih, yyyy-MM-dd biçiminde.
+    numberOfDependents:
+      type: number
+      required: true
+      description: Bakmakla yükümlü olduğu kişi sayısı. Kimse yoksa 0 yazılır.
+    monthlyNetIncome:
+      type: number
+      required: true
+      description: Kullanıcının beyan ettiği aylık net geliri, TL cinsinden sayı olarak.
+    additionalMonthlyIncome:
+      type: number
+      required: false
+      description: Kira, nafaka, ek iş gibi düzenli ek gelir. Yoksa boş bırakılır.
+    employerName:
+      type: string
+      required: true
+      description: Çalışılan kurumun veya işyerinin adı.
+    workPhone:
+      type: string
+      required: false
+      description: İşyeri telefonu. Kullanıcı vermek istemezse boş bırakılır.
+    cardProductPreference:
+      type: string
+      required: true
+      description: >-
+        İstenen kart ürünü. Geçerli değerler Classic, Gold, Platinum. Her ürünün tahsis
+        edilebilecek en yüksek limiti farklıdır; kararı banka verir.
+    requestedLimit:
+      type: number
+      required: false
+      description: Kullanıcının talep ettiği kart limiti. Bir tutar söylemediyse boş bırakılır.
+    statementDay:
+      type: number
+      required: true
+      description: Hesap kesim günü. Ayın 1 ile 28'i arasında bir gün olmalıdır.
+    deliveryChannel:
+      type: string
+      required: true
+      description: Kartın nasıl teslim edileceği. Geçerli değerler Adres, Şube.
+    deliveryAddressLine:
+      type: string
+      required: false
+      description: Kartın gönderileceği açık adres. Yalnızca teslimat kanalı Adres ise doldurulur.
+    deliveryBranchCode:
+      type: string
+      required: false
+      description: Kartın teslim alınacağı şubenin kodu. Yalnızca teslimat kanalı Şube ise doldurulur.
+    eStatementEmail:
+      type: string
+      required: false
+      description: E-ekstrenin gönderileceği e-posta adresi. İstenmiyorsa boş bırakılır.
+    supplementaryCardRequested:
+      type: boolean
+      required: true
+      description: Ek kart isteniyorsa true.
+    supplementaryCardHolderName:
+      type: string
+      required: false
+      description: Ek kart hamilinin adı soyadı. Yalnızca ek kart isteniyorsa doldurulur.
+    cardInsuranceOptIn:
+      type: boolean
+      required: true
+      description: Kart güvence sigortası isteniyorsa true.
+    kvkkConsent:
+      type: boolean
+      required: true
+      description: >-
+        Kişisel verilerin başvuru için işlenmesine izin verildiğini gösterir. Kullanıcı açıkça
+        onaylamadan true yazılmaz.
+action:
+  method: POST
+  path: /api/credit-card-application

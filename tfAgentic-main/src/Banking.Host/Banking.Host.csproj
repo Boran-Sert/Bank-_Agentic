@@ -5,11 +5,18 @@
     <ProjectReference Include="..\Banking.Mcp\Banking.Mcp.csproj" />
     <ProjectReference Include="..\Banking.Domain\Banking.Domain.csproj" />
     <ProjectReference Include="..\Banking.Gateway\Banking.Gateway.csproj" />
+    <ProjectReference Include="..\Banking.BankApi.Client\Banking.BankApi.Client.csproj" />
+    <!--
+      Banking.BankApi'ye referans YOKTUR ve olmamalıdır. Sahte banka ayrı bir süreçtir ve bu süreç
+      ona yalnızca HTTP ile (Banking.BankApi.Client) bağlanır. Referans eklemek, sahte banka
+      kaldırıldığında host'u derlenemez hâle getirir.
+    -->
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Agents.AI.Hosting.A2A.AspNetCore" Version="1.11.1-preview.260625.1" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.0" />
+    <PackageReference Include="SmartComponents.LocalEmbeddings" Version="0.1.0-preview10148" />
   </ItemGroup>
 
   <PropertyGroup>

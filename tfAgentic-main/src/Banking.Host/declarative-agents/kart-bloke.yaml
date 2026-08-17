@@ -1,0 +1,101 @@
+kind: Workflow
+name: kart-bloke
+displayName: Kart Blokaj ve Kayıp Çalıntı Bildirimi
+description: >-
+  Kartın kaybolması, çalınması veya geçici olarak kullanıma kapatılması; kayıp çalıntı bildirimi,
+  yenileme kartı talebi ve harcama itirazı.
+mkCode: CreditCards
+instructions: |
+  Bu akış sadece bir kartın işlemlere kapatılması için kullanılır. Blokajın kaldırılması, limit
+  artırımı ve kart borcu ödeme bu akışın konusu değildir.
+
+  Önce blokajın kalıcı mı geçici mi olduğunu netleştir, çünkü sorulacak alanlar buna göre değişir.
+  Kart kaybolduysa veya çalındıysa blokaj kalıcıdır ve kart bir daha açılmaz; kullanıcı kartını
+  geçici olarak kapatmak istiyorsa blokaj geçicidir ve sonradan kaldırılabilir. Bu ayrımı kullanıcıya
+  açıkça söyle ve kararını al.
+
+  Kart kimliğini kullanıcıya sorma; kart uzmanına danışarak bul, kullanıcı tarif ettiyse doğrudan
+  eşle, tarif etmediyse kartları okunabilir biçimde sunup seçmesini iste.
+
+  Blokaj kalıcıysa olayın gerçekleştiği tarihi sor; geçici blokajda olay tarihini hiç sorma.
+  Yenileme kartı isteniyorsa teslimat kanalını sor, kanal "Adres" ise teslimat adresini, "Şube" ise
+  şube kodunu sor; yenileme kartı istenmiyorsa teslimat alanlarını hiç sorma.
+  Kullanıcı tanımadığı harcama olduğunu söylediyse itiraz tutarını sor; itiraz yoksa tutarı hiç sorma.
+model:
+  options:
+    temperature: 0.1
+outputSchema:
+  type: object
+  properties:
+    cardId:
+      type: string
+      required: true
+      description: >-
+        Kapatılacak kartın kimliği. Kart uzmanından gelir; kart numarası veya son haneler bu alana
+        yazılmaz.
+    reason:
+      type: string
+      required: true
+      description: Blokajın gerekçesi (kayıp, çalıntı, tanımadığım harcama, güvenlik endişesi gibi).
+    permanent:
+      type: boolean
+      required: true
+      description: >-
+        Blokajın kalıcı olduğunu gösterir. Kayıp ve çalıntı bildiriminde true; kart sonradan
+        açılamaz. Geçici kapatmada false.
+    issueReplacement:
+      type: boolean
+      required: true
+      description: Kapatılan kartın yerine yeni kart basılması isteniyorsa true.
+    incidentDate:
+      type: string
+      required: false
+      description: >-
+        Kaybın veya çalıntının gerçekleştiği tarih, yyyy-MM-dd biçiminde. Yalnızca kalıcı blokajda
+        doldurulur ve bugünden ileri olamaz.
+    incidentDescription:
+      type: string
+      required: false
+      description: Olayın kısa anlatımı. Kullanıcı anlatmak istemezse boş bırakılır.
+    lastKnownLocation:
+      type: string
+      required: false
+      description: Kartın en son nerede kullanıldığı veya görüldüğü. Bilinmiyorsa boş bırakılır.
+    policeReportFiled:
+      type: boolean
+      required: false
+      description: Olay için karakola başvurulduysa true. Kullanıcı belirtmediyse boş bırakılır.
+    disputedTransactionsExist:
+      type: boolean
+      required: true
+      description: Kullanıcının tanımadığı, itiraz ettiği harcama varsa true.
+    disputedAmount:
+      type: number
+      required: false
+      description: >-
+        İtiraz edilen harcamaların toplam tutarı. Yalnızca itiraz edilen harcama varsa doldurulur.
+    replacementDeliveryChannel:
+      type: string
+      required: false
+      description: >-
+        Yenileme kartının nasıl teslim edileceği. Geçerli değerler Adres, Şube. Yalnızca yenileme
+        kartı isteniyorsa doldurulur.
+    replacementDeliveryAddressLine:
+      type: string
+      required: false
+      description: Yenileme kartının gönderileceği açık adres. Yalnızca teslimat kanalı Adres ise doldurulur.
+    replacementBranchCode:
+      type: string
+      required: false
+      description: Yenileme kartının teslim alınacağı şubenin kodu. Yalnızca teslimat kanalı Şube ise doldurulur.
+    contactPhone:
+      type: string
+      required: true
+      description: Bankanın olayla ilgili ulaşabileceği telefon numarası.
+    notifyChannel:
+      type: string
+      required: true
+      description: İşlem sonucunun bildirileceği kanal. Geçerli değerler SMS, E-posta, Telefon.
+action:
+  method: PUT
+  path: /api/card-block

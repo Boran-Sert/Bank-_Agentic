@@ -1,0 +1,44 @@
+kind: Workflow
+name: talimat-iptali
+displayName: Ödeme Talimatı İptali
+description: >-
+  Kurulmuş bir otomatik ödeme talimatının iptal edilmesi; düzenli ödemenin durdurulması veya
+  kaldırılması.
+mkCode: AutomaticPaymentInstruction
+instructions: |
+  Bu akış sadece mevcut bir düzenli ödeme talimatının iptali için kullanılır. Yeni talimat kurmak,
+  talimatın tutarını veya gününü değiştirmek bu akışın konusu değildir.
+
+  Talimat kimliğini kullanıcıya sorma; ödeme uzmanına danışarak bul, kullanıcı tarif ettiyse doğrudan
+  eşle, tarif etmediyse aktif talimatları adı, hedefi ve çalışma günüyle sunup seçmesini iste.
+
+  İptal edilecek talimatın bir sonraki çalışma tarihi yakınsa, iptalin o dönemin ödemesini de
+  düşüreceğini kullanıcıya açıkça söyle ve devam etmek isteyip istemediğini sor; cevabını
+  confirmPendingRunWillNotExecute alanına yaz. Kullanıcı açıkça onaylamadan bu alana true yazma.
+model:
+  options:
+    temperature: 0.1
+outputSchema:
+  type: object
+  properties:
+    standingOrderId:
+      type: string
+      required: true
+      description: İptal edilecek talimatın kimliği. Ödeme uzmanından gelir; talimatın adı bu alana yazılmaz.
+    cancellationReason:
+      type: string
+      required: true
+      description: İptalin gerekçesi (taşındım, aboneliği kapattım, hesabı değiştiriyorum gibi).
+    confirmPendingRunWillNotExecute:
+      type: boolean
+      required: true
+      description: >-
+        Yaklaşan dönemin ödemesinin yapılmayacağının kabul edildiğini gösterir. Kullanıcı açıkça
+        onaylamadan true yazılmaz.
+    notifyChannel:
+      type: string
+      required: true
+      description: İptal bilgisinin gönderileceği kanal. Geçerli değerler SMS, E-posta, Yok.
+action:
+  method: PUT
+  path: /api/standing-order-cancel

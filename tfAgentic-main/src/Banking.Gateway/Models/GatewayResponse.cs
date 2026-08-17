@@ -1,67 +1,75 @@
+using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Banking.Gateway.Models;
 
 /// <summary>
-/// .NET'ten Java MW'ye dönen response. Java MW'nin beklediği flat JSON'a uygundur.
+/// İstemciye dönen yanıtın kablo üzerindeki gösterimi. Tüketicinin beklediği düz (flat) JSON
+/// yapısına birebir uyar: aşağıdaki dört sabit alan dışındaki her değer kök seviyeye yazılır.
 /// </summary>
 public sealed record GatewayResponse
 {
+    /// <summary>İstemcinin yanıtı nasıl işleyeceğini belirleyen tip.</summary>
     [JsonPropertyName("type")]
     [JsonConverter(typeof(JsonStringEnumConverter))]
     public required GatewayResponseType Type { get; init; }
 
+    /// <summary>Kullanıcıya gösterilecek metin; metin taşımayan yanıtlarda <c>null</c>.</summary>
     [JsonPropertyName("text")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Text { get; init; }
 
+    /// <summary>Açılacak ekranın kodu; ekran yönlendirmesi olmayan yanıtlarda <c>null</c>.</summary>
     [JsonPropertyName("mkCodeValue")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? MkCodeValue { get; init; }
 
-
-    // MW'nin beklediği diğer alanlar (tahsilat onayında veya ekranda gerekirse)
-    [JsonPropertyName("cardNumber")]
+    /// <summary>İstemcinin sonraki isteğinde geri göndereceği oturum jetonu.</summary>
+    [JsonPropertyName("sessionToken")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? CardNumber { get; init; }
+    public string? SessionToken { get; init; }
 
-    [JsonPropertyName("cardProductName")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? CardProductName { get; init; }
+    /// <summary>
+    /// Sabit alanların dışında kalan akışa özgü değerler. Serileştirmede JSON kök seviyesine düz
+    /// property olarak yazılır; iç içe bir nesne üretilmez.
+    /// </summary>
+    [JsonExtensionData]
+    public Dictionary<string, object?> AdditionalProperties { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    [JsonPropertyName("amount")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Amount { get; init; }
-
-    [JsonPropertyName("accountNo")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? AccountNo { get; init; }
-
+    /// <summary>Düz metin yanıt üretir.</summary>
     public static GatewayResponse AsText(string text) => new()
     {
         Type = GatewayResponseType.TEXT,
         Text = text
     };
 
-    public static GatewayResponse AsOpenScreen(string mkCodeValue) 
+    /// <summary>İstemciyi verilen ekran koduna yönlendiren yanıt üretir.</summary>
+    public static GatewayResponse AsOpenScreen(string mkCodeValue) => new()
     {
-        return new GatewayResponse
-        {
-            Type = GatewayResponseType.OPEN_SCREEN,
-            MkCodeValue = mkCodeValue
-        };
-    }
+        Type = GatewayResponseType.OPEN_SCREEN,
+        MkCodeValue = mkCodeValue
+    };
 
-    public static GatewayResponse AsConfirmPayment(string mkCodeValue, string cardNumber, string? cardProductName, string amount, string accountNo) 
+    /// <summary>
+    /// Onay ekranı yanıtı üretir. Slot adları camelCase'e çevrilerek kök seviyeye yazılır.
+    /// </summary>
+    /// <param name="mkCodeValue">Ekranı render edecek UI kodu; çözülemediyse <c>null</c>.</param>
+    /// <param name="parameters">Onaya sunulan slot kümesi.</param>
+    public static GatewayResponse AsGenericConfirmation(string? mkCodeValue, IReadOnlyDictionary<string, object?> parameters)
     {
-        return new GatewayResponse
+        var response = new GatewayResponse
         {
             Type = GatewayResponseType.CONFIRM_PAYMENT,
-            MkCodeValue = mkCodeValue,
-            CardNumber = cardNumber,
-            CardProductName = cardProductName,
-            Amount = amount,
-            AccountNo = accountNo
+            MkCodeValue = mkCodeValue
         };
+
+        foreach (var (key, value) in parameters)
+        {
+            string jsonKey = char.ToLowerInvariant(key[0]) + key[1..];
+            response.AdditionalProperties[jsonKey] = value;
+        }
+
+        return response;
     }
 }

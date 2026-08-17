@@ -1,0 +1,35 @@
+kind: Workflow
+name: card-payment
+displayName: Kredi Kartı Borç Ödeme
+description: Kredi kartı borcunun tek seferlik olarak ödenmesi işlemi.
+mkCode: CardPaymentSubMenu
+instructions: |
+  Bu akış sadece kredi kartı borcu ödemek için kullanılacaktır .Kullanıcının hangi kartın borcunu, ne kadar ve hangi 
+  hesaptan ödeyeceğini netleştir.
+  Kart ve hesap kimliklerini kullanıcıya sorma; kartı kart uzmanına, hesabı hesap uzmanına
+  danışarak bul, kullanıcı tarif ettiyse doğrudan eşle, tarif etmediyse seçenekleri sun.
+outputSchema:
+  type: object
+  properties:
+    cardId:
+      type: string
+      required: true
+      description: >-
+        Borcu ödenecek kredi kartının kimliği. Kart uzmanından gelir; kullanıcıdan
+        asla ham kart numarası veya kimlik istenmez.
+    amount:
+      type: number
+      required: true
+      description: >-
+        Ödenecek tutar, Para kuru (TL,Dolar vb.) cinsinden sayı olarak. Kullanıcı rakamı söyleyebilir ya da
+        tarif edebilir (borcun tamamı, asgari ödeme); tarif edildiyse güncel tutarı kart
+        uzmanından öğrenip yaz, kendin hesaplama.
+    sourceAccountId:
+      type: string
+      required: true
+      description: >-
+        Ödemenin çekileceği banka hesabının kimliği. Hesap uzmanından gelir; IBAN veya
+        hesap adı bu alana yazılmaz.
+action:
+  method: PUT
+  path: /api/card-payment
